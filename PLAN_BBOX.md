@@ -98,7 +98,12 @@ migration som skapar dem — samma resonemang som handoffen redan för om dokume
 
 ## Etapper
 
-**Etapp 1 — bekräfta det modellen tror.** Det som löser det uttalade behovet.
+**Etapp 1 — bekräfta det modellen tror. Levererad 2026-08-27.**
+
+Ingen migration behövdes. Granskningen sker innan dokumentet sparas, så rutorna
+följer med tolkningen i svaret och behöver aldrig lagras. Det gjorde första
+leveransen betydligt mindre än planerat, och skjuter retention-frågan till
+etapp 2 där segmenten faktiskt ska sparas.
 
 - Rendera dokumentet till en sidbild vid bekräftelsen, spara mått och rotation
 - Kör OCR, spara segment med rutor
@@ -194,3 +199,31 @@ fungerar i produktionsbygget.
 Kvar för etapp 1: migrationen för sidor och segment, bildvisaren med markering,
 och inkopplingen i granskningssteget. Migrationen väntar på beslutet om hur länge
 OCR-texten får ligga kvar.
+
+
+## Etapp 1 är levererad
+
+`/api/extract` kör OCR efter att dokumenttypen godkänts och returnerar för varje
+förslag var på sidan utdraget lästes. Granskningssteget visar originalet med
+markering, och säger uttryckligen "hela sidan visas" när området inte kunde
+fastställas.
+
+Rutorna returneras i den rymd webbläsaren målar i, med rotationen redan
+applicerad. Klienten ritar procent och behöver aldrig veta hur fotot hölls.
+
+### Platserna delas ut, de söks inte var för sig
+
+Första versionen slog upp varje utdrag oberoende. Tre olika lektioner fick då
+samma ruta, eftersom ett schema upprepar samma ämnesnamn på flera dagar och
+OCR läste klockslagen fel. Två av tre markeringar var alltså felaktiga och såg
+lika säkra ut.
+
+`locateExcerpts` delar i stället ut varje plats högst en gång. Det starkaste
+anspråket får platsen, övriga får hitta en egen eller stå utan. På det riktiga
+schemat gav det sju markeringar utan en enda delad plats, mot åtta med tre
+kollisioner tidigare. Färre markeringar, men inga falska.
+
+### Kvar
+
+Etapp 2 och framåt: sidor och segment i databasen, källklick från kalendern,
+dokumentversioner och segmenten i retrieval. Retention-beslutet behövs först då.

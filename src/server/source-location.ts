@@ -37,11 +37,11 @@ export interface OcrLine {
 }
 
 export interface OcrPage {
-  /** Rendered size the boxes were measured against. */
+  /** Stored size the boxes were measured against, before any rotation. */
   widthPx: number;
   heightPx: number;
-  /** Rotation applied before OCR, in degrees. Stored so a later render matches. */
-  rotation: number;
+  /** Clockwise degrees a viewer applies when showing the image. */
+  rotation: 0 | 90 | 180 | 270;
   lines: OcrLine[];
 }
 
@@ -150,6 +150,88 @@ function overlap(
  * well enough to point at. Null is a real answer, not a failure: the honest
  * fallback is the whole page.
  */
+interface Candidate {
+  start: number;
+  end: number;
+  score: number;
+}
+
+function rankCandidates(page: OcrPage, excerpt: string): Candidate[] {
+  const wanted = tokens(excerpt);
+  if (wanted.length === 0) return [];
+
+  const words = flatten(page);
+  if (words.length === 0) return [];
+
+  const wordTokens = words.map((word) => tokens(word.text).join(""));
+  const weights = tokenWeights(wordTokens);
+  const wantedWeight = wanted.reduce((total, token) => total + (weights.get(token) ?? 1), 0);
+  if (wantedWeight === 0) return [];
+
+  const candidates: Candidate[] = [];
+  for (const extra of [0, 1, 2, 3]) {
+    const size = wanted.length + extra;
+    for (let start = 0; start + size <= words.length + extra; start += 1) {
+      const end = Math.min(start + size, words.length);
+      if (end - start < Math.min(wanted.length, 1)) continue;
+      const score = overlap(wanted, wordTokens.slice(start, end), weights) / wantedWeight;
+      if (score >= MINIMUM_MATCH_SCORE) candidates.push({ start, end, score });
+    }
+  }
+  return candidates.sort((a, b) => b.score - a.score);
+}
+
+function boxesFor(page: OcrPage, candidate: Candidate): NormalizedBox[] {
+  const matched = flatten(page).slice(candidate.start, candidate.end);
+  const byLine = new Map<number, PixelBox[]>();
+  for (const word of matched) {
+    const line = byLine.get(word.lineIndex) ?? [];
+    line.push(word.box);
+    byLine.set(word.lineIndex, line);
+  }
+  return [...byLine.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, boxes]) => normalizeBox(unionBox(boxes), page));
+}
+
+/**
+ * Places several excerpts from the same document at once.
+ *
+ * A timetable prints the same lesson name on several days, so an excerpt looked
+ * up on its own can win a place that belongs to another. Two events pointing at
+ * one rectangle means at least one of them is wrong, and both look equally
+ * certain. Handing out each place at most once removes that: the strongest match
+ * takes it, and the others must find their own or go without.
+ */
+export function locateExcerpts(
+  page: OcrPage,
+  excerpts: readonly { id: string; text: string }[],
+): Map<string, LocatedExcerpt> {
+  const ranked = excerpts.map((excerpt) => ({
+    id: excerpt.id,
+    candidates: rankCandidates(page, excerpt.text),
+  }));
+
+  // Strongest first, so a confident match is not displaced by a weak one that
+  // happened to be considered earlier.
+  ranked.sort((a, b) => (b.candidates[0]?.score ?? 0) - (a.candidates[0]?.score ?? 0));
+
+  const taken: Candidate[] = [];
+  const located = new Map<string, LocatedExcerpt>();
+
+  for (const { id, candidates } of ranked) {
+    const free = candidates.find(
+      (candidate) =>
+        !taken.some((claim) => candidate.start < claim.end && claim.start < candidate.end),
+    );
+    if (!free) continue;
+    taken.push(free);
+    located.set(id, { boxes: boxesFor(page, free), score: Number(free.score.toFixed(3)) });
+  }
+
+  return located;
+}
+
 export function locateExcerpt(page: OcrPage, excerpt: string): LocatedExcerpt | null {
   const wanted = tokens(excerpt);
   if (wanted.length === 0) return null;
@@ -212,4 +294,47 @@ export function locateExcerpt(page: OcrPage, excerpt: string): LocatedExcerpt | 
       .map(([, boxes]) => normalizeBox(unionBox(boxes), page)),
     score: Number(best.score.toFixed(3)),
   };
+}
+
+/**
+ * Boxes come out of OCR in the coordinates of the image as stored. A browser
+ * shows a photo the way its EXIF orientation says it should, so for a phone
+ * photo the picture on screen and the coordinates disagree by a quarter turn.
+ *
+ * Rather than leave that arithmetic to the viewer, boxes are converted here into
+ * the space the viewer actually paints. The page then overlays plain
+ * percentages, and the rotation cannot be forgotten in one place and applied in
+ * another.
+ */
+export function displayPageSize(
+  page: Pick<OcrPage, "widthPx" | "heightPx" | "rotation">,
+): { widthPx: number; heightPx: number } {
+  const turned = page.rotation === 90 || page.rotation === 270;
+  return {
+    widthPx: turned ? page.heightPx : page.widthPx,
+    heightPx: turned ? page.widthPx : page.heightPx,
+  };
+}
+
+export function toDisplayBox(
+  box: NormalizedBox,
+  rotation: OcrPage["rotation"],
+  mirrored = false,
+): NormalizedBox {
+  let turned: NormalizedBox;
+  switch (rotation) {
+    case 90:
+      turned = { x: 1 - box.y - box.height, y: box.x, width: box.height, height: box.width };
+      break;
+    case 180:
+      turned = { x: 1 - box.x - box.width, y: 1 - box.y - box.height, width: box.width, height: box.height };
+      break;
+    case 270:
+      turned = { x: box.y, y: 1 - box.x - box.width, width: box.height, height: box.width };
+      break;
+    default:
+      turned = { ...box };
+  }
+  // EXIF mirrors after the turn, in the frame the viewer sees.
+  return mirrored ? { ...turned, x: 1 - turned.x - turned.width } : turned;
 }

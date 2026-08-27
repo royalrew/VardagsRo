@@ -1,7 +1,13 @@
 import "server-only";
 
+import type { DocumentExtraction } from "@/lib/types";
 import { readImageGeometry } from "@/server/image-geometry";
-import type { OcrPage } from "@/server/source-location";
+import {
+  displayPageSize,
+  locateExcerpts,
+  toDisplayBox,
+  type OcrPage,
+} from "@/server/source-location";
 
 /**
  * Reads a document's words and where they stand, using Tesseract in this
@@ -91,4 +97,47 @@ export async function recognizeDocumentPage(
   } finally {
     await worker.terminate();
   }
+}
+
+/**
+ * Adds to each proposed event the place on the page its excerpt came from, so
+ * the family can check the reading against the paper before confirming it.
+ *
+ * Everything here fails soft. An unreadable page, an unsupported file type or an
+ * excerpt that cannot be placed all leave the extraction exactly as it was: the
+ * proposal is still useful without a highlight, and a wrong highlight is worse
+ * than none.
+ */
+export async function withSourceLocations(
+  extraction: DocumentExtraction,
+  bytes: Uint8Array,
+  mimeType: string,
+): Promise<DocumentExtraction> {
+  let page: RecognizedPage | null = null;
+  try {
+    page = await recognizeDocumentPage(bytes, mimeType);
+  } catch {
+    return extraction;
+  }
+  if (!page) return extraction;
+
+  // Placed together, not one by one: a schedule repeats the same lesson name on
+  // several days, and each place may belong to only one event.
+  const located = locateExcerpts(
+    page,
+    extraction.events.map((event) => ({ id: event.id, text: event.sourceExcerpt })),
+  );
+
+  return {
+    ...extraction,
+    sourcePage: displayPageSize(page),
+    events: extraction.events.map((event) => {
+      const found = located.get(event.id);
+      return {
+        ...event,
+        sourceBoxes:
+          found?.boxes.map((box) => toDisplayBox(box, page.rotation, page.mirrored)) ?? null,
+      };
+    }),
+  };
 }

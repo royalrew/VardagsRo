@@ -32,6 +32,7 @@ import {
 } from "react";
 
 import { calendarDateInTimeZone } from "@/lib/dates";
+import { SourcePreview } from "@/components/SourcePreview";
 import { createDemoExtraction } from "@/lib/demo-data";
 import { weeksToRepeat } from "@/lib/weekly-schedule";
 import type {
@@ -107,6 +108,8 @@ function AddDocumentModalContent({
   // Empty means the document covers only the week it shows. A schedule usually
   // holds longer than that, and only the family knows until when.
   const [repeatWeeklyUntil, setRepeatWeeklyUntil] = useState("");
+  // Which proposal the original is currently showing. Null means no highlight.
+  const [shownSourceId, setShownSourceId] = useState<string | null>(null);
   const [personId, setPersonId] = useState(people[0]?.id ?? "");
   const [events, setEvents] = useState<ExtractedEvent[]>([]);
 
@@ -695,6 +698,14 @@ function AddDocumentModalContent({
                 <span className="upload-event-count">{events.length}</span>
               </div>
 
+              {file && shownSourceId ? (
+                <SourcePreview
+                  file={file}
+                  boxes={events.find((event) => event.id === shownSourceId)?.sourceBoxes ?? null}
+                  caption="Markeringen visar var uppgiften lästes."
+                />
+              ) : null}
+
               <div className="upload-event-list">
                 {events.map((event, index) => {
                   const eventBaseId = `${titleInputId}-event-${index}`;
@@ -705,6 +716,16 @@ function AddDocumentModalContent({
                         <span className="upload-event-number" aria-hidden="true">
                           {index + 1}
                         </span>
+                        <button
+                          type="button"
+                          className="upload-event-source"
+                          aria-pressed={shownSourceId === event.id}
+                          onClick={() =>
+                            setShownSourceId(shownSourceId === event.id ? null : event.id)
+                          }
+                        >
+                          {shownSourceId === event.id ? "Dölj originalet" : "Visa i originalet"}
+                        </button>
                         <div className="upload-field upload-event-title-field">
                           <label className="upload-label" htmlFor={`${eventBaseId}-title`}>
                             Titel

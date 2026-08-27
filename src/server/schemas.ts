@@ -29,6 +29,15 @@ export const eventCategorySchema = z.enum([
   "other",
 ]);
 
+const sourceBoxSchema = z
+  .object({
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    width: z.number().min(0).max(1),
+    height: z.number().min(0).max(1),
+  })
+  .strict();
+
 export const extractedEventSchema = z
   .object({
     id: z.string().trim().min(1).max(128),
@@ -41,6 +50,7 @@ export const extractedEventSchema = z
     notes: z.string().trim().min(1).max(2_000).nullable(),
     confidence: z.number().min(0).max(1),
     sourceExcerpt: z.string().trim().max(800),
+    sourceBoxes: z.array(sourceBoxSchema).max(20).nullable().optional(),
   })
   .strict()
   .refine(
@@ -89,6 +99,11 @@ export const documentExtractionSchema = z
       )
       .nullable(),
     hash: z.string().trim().min(1).max(128),
+    sourcePage: z
+      .object({ widthPx: z.number().int().positive(), heightPx: z.number().int().positive() })
+      .strict()
+      .nullable()
+      .optional(),
   })
   .strict();
 

@@ -102,6 +102,14 @@ export interface DashboardData {
   dataMode: "database" | "demo";
 }
 
+/** A rectangle as fractions 0-1 of the page as the viewer sees it. */
+export interface SourceBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface ExtractedEvent {
   id: string;
   title: string;
@@ -114,6 +122,12 @@ export interface ExtractedEvent {
   notes: string | null;
   confidence: number;
   sourceExcerpt: string;
+  /**
+   * Where the excerpt stands on the page, one rectangle per line it spans.
+   * Absent or empty means the place could not be found well enough to point at,
+   * and the whole page is shown instead of a rectangle that only looks precise.
+   */
+  sourceBoxes?: SourceBox[] | null;
 }
 
 export interface ExtractedTask {
@@ -139,6 +153,8 @@ export interface DocumentExtraction {
   mimeType: string;
   storageKey: string | null;
   hash: string;
+  /** Size of the page the boxes refer to, after any rotation the viewer applies. */
+  sourcePage?: { widthPx: number; heightPx: number } | null;
 }
 
 export type QuestionIntent = "schedule" | "work" | "overlap" | "reminder";

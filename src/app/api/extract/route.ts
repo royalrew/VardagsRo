@@ -6,6 +6,7 @@ import { loadDashboard } from "@/server/database";
 import { AppError } from "@/server/errors";
 import { HEALTH_DOCUMENT_MESSAGE, unsupportedHealthDocument } from "@/server/health-documents";
 import { apiError, json } from "@/server/http";
+import { withSourceLocations } from "@/server/ocr";
 import { assertTrustedMutationRequest } from "@/server/request-security";
 import {
   MAX_UPLOAD_BYTES,
@@ -86,7 +87,11 @@ export async function POST(request: Request) {
       throw new AppError(415, "HEALTH_DOCUMENT_NOT_SUPPORTED", HEALTH_DOCUMENT_MESSAGE);
     }
 
-    return json({ ...extraction, storageKey: null }, { status: 201 });
+    // Only after the type is accepted: OCR reads the whole page, so a care
+    // document must never reach it.
+    const located = await withSourceLocations(extraction, bytes, mimeType);
+
+    return json({ ...located, storageKey: null }, { status: 201 });
   } catch (error) {
     return apiError(error);
   }
