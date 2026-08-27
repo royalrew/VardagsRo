@@ -110,7 +110,9 @@ function AddDocumentModalContent({
   const [repeatWeeklyUntil, setRepeatWeeklyUntil] = useState("");
   // Which proposal the original is currently showing. Null means no highlight.
   const [shownSourceId, setShownSourceId] = useState<string | null>(null);
-  const [personId, setPersonId] = useState(people[0]?.id ?? "");
+  // Empty means nobody is chosen yet. The document has to say, or the family
+  // has to say; the product never picks.
+  const [personId, setPersonId] = useState("");
   const [events, setEvents] = useState<ExtractedEvent[]>([]);
 
   // The schedule cannot stop before the week it describes, and the summary says
@@ -205,7 +207,7 @@ function AddDocumentModalContent({
     const matchedPersonId = findPersonId(result, people);
     setExtraction(result);
     setDocumentTitle(result.title);
-    setPersonId(matchedPersonId);
+    setPersonId(matchedPersonId ?? "");
     setEvents(
       result.events.map((event) => ({
         ...event,
@@ -334,6 +336,11 @@ function AddDocumentModalContent({
 
   async function saveDocument() {
     if (!extraction) return;
+
+    if (!personId) {
+      setError("Välj vem dokumentet gäller innan du sparar.");
+      return;
+    }
 
     const cleanTitle = documentTitle.trim();
     if (!cleanTitle) {
@@ -648,13 +655,24 @@ function AddDocumentModalContent({
                     onChange={(event) => setPersonId(event.target.value)}
                     disabled={people.length === 0}
                   >
-                    {people.length === 0 ? <option value="">Ingen familjemedlem ännu</option> : null}
+                    {people.length === 0 ? (
+                      <option value="">Ingen familjemedlem ännu</option>
+                    ) : (
+                      <option value="">Välj familjemedlem…</option>
+                    )}
                     {people.map((person) => (
                       <option key={person.id} value={person.id}>
                         {person.name} · {person.role}
                       </option>
                     ))}
                   </select>
+                  {extraction && !personId ? (
+                    <p className="upload-field-hint">
+                      {extraction.personHint
+                        ? `Dokumentet säger ”${extraction.personHint}”, vilket inte pekar ut någon i familjen. Välj vem det gäller.`
+                        : "Dokumentet säger inte vem det gäller. Välj vem det gäller."}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="upload-field upload-field-grow">
@@ -996,18 +1014,33 @@ function AddDocumentModalContent({
   );
 }
 
-function findPersonId(extraction: DocumentExtraction, people: FamilyPerson[]): string {
+/**
+ * Who the document concerns, or null when it does not say.
+ *
+ * There is deliberately no fallback to the first family member. A school
+ * timetable names a class, not a child, so the old fallback quietly proposed
+ * every such document for whoever happened to be first in the household — the
+ * one with the role "Jag". A parent then saw their child's lessons offered as
+ * their own working hours. Asking is the honest answer; guessing looked like an
+ * answer and was not.
+ */
+export function findPersonId(
+  extraction: DocumentExtraction,
+  people: FamilyPerson[],
+): string | null {
   if (extraction.personId && people.some((person) => person.id === extraction.personId)) {
     return extraction.personId;
   }
 
   const hint = extraction.personHint.trim().toLocaleLowerCase("sv-SE");
+  if (!hint) return null;
+
   const match = people.find((person) =>
     [person.name, person.role, ...person.aliases].some(
       (value) => value.trim().toLocaleLowerCase("sv-SE") === hint,
     ),
   );
-  return match?.id ?? people[0]?.id ?? "";
+  return match?.id ?? null;
 }
 
 function formatFileSize(bytes: number): string {

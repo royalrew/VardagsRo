@@ -1079,3 +1079,23 @@ oanvändbar för det den mest används till.
 
 Verifierat mot körande server: ett dokument med titeln `Tandläkarbesök` ger 415
 och databasen står kvar på noll dokument och noll händelser.
+
+
+## 2026-08-27: dokumentet gissar inte längre vem det gäller
+
+Upptäckt vid en riktig uppladdning: ett skolschema föreslogs som förälderns eget,
+och lästes då som arbetstider.
+
+`findPersonId` föll tillbaka på `people[0]` när dokumentet inte pekade ut någon.
+Första personen i hushållet är den med rollen `Jag`, alltså föräldern. Ett
+skolschema namnger en klass, aldrig ett barn, så varje schema hamnade där.
+
+Fallbacken är borttagen. Kan personen inte avgöras är valet tomt, listan visar
+`Välj familjemedlem…`, och en rad förklarar vad dokumentet faktiskt sade —
+exempelvis `Elev i 7A` — och att det inte pekar ut någon i familjen. Sparandet
+blockeras tills någon valt.
+
+Regeln är testad i `src/components/document-person.test.ts`, inklusive att den
+aldrig får landa på den första familjemedlemmen.
+
+Samma mönster som resten av dagens fel: en gissning presenterad som ett faktum.
