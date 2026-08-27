@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.railway
+.env
+.env.*
+coverage
+playwright-report
+test-results
+artifacts/releases
+*.log
+
+# Personliga anteckningar om familjen. Ska aldrig in i build context.
+Familjen.txt
+/private/
+private
+private/**

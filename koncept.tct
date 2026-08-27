@@ -1,0 +1,850 @@
+Family OS
+Familjens gemensamma minne, kalender och AI-assistent
+
+Grundidén är väldigt enkel:
+
+Familjen skickar in sådant som annars blir utspritt över lappar, bilder, mejl, skolplattformar, scheman och kalendrar. Family OS förstår informationen, organiserar den, minns den och hjälper familjen att agera på den.
+
+Man ska kunna slänga in nästan vad som helst:
+
+foto på en skollapp
+screenshot
+PDF
+arbetsschema
+veckobrev
+läxa
+provdatum
+fotbollsschema
+tandläkarkallelse
+studiedagar
+regler från skolan
+resebokning
+senare kvitton, garantier, ekonomi, bilder osv.
+
+AI:n avgör sedan:
+
+Vad är det? Vem gäller det? När händer det? Behöver någon göra något? Ska det sparas som kunskap?
+
+Kärnupplevelsen
+
+Det ska kännas ungefär:
+
+Skicka allt hit. Familjen behöver inte komma ihåg resten.
+
+Men AI:n får inte automatiskt bestämma vad som är sant.
+
+Om pappa skickar in ett foto av ett schema:
+
+🤖 Jag hittade 17 arbetspass.
+
+Sedan visas en granskningsmodal:
+
+Nora
+21 augusti
+14:00–22:00
+Kvällspass
+
+Alla fält går att ändra direkt.
+
+Godkänn
+
+Först efter godkännandet blir informationen betrodd familjedata.
+
+Samma sak om ett barn fotograferar en skollapp:
+
+👦 Kalle skickade in en bild.
+🤖 AI hittade:
+
+Engelskaprov: 25 augusti
+Kapitel 4–6
+Läroboken behövs
+
+Föräldern får:
+
+Granska → Ändra → Godkänn
+
+Det är en viktig princip:
+
+AI tolkar. Familjen bestämmer.
+
+AI:n ska göra mer än att lagra
+
+Vanlig RAG:
+
+“När är Kalles engelskaprov?”
+
+Family OS:
+
+“Kalles engelskaprov är om 5 dagar.”
+
+Men ännu bättre:
+
+Kalle bör ta hem engelskboken idag eftersom provet är om fem dagar och kapitel 4–6 ska läsas.
+
+Det är skillnaden mellan:
+
+information
+
+och
+
+information → konsekvens → handling.
+
+AI:n ska kunna skilja tydligt mellan:
+
+Fakta
+
+Skolan skrev att engelskaprovet är på tisdag.
+
+AI-slutsats
+
+Jag föreslår att Kalle tar hem boken idag.
+
+Det ska alltid gå att trycka på:
+
+Varför?
+
+och se originalkällan.
+
+Morgonbriefen kan bli kärnan
+
+Varje morgon:
+
+God morgon 👋
+
+🥪 Ida behöver matsäck idag.
+
+📘 Kalle bör ta hem engelskboken. Prov om 5 dagar.
+
+🏊 Ida har simning. Badkläder + handduk.
+
+👨 Pappa jobbar 14–22.
+
+⚽ Fotboll 17:30.
+
+📄 Blanketten till fritids ska lämnas senast imorgon.
+
+🇬🇷 21 dagar kvar till Grekland.
+
+Det är där systemet börjar kännas som:
+
+Familjens andra hjärna.
+Barnen får en egen AI
+
+Det här tycker jag är en väldigt stark del av konceptet.
+
+Barnen behöver inte ens använda huvudappen.
+
+De kan exempelvis använda Telegram och fråga:
+
+“Jobbar pappa idag?”
+
+“När kommer pappa hem?”
+
+“Har jag något prov snart?”
+
+“Vad ska jag ha med mig imorgon?”
+
+“Hur många dagar är det kvar till Grekland?”
+
+“Har jag idrott?”
+
+AI:n svarar från familjens verkliga information.
+
+Det gör dessutom produkten lite cool för barnen:
+
+“Kolla, vår familj har en egen AI.” 😁
+
+Telegram ska vara familjens handlingsyta, inte en separat databas.
+
+Först används privata, identitetskopplade chattar. Familjegrupper där botten
+kan läsa vanliga samtal kommer senare, om familjen uttryckligen väljer det.
+
+I Telegram ska en familjemedlem kunna:
+
+fråga om sådant personen har rätt att se
+skicka text, foto, screenshot, PDF eller röst
+få en morgonbrief och relevanta påminnelser
+föreslå en ny händelse eller task
+föreslå att något ändras eller tas bort
+öppna en Mini App för att granska många hittade poster
+
+Viktig princip:
+
+AI:n får aldrig skriva direkt i familjens data.
+
+Telegrammeddelande
+        ↓
+Vem är personen?
+        ↓
+Vad får personen läsa eller ändra?
+        ↓
+AI skapar ett typat ändringsförslag
+        ↓
+Visa diff / förhandsgranskning
+        ↓
+Familjemedlemmen bekräftar
+        ↓
+Utför → logga → erbjud Ångra
+
+Behörigheter
+
+Det här måste byggas in från början.
+
+Föräldrar bestämmer vad varje familjemedlem får:
+
+Kalle får
+
+✅ Se sitt eget skolschema
+✅ Se sina läxor
+✅ Se sina aktiviteter
+✅ Fråga när pappa jobbar
+✅ Se gemensamma familjeaktiviteter
+✅ Skicka in bilder för granskning
+
+Men:
+
+❌ Mammas privata kalender
+❌ Vårddokument
+❌ Familjens ekonomi
+❌ Syskonets privata information
+❌ Originalet till pappas arbetsschema
+
+Och viktigt tekniskt:
+
+behörighetskontrollen sker innan retrieval.
+
+AI:n ska alltså inte få all information och sedan instrueras:
+
+“Berätta inte detta för Kalle.”
+
+Istället:
+
+Kalle frågar
+      ↓
+Vem är Kalle?
+      ↓
+Vad får Kalle se?
+      ↓
+Hämta ENDAST den informationen
+      ↓
+AI svarar
+Countdown
+
+En liten feature som jag tror kommer bli väldigt älskad.
+
+Familjens countdowns
+
+🇬🇷 21 dagar
+Grekland
+
+📝 5 dagar
+Engelskaprov
+
+🎂 11 dagar
+Idas födelsedag
+
+⚽ 2 dagar
+Cup
+
+Och countdowns kan vara intelligenta.
+
+5 dagar till engelskaprovet
+
+📘 Ta hem boken idag
+📚 Kapitel 4–6
+🧠 Tre pluggtillfällen kvar
+
+7 dagar till Grekland
+
+🛂 Kontrollera pass
+🧳 Börja packa
+🚕 Transfer saknas
+
+Countdown blir alltså både roligt och funktionellt.
+
+Under huven
+
+Jag skulle tänka systemet som ungefär:
+
+ Web / Telegram / Mail / Kalender / API
+                     ↓
+       IDENTITY + HOUSEHOLD + PERMISSIONS
+                     ↓
+                FAMILY INBOX
+                     ↓
+ Foto / PDF / Screenshot / Mail / Röst
+                     ↓
+          DOCUMENT UNDERSTANDING
+          Vision / OCR / extraction
+                     ↓
+               REVIEW LAYER
+          Ändra → godkänn → avvisa
+                     ↓
+              NORMALISERING
+                     ↓
+ ┌────────────┬────────────┬─────────────┐
+ Person     Event         Task          Fact
+ Rule       Document      Deadline      Memory
+ └────────────┴────────────┴─────────────┘
+                     ↓
+       VERIFIED FAMILY DATA + SOURCES
+                     ↓
+          FAMILY GRAPH / RELATIONS
+                     ↓
+     PERMISSION-FILTERED MEMORY + RAG
+                     ↓
+             REASONING ENGINE
+                     ↓
+            PROPOSED ACTIONS
+                     ↓
+       POLICY + CONFIRMATION GATE
+                     ↓
+ Kalender / tasks / reminders / brief
+                     ↓
+              AUDIT + ÅNGRA
+
+Det här är mycket mer än en vector database.
+
+Family Graph
+
+Systemet behöver förstå relationer.
+
+Familjen
+│
+├── Nora
+│   └── Arbetsschema
+│
+├── Ida
+│   ├── Skola
+│   ├── Läxor
+│   ├── Fotboll
+│   └── Kallelser
+│
+├── Kalle
+│   ├── Skola
+│   ├── Prov
+│   └── Aktiviteter
+│
+└── Gemensamt
+    ├── Resor
+    ├── Kalender
+    ├── Hem
+    └── Familjehändelser
+
+Då kan AI:n kombinera saker.
+
+“Kan pappa följa med på Kalles match?”
+
+Den kontrollerar:
+
+pappas arbetsschema + Kalles match + övrig kalender.
+
+Connectors
+
+Produkten ska fungera utan integrationer.
+
+Men varje API gör den bättre.
+
+Exempel:
+
+Google Calendar
+Outlook
+Gmail/mail
+Telegram
+ICS
+skolplattformar
+sportappar
+arbetsschemasystem
+resebokningar
+senare bank/Open Banking
+fotoarkiv
+
+Principen:
+
+API är turbo, inte ett krav.
+
+Om det inte finns API:
+
+📸 screenshot.
+
+Det gör produkten väldigt robust.
+
+Svensk produktfördel
+
+Vardagsro ska inte försöka vinna genom att ha flest funktioner eller genom att
+marknadsföra ett tekniskt ord som “multimodal RAG”.
+
+Produkten ska vinna genom att kombinera:
+
+svenska datum, veckonummer, lov och studiedagar
+skift- och rotationsscheman
+delad vårdnad och bytesdagar
+svenskt skol- och föreningsspråk
+familjemedlemmar med olika behörighet
+verifierade fakta med originalkälla
+säkra handlingar med bekräftelse och Ångra
+konsekvenser över jobb + skola + aktiviteter
+
+Det tekniska försprånget är ett privat, källgrundat och behörighetsstyrt
+familjeminne. Kundlöftet är enklare:
+
+Skicka familjens papper. Fråga vad som gäller. Se källan. Fixa det direkt.
+
+Leveransprincip — svart på vitt
+
+Vardagsro utvecklas production-first. Lokal körning och automatiska tester är
+nödvändiga, men en funktion eller version räknas inte som klar förrän den har
+driftsatts på Railway och verifierats genom den riktiga domänen.
+
+Under privat utveckling ligger hela produkten bakom en lösenordsgrind. Grinden
+skyddar testmiljön men ersätter aldrig riktig inloggning, hushållsisolering eller
+behörighetskontroll i produkten.
+
+Definition of Done
+
+build, lint, typkontroll och automatiska tester passerar före deploy
+Railway använder en separat produktionslik databas, privat R2-bucket och validerade secrets
+databasmigreringar körs säkert och kan inte lämna releasen halvt uppdaterad
+Railways health check är grön för app, databas och lagring
+egen domän, TLS och lösenordsgrind fungerar för både gränssnitt och skyddade API-anrop
+Railways standarddomän kan inte användas för att gå runt lösenordsgrinden
+ett end-to-end-test körs mot den driftsatta domänen med en särskild testfamilj
+kärnflödet provas: skapa/flytta kalenderpost → ladda upp → AI-tolka → granska → godkänna → kalender/task → fråga → öppna källa → städa testdata
+fel kan felsökas utan att secrets eller familjens privata innehåll hamnar i loggar
+varje release får ett enkelt bevis: URL, release-id, tidpunkt och resultat för smoke/E2E
+rollback till senast fungerande release är möjlig
+
+När releasen innehåller Safe Action Engine ska testet dessutom bevisa:
+
+ett obekräftat, avvisat eller utgånget förslag ändrar ingenting
+ett bekräftat förslag utförs exakt en gång
+retry eller dubbel leverans skapar ingen dubblett
+ändringen hamnar i en append-only audit log
+Ångra återställer resultatet
+modellen saknar både direkt skrivväg och databasbehörighet
+
+När produkten öppnas för externa familjer ersätts den gemensamma lösenordsgrinden
+av riktig produktinloggning. En separat lösenordsskyddad Railway-miljö behålls för
+release candidates och tester mot nästa version.
+
+Produktversionerna
+
+Här skulle jag vara disciplinerad.
+
+Version 0 — Family Lab
+
+Det här är egentligen din privata prototyp.
+
+Syfte
+
+Bevisa att familjen faktiskt använder den.
+
+Funktioner
+skapa familj
+skapa familjemedlemmar
+ladda upp bild/PDF
+vision/OCR
+extrahera datum/person/händelse/task
+granskningsmodal
+redigera AI-resultatet
+godkänn
+kalender
+enkel RAG
+enkel privat Telegram-bot för read-only-frågor och inbox
+arbetsschema
+läxor/prov
+countdown
+Frågor systemet ska klara
+
+“Jobbar pappa imorgon?”
+
+“Har Ida något med sig till skolan?”
+
+“När har Kalle prov?”
+
+“Hur länge är det kvar till Grekland?”
+
+“Vad behöver vi tänka på imorgon?”
+
+Det här kan du dogfooda hårt.
+
+Version 1 — Familjen glömmer inget
+
+Detta är första riktiga produkten.
+
+Positionering
+
+Från skollapp till familjekoll på 30 sekunder.
+
+Fokus:
+
+skola + jobb + aktiviteter + kalender.
+
+Funktioner
+
+📸 Bild/PDF/screenshot
+🧠 AI-extraktion
+✅ Föräldragranskning
+📅 Kalender
+   skapa och redigera event i en gemensam modal med person, titel, datum, start/slut, heldag, kategori, plats och anteckning
+   riktig veckovy med veckonummer, dagkolumner, timaxel, halvtimmeslinjer, heldagsrad och tydlig nu-markering
+   dra event till ny dag och exakt tid i 15-minuterssteg på desktop; draget blir ett förslag i samma modal och sparas först efter explicit bekräftelse
+   överlappande event ska förbli läsbara och kalendern utökar synligt tidsintervall när familjen har tidiga eller sena pass
+   mobil och tangentbord har alltid Redigera som fullvärdigt alternativ till drag-and-drop
+   UI flyttar posten först efter serverbekräftad, hushållsfiltrerad uppdatering och visar fel utan falsk optimistic success
+   om familjen ändrar en dokumentbunden tid måste posten bli en tydligt manuell override; den får aldrig fortsätta citera originaldokumentet som stöd för den nya tiden
+🗂 Dokumentträd med beständiga mappar, expandera/minimera och drag-and-drop mellan mappar
+   trepunktsmenyer på mappar och filer för byt namn, flytta, öppna och säker radering
+   en mapp med innehåll får inte raderas av misstag; servern nekar tills den är tom
+👋 Första-gången-intro som presenterar familjemedlemmarna och förklarar dokument → AI-förslag → mänskligt godkännande → kalender/frågor/källor
+🎨 Egen Vardagsro-symbol och appikon i skalbar SVG, separerad från vanliga Lucide-funktionsikoner
+✅ Tasks, deadlines och “ta med”
+⏰ Reminders
+🎓 Läxor/prov
+👨‍👩‍👧 Familjemedlemmar
+🔐 Inloggning, hushåll och serverstyrda permissions
+🔎 Behörighetsfilter före retrieval och varje action
+🤖 Smala frågor över godkänd data, alltid med källa eller “jag vet inte”
+⏳ Enkla countdowns från godkända deadlines
+☀️ Daily Brief
+🧾 Ändringshistorik, dokumentstatus och senast uppdaterad
+
+Det här tycker jag är rätt MVP att sälja.
+
+Version 1.1 — Familjens AI i fickan
+
+Nu gör vi den verifierade familje-AI:n tillgänglig utan att familjen behöver
+öppna huvudappen.
+
+Telegram börjar i privata chattar där varje Telegram-konto är säkert kopplat
+till en familjemedlem och ett hushåll.
+
+Funktioner
+
+📱 Privat Telegram-bot för varje familjemedlem
+🔗 Engångslänk för säker konto- och familjekoppling
+💬 Frågor mot endast den data personen får se
+📸 Foto, screenshot och PDF direkt till familjens inbox
+🎙 Röst för frågor och nya förslag
+✅ Mini App för buntgranskning och redigering
+☀️ Personlig morgonbrief och relevanta påminnelser
+🔎 Svar med källa, freshness och tydligt osäkert underlag
+
+Safe Action Engine
+
+AI:n får föreslå add, change och delete för events och tasks, men får aldrig
+skriva direkt i databasen.
+
+Varje ändring går genom:
+
+identitet
+behörighetskontroll
+typat ändringsförslag
+tydlig diff eller förhandsgranskning
+explicit bekräftelse efter risknivå
+idempotens och dubblettkontroll
+soft delete
+append-only audit log
+Ångra
+
+Exempel:
+
+“Flytta Idas fotboll till 18:00.”
+
+🤖 Vill du ändra söndagens fotboll?
+14:30–16:00 → 18:00–19:30
+
+[Bekräfta] [Avbryt]
+
+Gruppchattar och bredare autonoma handlingar väntar tills privata flöden,
+permissions och audit har bevisats i riktiga familjer.
+
+Version 2 — Familjen hittar allt
+
+Nu utvecklar vi Family Memory.
+
+Dokument kan ligga där länge.
+
+Exempel:
+
+skolregler
+vårdinformation
+garantier
+manualer
+försäkringar
+föreningsinformation
+tidigare scheman
+
+Frågor:
+
+“Hur gör vi en ledighetsansökan?”
+
+“När var Ida senast hos tandläkaren?”
+
+“Hur länge gäller garantin på diskmaskinen?”
+
+“Vad skrev läraren om läxhjälp?”
+
+Med:
+
+källa → dokument → sida/bild → bbox.
+
+Här byggs riktig multimodal RAG:
+
+originaldokumentet bevaras
+OCR-text och sidlayout delas upp i sökbara segment
+text, metadata och visuella segment kan hämtas tillsammans
+hybrid retrieval använder person, datum, dokumenttyp, nyckelord och semantik
+permissions och godkännandestatus filtreras före modellen
+svaret citerar exakt dokument, sida och bildområde
+dubbletter identifieras
+nya scheman kan ersätta gamla utan att historiken försvinner
+varje källa har freshness och versionsstatus
+
+BBox är ett uttryckligt leveranskrav i Version 2, inte bara intern metadata:
+
+varje källsegment sparar documentId, sida/bild, OCR-text och en eller flera bbox
+bbox lagras i ett dokumenterat normaliserat koordinatsystem tillsammans med rotation och renderingsversion
+retrieval returnerar endast bbox från tillåtna, godkända dokument
+ett källklick öppnar rätt sida och markerar exakt rektangel i originalet
+flera separata textområden kan markeras när ett svar bygger på mer än ett ställe
+om exakt bbox saknas måste UI tydligt falla tillbaka till sidnivå, aldrig låtsas vara mer exakt
+dokumentversioner behåller provenance så att en bbox aldrig råkar peka in i en ersatt fil
+ett end-to-end-test bevisar svar → källa → rätt sida → synlig markering → rätt källtext
+
+Det ska gå att trycka på ett svar och öppna exakt där uppgiften stod.
+
+Version 3 — Familjen ligger steget före
+
+Nu blir systemet proaktivt.
+
+Det börjar själv upptäcka:
+
+⚠️ Matsäck behövs imorgon.
+
+⚠️ Engelskaprov om fem dagar men inget pluggtillfälle planerat.
+
+⚠️ Blanketten ska in imorgon.
+
+⚠️ Pappa jobbar kväll samtidigt som Ida har träning.
+
+⚠️ Ni har två saker bokade samtidigt.
+
+⚠️ Ingen är registrerad för skjuts till matchen.
+
+⚠️ Arbetsschemat som svaret bygger på är äldre än fyra veckor.
+
+⚠️ Ett nytt veckobrev verkar ersätta en tidigare uppgift.
+
+AI:n går från:
+
+“Fråga mig.”
+
+till:
+
+“Jag såg något ni bör veta.”
+
+Det här är en jättestor produktmilstolpe.
+
+Consequence Engine använder endast tillåten och godkänd familjedata. Den skiljer
+alltid mellan faktum och förslag, visar Varför? och länkar till källorna.
+
+I början är den rådgivande. Den skickar briefar och förslag via appen eller
+Telegram, men ändrar inget själv. Familjen kan bekräfta, avfärda, snooza och
+ge feedback så att systemet lär sig vad som faktiskt är viktigt.
+
+Det är också här intelligenta countdowns hör hemma:
+
+5 dagar till provet
+        ↓
+boken behöver tas hem
+        ↓
+tre möjliga pluggtillfällen finns
+        ↓
+förslag på plan, inte ett automatiskt beslut
+
+Version 4 — Family Planner
+
+Här börjar olika delar av familjelivet kombineras på riktigt.
+
+Resor
+
+Familjen slänger in:
+
+✈️ flyg
+🏨 hotell
+🚆 tågbiljetter
+🛂 passinfo
+🎟 aktiviteter
+
+Fråga:
+
+“Vad behöver vi fixa inför Grekland?”
+
+eller:
+
+“Kan vi resa den här helgen?”
+
+AI:n använder:
+
+skolschema + jobb + kalender + aktiviteter + resa.
+
+Version 5 — Family Economy
+
+Separat modul ovanpå samma grund.
+
+Exempel:
+
+kvitton
+fakturor
+abonnemang
+hushållsbudget
+garantier
+försäkringar
+återkommande kostnader
+
+Frågor:
+
+“Hur mycket kostar våra streamingtjänster?”
+
+“När går bilförsäkringen ut?”
+
+“Hur mycket spenderade vi på mat förra månaden?”
+
+“Har vi råd med den här resan?”
+
+Här kan Open Banking senare kopplas in.
+
+Version 6 — Family Memories
+
+Här kommer bilder och familjens historia.
+
+Alla familjebilder blir sökbara.
+
+“Visa när Ida lärde sig cykla.”
+
+“Visa bilder från Grekland 2026.”
+
+“Vilka resor gjorde vi när Kalle var liten?”
+
+Systemet kan koppla:
+
+Foto
+↓
+Person
+↓
+Datum
+↓
+Plats
+↓
+Resa
+↓
+Familjehändelse
+
+Och då får Family OS en helt annan dimension:
+
+inte bara vad familjen ska göra — utan vad familjen har gjort.
+
+Version 7 — Full Family OS
+
+Nu kan man börja ställa frågor som korsar flera områden:
+
+“När kan hela familjen åka till Legoland?”
+
+AI:n kontrollerar:
+
+arbetsschema
+skolkalender
+prov
+aktiviteter
+familjekalender
+resbudget
+eventuella bokningar
+
+och kan svara:
+
+17–20 oktober ser bäst ut. Barnen är lediga den 19:e, ingen har aktivitet på söndagen och båda föräldrarna är lediga.
+
+Eller:
+
+“Vad behöver vår familj tänka på kommande två veckor?”
+
+Och det är egentligen slutvisionen.
+
+Det jag skulle INTE bygga tidigt
+
+Det finns en risk att Family OS snabbt blir:
+
+kalender + shoppinglista + recept + ekonomi + fotoalbum + GPS + chat + chores + resor + hälsa + smart home +...
+
+Nej.
+
+Inte heller tidigt:
+
+en Telegram-bot som läser hela familjens vanliga gruppchatt
+en LLM som får skriva direkt i databasen
+autonoma raderingar eller kalenderändringar utan policy och audit
+separat affärslogik för Telegram som inte delas med huvudappen
+en generell AI som försöker svara på allt utan verifierad familjedata
+
+Jag skulle hålla de första månaderna nästan löjligt fokuserade:
+
+INPUT
+
+📸 Skicka saker.
+
+UNDERSTANDING
+
+🧠 AI förstår.
+
+TRUST
+
+✅ Förälder granskar.
+
+MEMORY
+
+🔎 Familjen kan fråga.
+
+ACTION
+
+📅 Systemet påminner om det viktiga.
+
+Om det blir riktigt bra har du sedan en grund där nästan allt annat går att bygga ovanpå.
+
+Produktens kanske viktigaste loop
+
+Jag tror kärnloopen kan bli:
+
+Något händer i familjen
+        ↓
+Någon skickar in det
+        ↓
+AI tolkar
+        ↓
+Förälder godkänner
+        ↓
+Family OS minns
+        ↓
+Rätt familjemedlem får rätt information
+        ↓
+AI hjälper innan något glöms
+        ↓
+Familjen litar ännu mer på systemet
+        ↓
+Mer information läggs in
+
+Den sista delen är viktig.
+
+Ju mer familjen använder systemet, desto mer värdefullt blir det.
+
+Det är en väldigt trevlig produktdynamik.
+
+Och hela visionen i en mening
+
+Family OS är ett privat AI-minne för hela familjen som förstår familjens dokument, scheman, aktiviteter och information, låter föräldrar kontrollera vad som är sant och vem som får se vad, och hjälper familjen att komma ihåg och agera på rätt saker vid rätt tidpunkt.
+
+Eller den konsumentvänliga versionen:
+
+Skicka allt. Familjen glömmer inget.
+
+Det är den formuleringen jag skulle bygga vidare från.

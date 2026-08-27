@@ -1,0 +1,14 @@
+VARDAGSRO RAILWAY E2E {{RUN_ID}}
+
+JOBBSCHEMA
+Person: Mikael (pappa)
+Datum: {{DATE}}
+Arbetspass: 21:15-22:00
+Plats: Railway E2E
+
+ATT GORA
+Person: Mikael (pappa)
+Ta med: E2E-testmapp {{RUN_ID}}
+Senast: {{DATE}} 20:00
+
+Detta ar ett automatiskt testdokument och ska tas bort efter testet.
