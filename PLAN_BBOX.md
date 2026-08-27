@@ -166,3 +166,31 @@ papper i `private/` att köra mot.
 `node scripts/ocr-probe.mjs "private/Kallelse.jpg"` visar vad OCR såg: tid,
 säkerhet, andel osäkra ord och texten. Med `--words` även varje ord med sin ruta.
 Tänkt för att titta på riktiga papper innan man bestämmer vad koden ska göra.
+
+
+## Två saker som bara en körning i den riktiga appen kunde visa
+
+**Tesseract fungerar inte paketerad.** Next buntar in serverberoenden, och
+Tesseract letar upp sitt eget worker-skript på disk vid körning. Bundlad letade
+den efter en omskriven sökväg som inte finns, och varje anrop dog med
+`MODULE_NOT_FOUND`. Lösningen är `serverExternalPackages: ["tesseract.js"]` i
+`next.config.ts`, så att paketet krävs in nativt i stället.
+
+Felet hade inte synts förrän i produktion om OCR bara testats från ett skript.
+
+**Språkdata följer inte med standalone-bygget av sig självt.** Filen läses från
+disk, inte importeras, så bygget ser den inte. `outputFileTracingIncludes` tar med
+`vendor/tessdata/**/*`, verifierat i `.next/standalone`.
+
+Efter det: OCR körd genom en riktig route i Next ger 66 rader och 171 ord med
+koordinater på ett fotograferat schema.
+
+## Läget
+
+Klart och verifierat: OCR i egen process, sidmått och EXIF-rotation ur filen,
+deterministisk matchning av källutdrag mot område, och allt paketerat så att det
+fungerar i produktionsbygget.
+
+Kvar för etapp 1: migrationen för sidor och segment, bildvisaren med markering,
+och inkopplingen i granskningssteget. Migrationen väntar på beslutet om hur länge
+OCR-texten får ligga kvar.
