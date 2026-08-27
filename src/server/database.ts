@@ -14,6 +14,7 @@ import type {
 import { recordAudit } from "@/server/audit";
 import type { ActorContext } from "@/server/authorization-types";
 import { databaseUrl, demoFallbackAllowed } from "@/server/config";
+import { HEALTH_DOCUMENT_MESSAGE, unsupportedHealthDocument } from "@/server/health-documents";
 import { AppError } from "@/server/errors";
 import type {
   DocumentOrganizationInput,
@@ -868,6 +869,13 @@ export async function saveConfirmedDocument(
   events: FamilyEvent[];
   tasks: FamilyTask[];
 }> {
+  // Checked here as well as in the extraction route, so no path can file a care
+  // document by skipping a step. This also runs before any text is read off the
+  // page, which is the point: refusing after reading would mean it was read.
+  if (unsupportedHealthDocument(input.extraction)) {
+    throw new AppError(415, "HEALTH_DOCUMENT_NOT_SUPPORTED", HEALTH_DOCUMENT_MESSAGE);
+  }
+
   const sql = await readyClient();
   const personRows = await sql<{ id: string; household_id: string; timezone: string }[]>`
     select p.id, p.household_id, h.timezone

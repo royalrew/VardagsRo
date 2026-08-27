@@ -1053,3 +1053,29 @@ Lovveckor hanteras inte. För det här schemat spelar det ingen roll eftersom
 höstlovet ligger efter flytten, men ett schema som spänner över ett lov lägger in
 lektioner på lediga dagar. Det ska lösas innan någon förlitar sig på en hel
 termin.
+
+
+## 2026-08-27: hälsoregeln finns nu i koden
+
+Beslutet togs 26 augusti och stod i dokumenten, men ingen spärr fanns i koden.
+Det upptäcktes när OCR skulle förberedas: OCR läser *hela* sidan, inte bara det
+modellen valt ut, så ett vårddokument hade lagrat diagnostext ordagrant även med
+regeln om att `summary` och `sourceExcerpt` ska hållas rena.
+
+`unsupportedHealthDocument` i `src/server/health-documents.ts` avgör saken på
+dokumenttyp och titel. Listan är stammar, inte hela ord: `tandläkare` finns inte
+i `Tandläkarbesök`, och en regel som missar den vanligaste stavningen av det
+vanligaste vårddokumentet är ingen regel.
+
+Spärren sitter på två ställen. I `/api/extract` innan tolkningen lämnar servern,
+och i `saveConfirmedDocument` innan något skrivs. Den andra är den viktiga: den
+ligger i datalagret, så ingen väg kan gå runt den, och den ligger före den plats
+där OCR ska köras. Ordningen är avsiktlig och testad — `database.health-gate.test.ts`
+faller den dag ett vårddokument läses innan det nekas.
+
+Bara typ och titel granskas, inte hela texten. Ett skolbrev som råkar nämna
+skolsköterskan är fortfarande ett skolbrev, och att neka det hade gjort produkten
+oanvändbar för det den mest används till.
+
+Verifierat mot körande server: ett dokument med titeln `Tandläkarbesök` ger 415
+och databasen står kvar på noll dokument och noll händelser.

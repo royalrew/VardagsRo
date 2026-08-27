@@ -4,6 +4,7 @@ import { requireActor, assertCanMutate } from "@/server/actor";
 import { extractDocument } from "@/server/ai";
 import { loadDashboard } from "@/server/database";
 import { AppError } from "@/server/errors";
+import { HEALTH_DOCUMENT_MESSAGE, unsupportedHealthDocument } from "@/server/health-documents";
 import { apiError, json } from "@/server/http";
 import { assertTrustedMutationRequest } from "@/server/request-security";
 import {
@@ -78,6 +79,12 @@ export async function POST(request: Request) {
       people: data.people,
       timezone: data.timezone,
     });
+
+    // Refused before the extraction is handed back, so the care text never
+    // reaches the browser either.
+    if (unsupportedHealthDocument(extraction)) {
+      throw new AppError(415, "HEALTH_DOCUMENT_NOT_SUPPORTED", HEALTH_DOCUMENT_MESSAGE);
+    }
 
     return json({ ...extraction, storageKey: null }, { status: 201 });
   } catch (error) {
