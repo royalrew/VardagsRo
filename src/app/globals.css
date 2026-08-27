@@ -5243,3 +5243,27 @@ button.event-row:hover {
   background: var(--coral-soft);
   color: #8c3520;
 }
+
+.login-notice {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--green-soft);
+  color: var(--green-dark);
+  font-size: 14px;
+}
+
+.login-secondary {
+  margin-top: 2px;
+  padding: 6px;
+  border: 0;
+  background: none;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.login-secondary:hover:not(:disabled) {
+  color: var(--green-dark);
+}

@@ -1144,3 +1144,35 @@ adress som bär inloggningsuppgifter.
 
 `pnpm release:smoke` och `release:e2e` kräver ett konto, alltså bootstrapen ovan,
 plus `VARDAGSRO_TEST_EMAIL` och `VARDAGSRO_TEST_PASSWORD`.
+
+
+## 2026-08-27: lösenordsåterställning
+
+Innan detta var enda vägen tillbaka in i ett glömt konto en shell på
+produktionscontainern. Det duger för den som deployat och för ingen annan i
+familjen.
+
+`src/server/mail.ts` skickar två sorters brev: en återställningslänk och en
+inbjudan. Ingetdera bär familjeinnehåll — inga scheman, inga dokument, inga
+barnnamn. Den gränsen är ett beslut, och den är skälet till att en extern
+e-postleverantör är ett vanligt val här i stället för en fråga om behandling av
+barns uppgifter.
+
+Utan SMTP konfigurerat skrivs länken i konsolen i stället för att skickas. Det
+gör flödet körbart lokalt utan påhittad mejlserver.
+
+Verifierat lokalt hela vägen: begäran → loggad länk → `/nytt-losenord` → nytt
+lösenord satt → inloggning med det nya ger 200 och med det gamla 401. Begäran
+svarar likadant för känd och okänd adress, så inloggningssidan kan inte användas
+för att ta reda på vilka som finns i familjen.
+
+Ett fel som testet hittade: en tom miljövariabel behandlades som satt. `SMTP_FROM=`
+utan värde hade gett avsändare tom sträng i stället för att falla tillbaka på
+kontot. Rättat i `smtpConfig`.
+
+### SMTP-uppgifterna i .env.local fungerar inte
+
+Loopia svarar `535 5.7.8 authentication failed` på både 587 och 465. Värd och
+port stämmer alltså — hela SMTP-samtalet går fram till autentiseringen. Det är
+uppgifterna som avvisas. Vanliga orsaker hos Loopia: adressen är en vidarebefordran
+och inte en riktig brevlåda, eller lösenordet är kundzonens och inte brevlådans.

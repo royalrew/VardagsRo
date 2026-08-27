@@ -38,6 +38,46 @@ export function telegramConfig(): TelegramConfig | null {
   };
 }
 
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  from: string;
+  /** Port 465 is implicit TLS; everything else starts plain and upgrades. */
+  secure: boolean;
+}
+
+/**
+ * Mail carries account plumbing only: a reset link and an invitation. No family
+ * content is ever sent, so no schedule, document or child's name reaches a mail
+ * provider. That boundary is a decision, not an accident, and it is the reason
+ * this configuration can exist without a wider discussion about processors.
+ */
+export function smtpConfig(): SmtpConfig | null {
+  const host = process.env.SMTP_HOST;
+  const user = process.env.SMTP_USER;
+  const password = process.env.SMTP_PASSWORD;
+  // An empty variable is not a configured one. `SMTP_FROM=` with nothing after
+  // it is ordinary in an env file, and treating it as a value would send mail
+  // from an empty address instead of falling back to the account.
+  const from = present(process.env.SMTP_FROM) ? process.env.SMTP_FROM : user;
+  const rawPort = process.env.SMTP_PORT;
+  const port = present(rawPort) ? Number(rawPort) : 587;
+
+  if (!present(host) || !present(user) || !present(password) || !present(from)) return null;
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) return null;
+
+  return {
+    host: host.trim(),
+    port,
+    user: user.trim(),
+    password,
+    from: from.trim(),
+    secure: port === 465,
+  };
+}
+
 export function databaseUrl(): string | null {
   const value = process.env.FAMILY_DATABASE_URL ?? process.env.DATABASE_URL;
   return present(value) ? value.trim() : null;
@@ -101,5 +141,6 @@ export function configuredServices() {
     r2: r2Config() !== null,
     telegram: telegramConfig() !== null,
     auth: present(process.env.VARDAGSRO_AUTH_SECRET ?? process.env.BETTER_AUTH_SECRET),
+    mail: smtpConfig() !== null,
   } as const;
 }

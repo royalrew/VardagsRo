@@ -11,6 +11,7 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -19,6 +20,7 @@ export function LoginForm() {
     setBusy(true);
     setError(null);
 
+    setNotice(null);
     const result = await authClient.signIn.email({ email: email.trim(), password });
 
     if (result.error) {
@@ -32,6 +34,23 @@ export function LoginForm() {
 
     router.replace("/");
     router.refresh();
+  }
+
+  async function requestReset() {
+    if (busy) return;
+    const address = email.trim();
+    if (!address) {
+      setError("Fyll i din e-postadress först, så skickar vi en återställningslänk.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    await authClient.requestPasswordReset({ email: address, redirectTo: "/nytt-losenord" });
+    // Always the same answer, whether or not the address has an account: a login
+    // form must not become a way to find out who is in the family.
+    setNotice("Om adressen har ett konto är ett mejl på väg. Kolla skräpposten också.");
+    setBusy(false);
   }
 
   return (
@@ -75,8 +94,18 @@ export function LoginForm() {
           </p>
         ) : null}
 
+        {notice ? (
+          <p className="login-notice" role="status">
+            {notice}
+          </p>
+        ) : null}
+
         <button type="submit" className="login-submit" disabled={busy}>
           {busy ? "Loggar in…" : "Logga in"}
+        </button>
+
+        <button type="button" className="login-secondary" onClick={requestReset} disabled={busy}>
+          Glömt lösenordet?
         </button>
 
         <p className="login-help">

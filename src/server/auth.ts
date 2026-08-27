@@ -5,6 +5,7 @@ import { admin } from "better-auth/plugins";
 import { Pool } from "pg";
 
 import { appBaseUrl, authSecret, databaseUrl, isProductionRuntime } from "@/server/config";
+import { sendPasswordReset } from "@/server/mail";
 
 const globalAuthPool = globalThis as typeof globalThis & { vardagsroAuthPool?: Pool };
 
@@ -37,6 +38,13 @@ function createAuth() {
       disableSignUp: true,
       minPasswordLength: 12,
       maxPasswordLength: 128,
+      // Without this, the only way back into a forgotten account is a shell on
+      // the production container. That is workable for whoever deployed it and
+      // nobody else in the family.
+      sendResetPassword: async ({ user, url }) => {
+        await sendPasswordReset(user.email, url);
+      },
+      resetPasswordTokenExpiresIn: 60 * 60,
     },
     user: {
       modelName: "auth_users",
