@@ -25,7 +25,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Railway runs migrations from this same final image in a separate pre-deploy
 # container. Keep only the migration files and their dependency in the image.
-COPY --from=builder --chown=nextjs:nodejs /app/scripts/predeploy-staging.mjs /app/scripts/migrate.mjs /app/scripts/seed-staging.mjs /app/scripts/database-env.mjs ./scripts/
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/predeploy-staging.mjs /app/scripts/migrate.mjs /app/scripts/seed-staging.mjs /app/scripts/database-env.mjs /app/scripts/bootstrap-account.mjs /app/scripts/auth-password.mjs ./scripts/
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules/.pnpm/postgres@*/node_modules/postgres ./node_modules/postgres
 USER nextjs
 EXPOSE 3000

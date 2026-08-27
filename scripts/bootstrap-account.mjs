@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import { hashPassword } from "better-auth/crypto";
 import postgres from "postgres";
+
+import { hashPasswordForAuth } from "./auth-password.mjs";
 
 import { requiredDatabaseUrl } from "./database-env.mjs";
 
@@ -112,7 +113,7 @@ try {
   }
 
   const name = typeof args.name === "string" ? args.name : person.name;
-  const hashed = await hashPassword(password);
+  const hashed = await hashPasswordForAuth(password);
 
   const summary = await sql.begin(async (tx) => {
     const existing = await tx`select id from auth_users where lower(email) = ${email} limit 1`;
