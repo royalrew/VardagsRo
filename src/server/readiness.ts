@@ -11,6 +11,7 @@ export interface ServiceReadiness {
     database: DatabaseStatus;
     openai: ConfiguredServiceStatus;
     r2: R2Status;
+    mail: ConfiguredServiceStatus;
   };
 }
 
@@ -19,6 +20,7 @@ export function readinessFrom(input: {
   openaiConfigured: boolean;
   r2Configured: boolean;
   r2Healthy: boolean;
+  mailConfigured: boolean;
 }): ServiceReadiness {
   const openai: ConfiguredServiceStatus = input.openaiConfigured
     ? "configured"
@@ -29,9 +31,16 @@ export function readinessFrom(input: {
       ? "unavailable"
       : "not_configured";
 
+  const mail: ConfiguredServiceStatus = input.mailConfigured
+    ? "configured"
+    : "not_configured";
+
   return {
+    // Mail is reported but does not hold readiness back. A household can use the
+    // product without it; what it cannot do is recover a forgotten password, and
+    // that failure is silent unless something says so out loud.
     ready: input.database === "ok" && openai === "configured" && r2 === "ok",
-    services: { database: input.database, openai, r2 },
+    services: { database: input.database, openai, r2, mail },
   };
 }
 
@@ -47,5 +56,6 @@ export async function serviceReadiness(): Promise<ServiceReadiness> {
     openaiConfigured: configured.openai,
     r2Configured: configured.r2,
     r2Healthy,
+    mailConfigured: configured.mail,
   });
 }

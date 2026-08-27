@@ -10,17 +10,18 @@ describe("service readiness", () => {
         openaiConfigured: true,
         r2Configured: true,
         r2Healthy: true,
+        mailConfigured: true,
       }),
     ).toMatchObject({ ready: true });
   });
 
   it.each([
-    { database: "not_configured" as const, openaiConfigured: true, r2Configured: true, r2Healthy: true },
-    { database: "migration_required" as const, openaiConfigured: true, r2Configured: true, r2Healthy: true },
-    { database: "empty" as const, openaiConfigured: true, r2Configured: true, r2Healthy: true },
-    { database: "ok" as const, openaiConfigured: false, r2Configured: true, r2Healthy: true },
-    { database: "ok" as const, openaiConfigured: true, r2Configured: false, r2Healthy: false },
-    { database: "ok" as const, openaiConfigured: true, r2Configured: true, r2Healthy: false },
+    { database: "not_configured" as const, openaiConfigured: true, r2Configured: true, r2Healthy: true, mailConfigured: true },
+    { database: "migration_required" as const, openaiConfigured: true, r2Configured: true, r2Healthy: true, mailConfigured: true },
+    { database: "empty" as const, openaiConfigured: true, r2Configured: true, r2Healthy: true, mailConfigured: true },
+    { database: "ok" as const, openaiConfigured: false, r2Configured: true, r2Healthy: true, mailConfigured: true },
+    { database: "ok" as const, openaiConfigured: true, r2Configured: false, r2Healthy: false, mailConfigured: true },
+    { database: "ok" as const, openaiConfigured: true, r2Configured: true, r2Healthy: false, mailConfigured: true },
   ])("is not ready for an incomplete dependency state", (input) => {
     expect(readinessFrom(input).ready).toBe(false);
   });
