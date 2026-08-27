@@ -1170,9 +1170,16 @@ Ett fel som testet hittade: en tom miljövariabel behandlades som satt. `SMTP_FR
 utan värde hade gett avsändare tom sträng i stället för att falla tillbaka på
 kontot. Rättat i `smtpConfig`.
 
-### SMTP-uppgifterna i .env.local fungerar inte
+### E-posten fungerar
 
-Loopia svarar `535 5.7.8 authentication failed` på både 587 och 465. Värd och
-port stämmer alltså — hela SMTP-samtalet går fram till autentiseringen. Det är
-uppgifterna som avvisas. Vanliga orsaker hos Loopia: adressen är en vidarebefordran
-och inte en riktig brevlåda, eller lösenordet är kundzonens och inte brevlådans.
+Ett felskrivet lösenord gav först `535 5.7.8 authentication failed` på både 587
+och 465. Rättat i Loopias kundzon, och båda portarna autentiserar nu.
+
+Skarpt prov: en återställning begärd från utvecklingsservern levererades till
+`jimmy@zickaris.se` med rätt text och avsändare. Länken pekade på `localhost`
+eftersom `VARDAGSRO_BASE_URL` styr adressen i brevet; i produktion blir den
+`https://www.zickaris.se`.
+
+SMTP-variablerna finns i Railway. Utan dem hade återställning svarat att brevet
+var på väg och sedan inte skickat något — det tystaste tänkbara felet i den
+funktion som finns till för att någon är utelåst.
