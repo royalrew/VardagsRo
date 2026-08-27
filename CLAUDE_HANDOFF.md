@@ -1183,3 +1183,21 @@ eftersom `VARDAGSRO_BASE_URL` styr adressen i brevet; i produktion blir den
 SMTP-variablerna finns i Railway. Utan dem hade återställning svarat att brevet
 var på väg och sedan inte skickat något — det tystaste tänkbara felet i den
 funktion som finns till för att någon är utelåst.
+
+
+## Två fällor när Railway-variabler läses från Windows
+
+`railway variables --kv` avslutar rader med CRLF. Ett värde som plockas ut med
+`cut` bär då med sig ett ``, och Basic Auth misslyckas med 401 trots att
+lösenordet ser rätt ut och har rätt längd. Trimma alltid: `tr -d '
+'`.
+
+Och: använd aldrig `curl -w '%{redirect_url}'` mot en adress som bär
+inloggningsuppgifter. Utskriften tar med användarinfo och lägger lösenordet i
+loggen. `-o /dev/null -w '%{http_code}'` räcker för en hälsokontroll.
+
+## Produktionen efter kvällens deployer
+
+`/api/health` svarar `ok` med `database: ok`, `openai: configured`, `r2: ok` och
+`mail: configured`. `/` ger 307 till `/login`, `/login` och `/nytt-losenord` ger
+200, och `/api/documents` utan produktsession ger 401.
