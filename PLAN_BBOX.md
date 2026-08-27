@@ -47,7 +47,12 @@ dessutom olika mellan körningar, precis som lunchraderna redan visat.
 och samma mönster som `mergeMedvindWorkEvents` och `mergeParallelSchoolLessons`
 redan använder: modellen tolkar, koden avgör.
 
-**Rekommendation: alternativ 2.**
+**Beslut 2026-08-27: alternativ 2, med `tesseract.js` som körs i egen process.**
+
+Avgörande för valet var att 95 procent av materialet är fotograferade papper med
+vanlig löptext — kallelser och brev från skolan. Scheman är ovanliga. Löptext är
+precis vad Tesseract är bra på, och rutnät är dess svaghet. Molntjänsternas
+tabellstöd hade alltså betalat för det sällsynta fallet och inte för det vanliga.
 
 ### Och det är ett compliance-beslut, inte bara ett tekniskt
 
@@ -131,3 +136,33 @@ Utöver det:
 
 Hybrid retrieval, dubblettidentifiering och freshness hör till samma avsnitt i
 konceptet men löser inte det här problemet. De hör till etapp 4 och senare.
+
+
+## Mätt hittills
+
+`tesseract.js@7` kör svenska på ett fotograferat schema på cirka två sekunder och
+ger 248 ord med koordinater. Språkdata ligger versionerad i `vendor/tessdata`, så
+ingenting laddas ner vid körning och inget nätanrop sker på Railway.
+
+`locateExcerpt` i `src/server/source-location.ts` knyter ett källutdrag till ett
+område deterministiskt, utan att anropa någon modell. Tio enhetstester.
+
+På schemat, alltså det svåraste materialet, hittas 4 av 12 utdrag. De övriga åtta
+faller tillbaka till sidnivå i stället för att peka fel, vilket är kravet.
+
+Två saker gjorde matchningen ärlig i stället för gissande:
+
+- Tokens viktas efter hur ovanliga de är på sidan. `Samhällsorienterande ämnen`
+  står fem gånger i ett schema och säger nästan ingenting om var man är;
+  klockslaget bredvid säger nästan allt. Utan viktningen pekade två olika
+  lektioner på samma ruta.
+- Flera likvärdiga träffar på skilda ställen ger inget svar alls.
+
+Löptextfallet, alltså de 95 procenten, är ännu inte mätt. Det kräver ett riktigt
+papper i `private/` att köra mot.
+
+## Verktyg för den lokala slingan
+
+`node scripts/ocr-probe.mjs "private/Kallelse.jpg"` visar vad OCR såg: tid,
+säkerhet, andel osäkra ord och texten. Med `--words` även varje ord med sin ruta.
+Tänkt för att titta på riktiga papper innan man bestämmer vad koden ska göra.

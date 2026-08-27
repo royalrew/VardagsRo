@@ -36,3 +36,8 @@ pnpm-debug.log*
 # Personliga anteckningar om familjen. Ska aldrig in i build context.
 Familjen.txt
 /private/
+
+# Tesseract laddar ner språkdata till arbetskatalogen om den inte hittar den.
+# Den versionerade kopian ligger i vendor/tessdata och ska användas i stället.
+/*.traineddata
+/*.traineddata.gz
