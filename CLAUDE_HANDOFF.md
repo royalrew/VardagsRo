@@ -1099,3 +1099,48 @@ Regeln är testad i `src/components/document-person.test.ts`, inklusive att den
 aldrig får landa på den första familjemedlemmen.
 
 Samma mönster som resten av dagens fel: en gissning presenterad som ett faktum.
+
+
+## Deploy 2026-08-27: identitet, hälsospärr och källmarkering i produktion
+
+Hela dagens arbete är deployat. Produktionen kräver nu inloggning.
+
+- Railway deployment: `56447169-eb0c-4842-b984-e7d41162d30c` (SUCCESS), följd av
+  `0b090b95-cd85-450e-a2d0-7d30ac2d885e` (SUCCESS) som la till bootstrap-skriptet
+  i imagen
+- Migration 007, 008 och 009 kördes automatiskt via `preDeployCommand`
+- `person_type` backfillades korrekt i produktion: 2 vuxna, 5 barn
+
+Verifierat mot `https://www.zickaris.se`:
+
+- `/api/ready` 200 publikt, grinden svarar 401 utan uppgifter
+- `/` med grind men utan produktsession ger 307 till `/login`
+- `/api/documents` utan produktsession ger 401 `NOT_AUTHENTICATED`
+- `/login` ger 200
+- `bootstrap-account.mjs --list` kör i containern och läser databasen
+
+`VARDAGSRO_BASE_URL` är nu satt explicit till `https://www.zickaris.se`. Apex
+omdirigerar dit med 301, så ursprungskontrollen på skrivningar stämmer.
+
+### Kvar innan någon kan logga in
+
+Inget konto finns i produktion, och `disableSignUp` är på. Kör i eget fönster så
+att lösenordet inte hamnar i en logg:
+
+```powershell
+railway ssh --service vardagsro-web `
+  env VARDAGSRO_BOOTSTRAP_PASSWORD='<lösenord>' `
+  node scripts/bootstrap-account.mjs --email <e-post> --person "<namn>" --role owner
+```
+
+### Grindlösenordet är utbytt
+
+Det gamla exponerades i en terminalutskrift under deployen: `curl`s
+`%{redirect_url}` tar med användarinfo från anropet. Ett nytt är satt i Railway.
+Använd `-o /dev/null -w '%{http_code}'` och aldrig `%{redirect_url}` mot en
+adress som bär inloggningsuppgifter.
+
+### Release-testet är inte kört
+
+`pnpm release:smoke` och `release:e2e` kräver ett konto, alltså bootstrapen ovan,
+plus `VARDAGSRO_TEST_EMAIL` och `VARDAGSRO_TEST_PASSWORD`.
