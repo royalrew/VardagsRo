@@ -65,6 +65,8 @@ export interface DeterministicAnswerInput {
   events: readonly FamilyEvent[];
   documents?: readonly FamilyDocument[];
   timeZone?: string;
+  /** Who is asking, so the answer can say "Du" instead of their name. */
+  currentPersonId?: string;
 }
 
 export interface TaskQuestionPlan {
@@ -81,6 +83,8 @@ export interface DeterministicTaskAnswerInput {
   tasks: readonly FamilyTask[];
   documents?: readonly FamilyDocument[];
   timeZone?: string;
+  /** Who is asking, so the answer can say "Du" instead of their name. */
+  currentPersonId?: string;
 }
 
 type EventInterval = {
@@ -755,20 +759,41 @@ function formatDuration(minutes: number): string {
   return `${hourText} och ${formatDuration(remaining)}`;
 }
 
-function personLabel(personId: string, people: readonly FamilyPerson[]): string {
+/**
+ * What to call someone in an answer.
+ *
+ * The name comes first, never the role. In this household the owner's role is
+ * literally "Jag", so a role-first label made every answer about that person
+ * read as if the assistant were speaking about itself: asking whether someone
+ * worked tomorrow came back as "Ja. Jag – Jobb kl. 08.00–14.00".
+ *
+ * The person who asked is addressed as "Du", which is how the question would be
+ * answered by anyone in the family.
+ */
+function personLabel(
+  personId: string,
+  people: readonly FamilyPerson[],
+  currentPersonId?: string,
+): string {
   const person = people.find((candidate) => candidate.id === personId);
-  return person?.role || person?.name || "Okänd person";
+  if (!person) return "Okänd person";
+  if (currentPersonId && person.id === currentPersonId) return "Du";
+  return person.name || person.role || "Okänd person";
 }
 
 function eventLabel(
   event: FamilyEvent,
   people: readonly FamilyPerson[],
   timeZone: string,
+  currentPersonId?: string,
 ): string {
   const time = event.allDay
     ? "hela dagen"
     : `kl. ${formatClock(event.startsAt, timeZone)}–${formatClock(event.endsAt, timeZone)}`;
-  const who = event.personId === null ? "Hela familjen" : personLabel(event.personId, people);
+  const who =
+    event.personId === null
+      ? "Hela familjen"
+      : personLabel(event.personId, people, currentPersonId);
   return `${who} – ${event.title} ${time}`;
 }
 
@@ -868,6 +893,7 @@ export function answerTaskQuestionDeterministically({
   tasks,
   documents = [],
   timeZone: requestedTimeZone,
+  currentPersonId,
 }: DeterministicTaskAnswerInput): AssistantAnswer {
   const timeZone = safeTimeZone(requestedTimeZone);
   if (!plan) {
@@ -948,7 +974,7 @@ export function answerTaskQuestionDeterministically({
   }
 
   const descriptions = relevantTasks.map((task) => {
-    const person = personLabel(task.personId, people);
+    const person = personLabel(task.personId, people, currentPersonId);
     const due = taskDueLabel(task, timeZone);
     return `${person} – ${task.title}${due ? `, senast ${due}` : ", utan angiven deadline"}`;
   });
@@ -990,6 +1016,7 @@ export function answerQuestionDeterministically({
   events,
   documents = [],
   timeZone: requestedTimeZone,
+  currentPersonId,
 }: DeterministicAnswerInput): AssistantAnswer {
   const timeZone = safeTimeZone(requestedTimeZone);
   if (!plan) {
@@ -1075,7 +1102,7 @@ export function answerQuestionDeterministically({
       const pair = overlap.firstOverlappingPair;
       return {
         ...common,
-        text: `Ja. ${eventLabel(pair.first, people, timeZone)} och ${eventLabel(pair.second, people, timeZone)} överlappar med ${formatDuration(overlap.minutes)}.`,
+        text: `Ja. ${eventLabel(pair.first, people, timeZone, currentPersonId)} och ${eventLabel(pair.second, people, timeZone, currentPersonId)} överlappar med ${formatDuration(overlap.minutes)}.`,
         overlapMinutes: overlap.minutes,
       };
     }
@@ -1087,7 +1114,7 @@ export function answerQuestionDeterministically({
   }
 
   const eventDescriptions = relevantEvents
-    .map((event) => eventLabel(event, people, timeZone))
+    .map((event) => eventLabel(event, people, timeZone, currentPersonId))
     .join(", ");
   const planTerms = normalizedPlanTerms(plan);
   const workOnly = plan.intent === "work" && planTerms.every((term) => term === "work");

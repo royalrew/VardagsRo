@@ -35,6 +35,7 @@ export async function answerFamilyQuestion(
       tasks: data.tasks,
       documents: data.documents,
       timeZone: data.timezone,
+      currentPersonId,
     });
   }
 
@@ -74,6 +75,7 @@ export async function answerFamilyQuestion(
     events: data.events,
     documents: data.documents,
     timeZone: data.timezone,
+    currentPersonId,
   });
   return translateAnswer(answer, plan.language);
 }

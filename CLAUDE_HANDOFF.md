@@ -1226,3 +1226,31 @@ En detalj värd att minnas: Better Auth roterar sessionscookien vid bytet. Ett
 test som skickar men inte sparar cookies ser därför ut som att även den egna
 sessionen dog. I webbläsaren hanteras det automatiskt och personen förblir
 inloggad.
+
+
+## 2026-08-28: svaren kallade fel person för Jag
+
+Frågan "Jobbar Jimmy imorgon?" i Telegram besvarades med "Ja. Jag – Jobb
+kl. 07.00–16.00". Orsaken satt i `personLabel`:
+
+```ts
+return person?.role || person?.name || "Okänd person";
+```
+
+Rollen gick före namnet, och ägarens roll i det här hushållet är bokstavligen
+`Jag`. Alltså läste varje svar om den personen som om assistenten talade om sig
+själv. Samma fel gjorde att Hanni omtalades som `Mamma` i stället för med namn.
+
+Namnet går nu först, och den som frågar tilltalas som `Du`. Rollen används bara
+när en person saknar namn.
+
+Verifierat mot den lokala databasen: "Jobbar Jimmy den 26 augusti?" ger
+"Ja. Du – Hemvården kl. 07.00–16.00", och "Jobbar Hanni den 27 augusti?" ger
+"Ja. Hanni – Kvällspass kl. 14.00–22.00". Regressioner i
+`src/lib/answer-labels.test.ts`.
+
+Kvar i samma hörn: svaren är fortfarande telegrafiska. "Du – Hemvården
+kl. 07.00–16.00" är korrekt men inte hur en människa svarar. Att formulera om
+dem är en egen uppgift, och den ska göras utan att släppa in en modell mellan
+fakta och svar — hela poängen med den deterministiska motorn är att siffrorna
+inte kan ändras på vägen.
