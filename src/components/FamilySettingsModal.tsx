@@ -1,9 +1,15 @@
 "use client";
 
-import { ExternalLink, MessageCircle, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ExternalLink, KeyRound, MessageCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Avatar } from "@/components/ui";
 import type { DashboardData, FamilyPerson } from "@/lib/types";
+
+interface HouseholdLogin {
+  personId: string;
+  email: string;
+  role: "owner" | "adult" | "viewer";
+}
 
 export interface PersonDraft {
   name: string;
@@ -76,6 +82,12 @@ export function FamilySettingsModal({
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [logins, setLogins] = useState<HouseholdLogin[] | null>(null);
+  const [loginFor, setLoginFor] = useState<FamilyPerson | null>(null);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginRole, setLoginRole] = useState<"adult" | "viewer">("viewer");
+  const [loginError, setLoginError] = useState("");
   const [telegram, setTelegram] = useState<TelegramLinkState | null>(null);
   const [telegramCode, setTelegramCode] = useState("");
   const [telegramPersonId, setTelegramPersonId] = useState("");
@@ -84,6 +96,54 @@ export function FamilySettingsModal({
     () => data.people.filter((person) => person.personType === "adult"),
     [data.people],
   );
+
+  async function createLogin() {
+    if (!loginFor || busy) return;
+    setBusy(true);
+    setLoginError("");
+    try {
+      const response = await fetch(`/api/people/${loginFor.id}/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          personId: loginFor.id,
+          email: loginEmail.trim(),
+          password: loginPassword,
+          role: loginRole,
+        }),
+      });
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(body.error ?? "Inloggningen kunde inte skapas.");
+
+      setLogins((current) => [
+        ...(current ?? []),
+        { personId: loginFor.id, email: loginEmail.trim(), role: loginRole },
+      ]);
+      setLoginFor(null);
+      setLoginEmail("");
+      setLoginPassword("");
+    } catch (cause) {
+      setLoginError(cause instanceof Error ? cause.message : "Inloggningen kunde inte skapas.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    void fetch("/api/logins", { cache: "no-store" })
+      .then(async (response) => (response.ok ? await response.json() : { logins: [] }))
+      .then((body: { logins?: HouseholdLogin[] }) => {
+        if (active) setLogins(body.logins ?? []);
+      })
+      .catch(() => {
+        if (active) setLogins([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -378,6 +438,120 @@ export function FamilySettingsModal({
                   ))}
                 </ul>
               )}
+            </div>
+
+            <div className="login-settings">
+              <div className="family-members-heading">
+                <p className="eyebrow"><KeyRound size={15} /> Inloggningar</p>
+              </div>
+              <p className="family-settings-hint">
+                Du skapar inloggningen och säger lösenordet till personen. De byter
+                det själva under Byt lösenord när de kommit in.
+              </p>
+
+              <ul className="login-list">
+                {data.people.map((person) => {
+                  const login = logins?.find((candidate) => candidate.personId === person.id);
+                  return (
+                    <li key={person.id}>
+                      <span className="family-member-name">
+                        <strong>{person.name}</strong>
+                        <small>
+                          {login
+                            ? `${login.email} · ${
+                                login.role === "owner"
+                                  ? "ägare"
+                                  : login.role === "adult"
+                                    ? "kan ändra"
+                                    : "kan läsa"
+                              }`
+                            : "ingen inloggning"}
+                        </small>
+                      </span>
+                      {login ? null : (
+                        <button
+                          type="button"
+                          className="button button-ghost"
+                          onClick={() => {
+                            setLoginFor(person);
+                            setLoginRole(person.personType === "adult" ? "adult" : "viewer");
+                            setLoginError("");
+                          }}
+                          disabled={busy || logins === null}
+                        >
+                          Skapa
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {loginFor ? (
+                <div className="login-form">
+                  <p className="family-settings-hint">
+                    Inloggning för <strong>{loginFor.name}</strong>
+                    {loginFor.personType === "child" ? " (barn)" : ""}
+                  </p>
+                  <label className="login-field">
+                    <span>E-postadress</span>
+                    <input
+                      type="email"
+                      autoComplete="off"
+                      value={loginEmail}
+                      onChange={(event) => setLoginEmail(event.target.value)}
+                      disabled={busy}
+                    />
+                  </label>
+                  <label className="login-field">
+                    <span>Lösenord att säga vidare</span>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      value={loginPassword}
+                      onChange={(event) => setLoginPassword(event.target.value)}
+                      disabled={busy}
+                    />
+                  </label>
+                  <label className="login-field">
+                    <span>Behörighet</span>
+                    <select
+                      className="upload-select"
+                      value={loginRole}
+                      onChange={(event) =>
+                        setLoginRole(event.target.value === "adult" ? "adult" : "viewer")
+                      }
+                      disabled={busy}
+                    >
+                      <option value="viewer">Kan läsa</option>
+                      <option value="adult">Kan ändra</option>
+                    </select>
+                  </label>
+                  {loginError ? (
+                    <p className="login-error" role="alert">
+                      {loginError}
+                    </p>
+                  ) : null}
+                  <div className="password-modal-actions">
+                    <button
+                      type="button"
+                      className="password-modal-cancel"
+                      onClick={() => setLoginFor(null)}
+                      disabled={busy}
+                    >
+                      Avbryt
+                    </button>
+                    <button
+                      type="button"
+                      className="login-submit"
+                      onClick={() => void createLogin()}
+                      disabled={busy}
+                    >
+                      {busy ? "Skapar…" : "Skapa inloggning"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="telegram-settings">

@@ -5312,3 +5312,40 @@ button.event-row:hover {
   font-size: 14px;
   font-weight: 600;
 }
+
+/* Inloggningar i familjeinställningarna */
+.login-settings {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.login-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.login-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  gap: 12px;
+}
+
+.login-list li:last-child {
+  border-bottom: 0;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-muted);
+  gap: 10px;
+}

@@ -29,9 +29,17 @@ vi.mock("@/server/database", () => ({
   saveManualEvent: vi.fn(),
   createPerson: vi.fn(),
   updateHouseholdName: vi.fn(),
+  createHouseholdLogin: vi.fn(async () => ({
+    email: "ny@exempel.se",
+    personName: "Ida",
+    role: "viewer" as const,
+  })),
+  listHouseholdLogins: vi.fn(async () => []),
 }));
 
 import { PATCH as householdPatch } from "@/app/api/household/route";
+import { GET as loginsGet } from "@/app/api/logins/route";
+import { POST as createLogin } from "@/app/api/people/[id]/login/route";
 import { POST as peoplePost } from "@/app/api/people/route";
 import { GET as tasksGet, POST as tasksPost } from "@/app/api/tasks/route";
 
@@ -119,6 +127,42 @@ describe("roles decide what a member may change", () => {
 
     expect(write.status).toBe(403);
     expect(await write.json()).toMatchObject({ code: "READ_ONLY_MEMBER" });
+  });
+
+  it("reserves handing out access to the owner", async () => {
+    // Giving someone a login is not an ordinary edit: it decides who can see the
+    // household's calendar and documents at all.
+    harness.state.membership = membership("adult");
+
+    const created = await createLogin(
+      jsonPost("http://localhost/api/people/person-1/login", {
+        personId: "person-1",
+        email: "ny@exempel.se",
+        password: "ett tillrackligt langt",
+        role: "viewer",
+      }),
+      { params: Promise.resolve({ id: "person-1" }) },
+    );
+    const listed = await loginsGet(new Request("http://localhost/api/logins"));
+
+    expect(created.status).toBe(403);
+    expect(listed.status).toBe(403);
+  });
+
+  it("lets the owner hand out a login", async () => {
+    harness.state.membership = membership("owner");
+
+    const created = await createLogin(
+      jsonPost("http://localhost/api/people/person-1/login", {
+        personId: "person-1",
+        email: "ny@exempel.se",
+        password: "ett tillrackligt langt",
+        role: "viewer",
+      }),
+      { params: Promise.resolve({ id: "person-1" }) },
+    );
+
+    expect(created.status).toBe(201);
   });
 
   it("reserves family composition and the household name for the owner", async () => {

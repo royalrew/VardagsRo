@@ -227,6 +227,22 @@ export const askRequestSchema = z
   })
   .strict();
 
+export const householdLoginSchema = z
+  .object({
+    personId: z.string().trim().min(1).max(128),
+    email: z.string().trim().min(3).max(200).toLowerCase().refine(
+      (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
+      "Ange en giltig e-postadress",
+    ),
+    // Same floor as the login form itself, so a password made here is never
+    // one the person could not have chosen themselves.
+    password: z.string().min(12).max(128),
+    role: z.enum(["adult", "viewer"]),
+  })
+  .strict();
+
+export type HouseholdLoginInput = z.infer<typeof householdLoginSchema>;
+
 export const telegramLinkSchema = z
   .object({
     code: z.string().trim().min(8).max(16),

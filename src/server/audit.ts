@@ -26,7 +26,8 @@ export type AuditAction =
   | "telegram.link"
   | "telegram.unlink"
   | "membership.create"
-  | "membership.update";
+  | "membership.update"
+  | "login.create";
 
 /**
  * Audit metadata describes the shape of a change, never its content. Titles,

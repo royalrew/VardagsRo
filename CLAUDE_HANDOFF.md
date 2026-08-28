@@ -1297,3 +1297,29 @@ intervall: `torsdag 27 augusti–torsdag 27 augusti`.
 modellen. Den är verifierad genom riktiga frågor mot den lokala databasen, inte
 med ett enhetstest. Motsvarande regel på motorsidan — att en tom personlista ger
 hela familjen — är testad i `src/lib/answer-labels.test.ts`.
+
+
+## 2026-08-28: inloggning per familjemedlem
+
+Ägaren skapar inloggningen i familjeinställningarna och säger lösenordet till
+personen. Ingen inbjudningslänk, ingen token, ingen utgångstid.
+
+Ett inbjudningsflöde med e-post påbörjades och förkastades: alla i hushållet bor
+i samma hus, och att säga lösenordet högt är både enklare och färre rörliga
+delar. Tabellen `family_account_invitations` från migration 007 står därför
+oanvänd. Den lämnas kvar — att ta bort den kräver en migration och kostar mer än
+den gör nytta.
+
+Det förutsätter att personen kan byta lösenord själv efteråt, vilket är varför
+`Byt lösenord` byggdes först.
+
+Barnens roll är `viewer` enligt beslut 2026-08-28: de ser hela hushållet men
+ändrar ingenting. Bella och Ester, 4 och 2 år, får inga konton alls.
+
+Att dela ut åtkomst är ägarens ensak, inte en vanlig ändring. Både
+`POST /api/people/[id]/login` och `GET /api/logins` kräver ägare.
+
+Verifierat mot den lokala databasen hela vägen: ägaren skapade ett viewer-konto,
+personen loggade in, kunde läsa hushållet, och fick 403 på att skriva, på att se
+inloggningar och på att skapa konton. Regressioner i
+`src/app/api/route-permissions.test.ts`.

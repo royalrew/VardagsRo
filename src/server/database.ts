@@ -1433,3 +1433,101 @@ export async function releaseTelegramUpdate(updateId: number): Promise<void> {
     delete from telegram_updates where update_id = ${updateId}
   `;
 }
+
+/**
+ * Gives a family member their own login.
+ *
+ * There is no invitation letter and no token. Everyone in this household lives
+ * in the same house, so the owner creates the login and says the password out
+ * loud. The member changes it themselves afterwards, which is why changing a
+ * password from inside the app had to exist first.
+ *
+ * The password is hashed by the caller with the application's own hasher, so
+ * this function never decides what a valid password looks like.
+ */
+export async function createHouseholdLogin(
+  actor: ActorContext,
+  input: {
+    personId: string;
+    email: string;
+    role: "adult" | "viewer";
+    passwordHash: string;
+  },
+): Promise<{ email: string; personName: string; role: "adult" | "viewer" }> {
+  const sql = await readyClient();
+  return await sql.begin(async (tx) => {
+    const people = await tx<{ id: string; name: string }[]>`
+      select id, name from family_people
+      where id = ${input.personId} and household_id = ${actor.householdId}
+    `;
+    const person = people[0];
+    if (!person) {
+      throw new AppError(404, "PERSON_NOT_FOUND", "Familjemedlemmen finns inte.");
+    }
+
+    const members = await tx<{ count: string }[]>`
+      select count(*)::text as count from family_memberships
+      where household_id = ${actor.householdId} and person_id = ${input.personId}
+    `;
+    if (Number(members[0]?.count ?? 0) > 0) {
+      throw new AppError(
+        409,
+        "PERSON_ALREADY_HAS_LOGIN",
+        `${person.name} har redan en inloggning.`,
+      );
+    }
+
+    const taken = await tx<{ count: string }[]>`
+      select count(*)::text as count from auth_users
+      where lower(email) = lower(${input.email})
+    `;
+    if (Number(taken[0]?.count ?? 0) > 0) {
+      throw new AppError(409, "EMAIL_ALREADY_USED", "Adressen används redan.");
+    }
+
+    const users = await tx<{ id: string }[]>`
+      insert into auth_users (name, email, email_verified, role)
+      values (${person.name}, ${input.email}, true, 'user')
+      returning id
+    `;
+    const userId = users[0].id;
+
+    await tx`
+      insert into auth_accounts (issuer, account_id, provider_id, user_id, password)
+      values ('local:credential', ${userId}, 'credential', ${userId}, ${input.passwordHash})
+    `;
+    await tx`
+      insert into family_memberships (id, household_id, user_id, person_id, role)
+      values (${crypto.randomUUID()}, ${actor.householdId}, ${userId},
+              ${input.personId}, ${input.role})
+    `;
+
+    await recordAudit(tx, actor, {
+      action: "login.create",
+      targetType: "person",
+      targetId: input.personId,
+      metadata: { role: input.role },
+    });
+
+    return { email: input.email, personName: person.name, role: input.role };
+  });
+}
+
+export interface HouseholdLogin {
+  personId: string;
+  email: string;
+  role: "owner" | "adult" | "viewer";
+}
+
+/** Who in the household already has a login, so the owner can see it at a glance. */
+export async function listHouseholdLogins(actor: ActorContext): Promise<HouseholdLogin[]> {
+  const sql = await readyClient();
+  const rows = await sql<Array<{ person_id: string; email: string; role: HouseholdLogin["role"] }>>`
+    select m.person_id, u.email, m.role
+    from family_memberships m
+    join auth_users u on u.id = m.user_id
+    where m.household_id = ${actor.householdId}
+    order by m.created_at asc
+  `;
+  return rows.map((row) => ({ personId: row.person_id, email: row.email, role: row.role }));
+}
