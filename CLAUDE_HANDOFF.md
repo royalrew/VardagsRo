@@ -824,8 +824,10 @@ Får ännu inte beskrivas som klart:
 - **Daily Brief.** Kanalen är vald: Telegram, inte e-post. Kräver schemaläggaren.
   **Ska gå att stänga av från början**, per person och inte bara för hushållet.
   Beslutat 2026-08-28, innan en rad kod skrivits: en funktion som skickar
-  oombett måste kunna tystas av den som tar emot, och att lägga till den
-  möjligheten efteråt betyder att någon under tiden inte kunde säga nej.
+  oombett måste kunna tystas av den som tar emot. Mottagarna är de två vuxna —
+  barnen får enligt familjens egen regel inte använda Telegram, och kopplingen
+  är spärrad till vuxna i koden. Barnens väg till informationen är alltså appen
+  själv, vilket gör deras vy viktigare än den skulle vara annars.
   I dag skickar boten ingenting av sig själv, så det finns inget att stänga av.
 - **Countdowns.**
 - **Telegram inbox, röst och Mini App.**
@@ -1431,3 +1433,17 @@ arbetsformade och ett barns kalender inte är ett kladdpapper.
 Smoke, åtta kontroller, skriver ingenting och är ofarlig mot produktion. Full
 E2E skapar och tar bort riktiga poster i hushållet och städar efter sig; kör den
 med det i åtanke.
+
+
+## 2026-08-28: Telegram är bara för de vuxna
+
+Familjens egen regel: barnen får inte använda Telegram. Kopplingen var redan
+spärrad till `personType: adult`, men regeln var otestad, och en otestad regel är
+en regel som kan luckras upp av misstag.
+
+`src/app/api/telegram/link/adults-only.test.ts` håller den nu: ett barn ger 403
+`ADULT_REQUIRED` och kopplingen görs aldrig, en vuxen släpps igenom.
+
+Det betyder också att Daily Brief, när den byggs, når två personer. Barnens väg
+till samma information är appen, vilket gör deras vy viktigare än den annars
+hade varit — de kan inte fråga boten i stället.
