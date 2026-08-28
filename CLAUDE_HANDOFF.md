@@ -822,6 +822,11 @@ Får ännu inte beskrivas som klart:
   kalendern, dokumentversioner och segmenten i retrieval.
 - **Reminders och leveransscheduler.** Krävs innan något kan skickas oombett.
 - **Daily Brief.** Kanalen är vald: Telegram, inte e-post. Kräver schemaläggaren.
+  **Ska gå att stänga av från början**, per person och inte bara för hushållet.
+  Beslutat 2026-08-28, innan en rad kod skrivits: en funktion som skickar
+  oombett måste kunna tystas av den som tar emot, och att lägga till den
+  möjligheten efteråt betyder att någon under tiden inte kunde säga nej.
+  I dag skickar boten ingenting av sig själv, så det finns inget att stänga av.
 - **Countdowns.**
 - **Telegram inbox, röst och Mini App.**
 - **Lovveckor** i schemaupprepningen. Ett schema som spänner över ett lov lägger
@@ -1411,3 +1416,18 @@ dykt upp bredvid nästa toast, med en helt annan borttagning bakom sig.
 Kalenderposter och uppgifter går fortfarande inte att ta bort i gränssnittet, så
 den delen av ångra nås bara via API:t. Den dagen radering läggs till är servern
 redan klar.
+
+
+## 2026-08-28: release-testet kan köras mot en riktig familj
+
+Full E2E letade efter en person med rollen eller namnet "pappa" eller "Mikael".
+Det var stagingens såddata. Mot ett riktigt hushåll hittade sökningen ingen och
+körningen stannade innan den hunnit testa någonting.
+
+Testet väljer nu vilken vuxen som helst i hushållet, och frågorna det ställer
+byggs av den personens namn. En vuxen och inte ett barn, eftersom posterna är
+arbetsformade och ett barns kalender inte är ett kladdpapper.
+
+Smoke, åtta kontroller, skriver ingenting och är ofarlig mot produktion. Full
+E2E skapar och tar bort riktiga poster i hushållet och städar efter sig; kör den
+med det i åtanke.

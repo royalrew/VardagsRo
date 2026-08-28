@@ -278,14 +278,21 @@ async function main() {
 
     if (!FULL_MODE) return { baseUrl, status: "passed" };
 
-    const father = dashboard.people.find((person) => {
-      const terms = [person.role, person.name, ...(person.aliases ?? [])]
-        .filter((value) => typeof value === "string")
-        .map((value) => value.toLocaleLowerCase("sv-SE"));
-      return terms.includes("pappa") || terms.includes("mikael");
-    });
-    assert(father?.id, "Ingen testprofil for pappa/Mikael hittades.");
-    personId = father.id;
+    /*
+     * The test needs someone to hang its temporary entries on. It used to look
+     * for "pappa" or "Mikael", which were the staging seed's names; against a
+     * real household that search finds nobody and the run stops before it has
+     * tested anything.
+     *
+     * Any adult will do, and an adult rather than a child because the entries
+     * are work-shaped and because a child's calendar is not a scratch pad.
+     */
+    const subject =
+      dashboard.people.find((person) => person.personType === "adult") ??
+      dashboard.people[0];
+    assert(subject?.id, "Hushallet har ingen person att testa mot.");
+    personId = subject.id;
+    const subjectTerm = String(subject.name || subject.role || "").toLocaleLowerCase("sv-SE");
 
     const runId = crypto.randomUUID().slice(0, 8);
     const eventDate = futureTuesday();
@@ -559,7 +566,7 @@ async function main() {
       const response = await request(url("api/ask"), {
         method: "POST",
         headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ question: "Jobbar pappa nasta tisdag?" }),
+        body: JSON.stringify({ question: `Jobbar ${subjectTerm} nasta tisdag?` }),
       }, 45_000);
       const body = await jsonResponse(response, 200, "Familjefraga");
       assert(body.hasEnoughData === true, "Svaret saknar tillrackligt underlag.");
@@ -580,7 +587,7 @@ async function main() {
       const response = await request(url("api/ask"), {
         method: "POST",
         headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ question: "Vad ska pappa ta med nasta tisdag?" }),
+        body: JSON.stringify({ question: `Vad ska ${subjectTerm} ta med nasta tisdag?` }),
       }, 45_000);
       const body = await jsonResponse(response, 200, "Taskfraga");
       assert(body.hasEnoughData === true, "Tasksvaret saknar tillrackligt underlag.");
@@ -619,7 +626,7 @@ async function main() {
       const response = await request(url("api/ask"), {
         method: "POST",
         headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ question: "Vad ska pappa ta med nasta tisdag?" }),
+        body: JSON.stringify({ question: `Vad ska ${subjectTerm} ta med nasta tisdag?` }),
       }, 45_000);
       const body = await jsonResponse(response, 200, "Taskfraga efter klarmarkering");
       assert(
