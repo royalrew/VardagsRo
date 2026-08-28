@@ -156,7 +156,7 @@ nya kontroller före inloggningen:
   svarar 401 när bara Basic Auth finns, alltså utan produktsession
 - `product_login`: inloggningen lyckas och sätter en `vardagsro.`-sessionscookie
 
-Smoke är därmed 8 kontroller i stället för 6, och full E2E 29 i stället för 27.
+Smoke är därmed 9 kontroller i stället för 6, och full E2E 30 i stället för 27.
 Godkänt betyder de nya siffrorna. En körning som fortfarande ger 6/6 har inte
 kört den nya koden.
 

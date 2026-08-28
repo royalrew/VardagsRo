@@ -1430,7 +1430,7 @@ Testet väljer nu vilken vuxen som helst i hushållet, och frågorna det ställe
 byggs av den personens namn. En vuxen och inte ett barn, eftersom posterna är
 arbetsformade och ett barns kalender inte är ett kladdpapper.
 
-Smoke, åtta kontroller, skriver ingenting och är ofarlig mot produktion. Full
+Smoke, nio kontroller, skriver ingenting och är ofarlig mot produktion. Full
 E2E skapar och tar bort riktiga poster i hushållet och städar efter sig; kör den
 med det i åtanke.
 
@@ -1447,3 +1447,26 @@ en regel som kan luckras upp av misstag.
 Det betyder också att Daily Brief, när den byggs, når två personer. Barnens väg
 till samma information är appen, vilket gör deras vy viktigare än den annars
 hade varit — de kan inte fråga boten i stället.
+
+
+## 2026-08-28: grindens fel såg ut som produktsessionens
+
+Första skarpa smoke-körningen föll på `product_requires_login` med
+`UI utan produktsession gav HTTP 401, vantade en omdirigering`. Det beskrev
+symtomet och dolde orsaken: grindlösenordet i miljön stämde inte, så anropet kom
+aldrig fram till produktsessionen.
+
+En kontroll, `gate_accepts_credentials`, bevisar nu uppgifterna innan de används
+någon annanstans, och säger vilka två variabler som ska kontrolleras. Smoke är
+därmed nio kontroller.
+
+Läs helst värdet direkt ur Railway i stället för att klistra in det:
+
+```powershell
+$env:VARDAGSRO_GATE_PASSWORD = ((railway variables --service vardagsro-web --kv) `
+  -match '^VARDAGSRO_GATE_PASSWORD=') -replace '^VARDAGSRO_GATE_PASSWORD=',''
+```
+
+En varning värd att minnas: `railway variables` kan returnera tomt vid tillfälliga
+fel. En tom variabel ger samma 401 som ett felaktigt lösenord, så kontrollera
+längden innan felsökningen börjar.

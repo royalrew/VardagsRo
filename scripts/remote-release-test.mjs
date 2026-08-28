@@ -216,8 +216,24 @@ async function main() {
       assert(response.status === 401, `Health utan auth gav HTTP ${response.status}.`);
     });
 
+    await runCheck("gate_accepts_credentials", async () => {
+      // Proved before the credentials are used everywhere else. Without this the
+      // first check that sends them fails with "expected a redirect", which
+      // describes the symptom and hides the cause: a wrong gate password.
+      const response = await request(url("login"), { headers: authHeaders });
+      assert(
+        response.status !== 401,
+        "Grinden avvisade uppgifterna. Kontrollera VARDAGSRO_GATE_USERNAME och VARDAGSRO_GATE_PASSWORD mot Railway.",
+      );
+      assert(response.status === 200, `Inloggningssidan gav HTTP ${response.status}.`);
+    });
+
     await runCheck("product_requires_login", async () => {
       const page = await request(url("/"), { headers: authHeaders });
+      assert(
+        page.status !== 401,
+        "Grinden avvisade uppgifterna innan produktsessionen hann provas.",
+      );
       assert(
         page.status >= 300 && page.status < 400,
         `UI utan produktsession gav HTTP ${page.status}, vantade en omdirigering.`,
