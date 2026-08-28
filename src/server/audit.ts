@@ -27,6 +27,9 @@ export type AuditAction =
   | "telegram.unlink"
   | "membership.create"
   | "membership.update"
+  | "solo.action.create"
+  | "solo.action.delete"
+  | "solo.health.save"
   | "login.create";
 
 /**

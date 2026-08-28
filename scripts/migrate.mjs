@@ -386,6 +386,64 @@ const migrations = [
         on family_undo_entries (expires_at)`,
     ],
   },
+  {
+    version: "011_solo_progress",
+    name: "One adult's own progress, private from the household",
+    statements: [
+      // Keyed by user, never by household. Everything else in this schema is
+      // shared family data on purpose; this is the one place where a row must
+      // not become readable by living in the same house. There is no
+      // household_id to filter by wrongly and no join that could reintroduce
+      // one.
+      `create table if not exists solo_actions (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        kind text not null check (kind in (
+          'outreach_sent', 'application_sent', 'portfolio_published',
+          'interview_held', 'proposal_sent', 'offer_received',
+          'invoice_sent', 'payment_received'
+        )),
+        occurred_on date not null,
+        evidence text not null check (length(btrim(evidence)) > 0),
+        amount_ore bigint check (amount_ore is null or amount_ore >= 0),
+        xp integer not null check (xp >= 0),
+        created_at timestamptz not null default now()
+      )`,
+      // Evidence is what separates this ledger from a wish list, so the
+      // database refuses a blank one rather than trusting the form.
+      `create index if not exists solo_actions_user_idx
+        on solo_actions (user_id, occurred_on desc, id)`,
+      `create table if not exists solo_health_days (
+        user_id text not null references auth_users(id) on delete cascade,
+        day date not null,
+        sleep_hours numeric(4, 2) check (sleep_hours is null or (sleep_hours >= 0 and sleep_hours <= 24)),
+        workouts integer not null default 0 check (workouts >= 0 and workouts <= 10),
+        weight_kg numeric(5, 2) check (weight_kg is null or (weight_kg > 0 and weight_kg < 400)),
+        energy integer check (energy is null or (energy >= 1 and energy <= 5)),
+        diet_held boolean,
+        note text,
+        updated_at timestamptz not null default now(),
+        primary key (user_id, day)
+      )`,
+    ],
+  },
+  {
+    version: "012_solo_smaller_first_steps",
+    name: "Three smaller rungs below the first outreach",
+    statements: [
+      // The ladder used to start at "contact a stranger". These three kinds sit
+      // below it: making a link public, showing it to someone you already know,
+      // and asking a question. All three leave the computer and can be checked,
+      // and none of them can be refused by anyone.
+      `alter table solo_actions drop constraint if exists solo_actions_kind_check`,
+      `alter table solo_actions add constraint solo_actions_kind_check check (kind in (
+        'made_visible', 'shown_to_someone', 'question_asked',
+        'outreach_sent', 'application_sent', 'portfolio_published',
+        'interview_held', 'proposal_sent', 'offer_received',
+        'invoice_sent', 'payment_received'
+      ))`,
+    ],
+  },
 ];
 
 function checksum(migration) {

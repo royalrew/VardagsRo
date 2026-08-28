@@ -15,6 +15,7 @@ import {
   LogOut,
   Settings,
   Sparkles,
+  Swords,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -32,6 +33,7 @@ import type { PersonDraft } from "@/components/FamilySettingsModal";
 import { HomeView } from "@/components/HomeView";
 import { ManualEventModal } from "@/components/ManualEventModal";
 import { OnboardingModal } from "@/components/OnboardingModal";
+import { SoloView } from "@/components/SoloView";
 import { onboardingStorageKey } from "@/components/onboarding-contracts";
 import { authClient } from "@/lib/auth-client";
 import {
@@ -51,7 +53,7 @@ import type {
   FamilyTask,
 } from "@/lib/types";
 
-type View = "home" | "calendar" | "ask" | "documents";
+type View = "home" | "calendar" | "ask" | "documents" | "solo";
 
 const STORAGE_KEY = "vardagsro-v1-family-data";
 
@@ -60,6 +62,7 @@ const navigation: Array<{ id: View; label: string; icon: typeof Home }> = [
   { id: "calendar", label: "Kalender", icon: CalendarDays },
   { id: "ask", label: "Fråga", icon: Sparkles },
   { id: "documents", label: "Dokument", icon: FileText },
+  { id: "solo", label: "Mitt spår", icon: Swords },
 ];
 
 export function FamilyApp({
@@ -93,6 +96,12 @@ export function FamilyApp({
 
   const currentPerson = data.people.find((person) => person.id === data.currentPersonId) ?? data.people[0];
   const reviewCount = data.documents.filter((document) => document.status === "needs_review").length;
+  // Mitt spår is one adult's private page. A child signing in never sees the
+  // way in; the endpoint behind it is scoped to the account either way, so this
+  // is about not offering a door rather than about holding one shut.
+  const visibleNavigation = navigation.filter(
+    (item) => item.id !== "solo" || currentPerson?.personType === "adult",
+  );
 
   useEffect(() => {
     if (!allowLocalDemo) {
@@ -705,6 +714,8 @@ export function FamilyApp({
             onOpenDocument={openDocumentById}
           />
         );
+      case "solo":
+        return <SoloView />;
       case "documents":
         return (
           <DocumentsView
@@ -751,7 +762,7 @@ export function FamilyApp({
 
         <nav className="main-nav" aria-label="Huvudmeny">
           <span className="nav-label">Översikt</span>
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const Icon = item.icon;
             return (
               <button
@@ -820,11 +831,11 @@ export function FamilyApp({
             <Bell size={20} />
           </button>
         </header>
-        <main>{content}</main>
+        <main className={activeView === "solo" ? "full-bleed" : undefined}>{content}</main>
       </div>
 
       <nav className="mobile-nav" aria-label="Mobilmeny">
-        {navigation.slice(0, 2).map((item) => {
+        {visibleNavigation.slice(0, 2).map((item) => {
           const Icon = item.icon;
           return (
             <button key={item.id} className={activeView === item.id ? "active" : ""} onClick={() => navigate(item.id)}>
@@ -835,7 +846,7 @@ export function FamilyApp({
         <button className="mobile-add-button" onClick={() => setUploadOpen(true)} aria-label="Lägg till">
           <Plus size={23} />
         </button>
-        {navigation.slice(2).map((item) => {
+        {visibleNavigation.slice(2).map((item) => {
           const Icon = item.icon;
           return (
             <button key={item.id} className={activeView === item.id ? "active" : ""} onClick={() => navigate(item.id)}>

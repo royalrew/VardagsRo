@@ -7,6 +7,11 @@ import type {
   FamilyTask,
   QuestionPlan,
 } from "@/lib/types";
+import {
+  SOLO_ACTION_KINDS,
+  soloActionRule,
+  type SoloActionKind,
+} from "@/lib/solo";
 
 const isoDateTime = z
   .string()
@@ -433,3 +438,57 @@ export const documentOrganizationSchema = z
 export type FolderCreateInput = z.infer<typeof folderCreateSchema>;
 export type FolderUpdateInput = z.infer<typeof folderUpdateSchema>;
 export type DocumentOrganizationInput = z.infer<typeof documentOrganizationSchema>;
+
+/**
+ * Derived from the rules rather than restated, so the accepted kinds cannot
+ * drift away from the ones that carry experience. The list is never empty.
+ */
+const soloActionKinds = SOLO_ACTION_KINDS as [SoloActionKind, ...SoloActionKind[]];
+
+export const soloActionKindSchema = z.enum(soloActionKinds);
+
+/**
+ * Evidence is the whole point of the ledger, so it is required here and again
+ * in the database. An entry nobody could check is a wish, and wishes already
+ * had a decade.
+ */
+export const soloActionSchema = z
+  .object({
+    kind: soloActionKindSchema,
+    occurredOn: calendarDateSchema,
+    evidence: z.string().trim().min(3).max(500),
+    amountOre: z.number().int().min(0).max(100_000_000).nullable().default(null),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const rule = soloActionRule(value.kind);
+    if (rule.amount === "required" && (value.amountOre ?? 0) <= 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["amountOre"],
+        message: "Ett belopp krävs när pengar faktiskt kommit in.",
+      });
+    }
+    if (rule.amount === "none" && value.amountOre !== null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["amountOre"],
+        message: "Den här handlingen har inget belopp.",
+      });
+    }
+  });
+
+export const soloHealthSchema = z
+  .object({
+    date: calendarDateSchema,
+    sleepHours: z.number().min(0).max(24).nullable().default(null),
+    workouts: z.number().int().min(0).max(10).default(0),
+    weightKg: z.number().min(20).max(400).nullable().default(null),
+    energy: z.number().int().min(1).max(5).nullable().default(null),
+    dietHeld: z.boolean().nullable().default(null),
+    note: z.string().trim().max(500).nullable().default(null),
+  })
+  .strict();
+
+export type SoloActionInput = z.infer<typeof soloActionSchema>;
+export type SoloHealthInput = z.infer<typeof soloHealthSchema>;

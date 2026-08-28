@@ -5364,3 +5364,741 @@ button.event-row:hover {
 .toast-undo:hover {
   background: rgba(255, 255, 255, 0.24);
 }
+
+/* Mitt spår. Deliberately dark against the household's cream, because this is
+   one person's private page inside a shared family app and it should not be
+   possible to mistake one for the other at a glance. */
+.solo {
+  --solo-bg: #16202a;
+  --solo-panel: #1e2a36;
+  --solo-line: #2f3f4f;
+  --solo-gold: #d9a441;
+  --solo-gold-dim: rgba(217, 164, 65, 0.16);
+  --solo-text: #e7edf3;
+  --solo-muted: #93a6b8;
+  background: var(--solo-bg);
+  color: var(--solo-text);
+  border-radius: var(--radius-xl);
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.solo h2,
+.solo h3 {
+  color: var(--solo-text);
+  margin: 0;
+}
+
+.solo-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.solo-eyebrow {
+  margin: 0 0 2px;
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--solo-gold);
+}
+
+.solo-head h2 {
+  font-size: 1.6rem;
+}
+
+.solo-sub {
+  margin: 6px 0 0;
+  color: var(--solo-muted);
+  max-width: 52ch;
+}
+
+.solo-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.solo-badges span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--solo-line);
+  background: var(--solo-panel);
+  font-size: 0.83rem;
+  color: var(--solo-muted);
+}
+
+.solo-meter-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.85rem;
+  margin-bottom: 6px;
+}
+
+.solo-meter-caption {
+  color: var(--solo-muted);
+}
+
+.solo-meter-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #101922;
+  border: 1px solid var(--solo-line);
+  overflow: hidden;
+}
+
+.solo-meter-fill {
+  height: 100%;
+  background: var(--solo-muted);
+  transition: width 240ms ease;
+}
+
+.solo-meter-boss .solo-meter-track {
+  height: 16px;
+}
+
+.solo-meter-boss .solo-meter-fill {
+  background: linear-gradient(90deg, #b8722f, var(--solo-gold));
+}
+
+.solo-meter-level .solo-meter-fill {
+  background: #5b8fb9;
+}
+
+.solo-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.solo-pipeline {
+  margin: -8px 0 0;
+  color: var(--solo-muted);
+  font-size: 0.86rem;
+}
+
+.solo-quests ol {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.solo-quests li {
+  background: var(--solo-panel);
+  border: 1px solid var(--solo-line);
+  border-left: 3px solid var(--solo-gold);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.solo-quests span {
+  color: var(--solo-muted);
+  font-size: 0.88rem;
+}
+
+.solo-tree {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.solo-branch {
+  background: var(--solo-panel);
+  border: 1px solid var(--solo-line);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.solo-branch header {
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.solo-branch h3 {
+  font-size: 1rem;
+}
+
+.solo-branch p {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--solo-muted);
+}
+
+/* The connector between tiers. A chain, so the road through a branch is
+   visible before any of it has been walked. */
+.solo-tier {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  position: relative;
+  padding-top: 18px;
+}
+
+.solo-tier::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 18px;
+  background: var(--solo-line);
+}
+
+.solo-node {
+  position: relative;
+}
+
+.solo-node-face {
+  width: 74px;
+  min-height: 64px;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--solo-line);
+  background: #16202a;
+  color: var(--solo-muted);
+  cursor: default;
+  font: inherit;
+}
+
+.solo-node-initial {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--solo-line);
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.solo-node-title {
+  font-size: 0.68rem;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.solo-node-unlocked .solo-node-face {
+  border-color: var(--solo-gold);
+  background: var(--solo-gold-dim);
+  color: var(--solo-text);
+  box-shadow: 0 0 0 1px rgba(217, 164, 65, 0.25);
+}
+
+.solo-node-unlocked .solo-node-initial {
+  background: var(--solo-gold);
+  color: #16202a;
+}
+
+.solo-node-available .solo-node-face {
+  border-color: #5b8fb9;
+  color: var(--solo-text);
+}
+
+.solo-node-locked .solo-node-face {
+  opacity: 0.55;
+}
+
+.solo-node-tip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  width: 230px;
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 13px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--solo-gold);
+  background: #0f1922;
+  box-shadow: var(--shadow-modal);
+  z-index: 20;
+  font-size: 0.8rem;
+}
+
+.solo-node:hover .solo-node-tip,
+.solo-node:focus-within .solo-node-tip {
+  display: flex;
+}
+
+.solo-node-req {
+  color: var(--solo-gold);
+}
+
+.solo-node-meaning,
+.solo-node-progress {
+  color: var(--solo-muted);
+}
+
+.solo-forms {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.solo-form {
+  background: var(--solo-panel);
+  border: 1px solid var(--solo-line);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.solo-form h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.98rem;
+}
+
+.solo-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.83rem;
+  color: var(--solo-muted);
+}
+
+.solo-form input,
+.solo-form select {
+  background: #101922;
+  border: 1px solid var(--solo-line);
+  border-radius: var(--radius-md);
+  padding: 9px 11px;
+  color: var(--solo-text);
+  font: inherit;
+}
+
+.solo-form input:focus-visible,
+.solo-form select:focus-visible,
+.solo-node-face:focus-visible {
+  outline: 2px solid var(--solo-gold);
+  outline-offset: 2px;
+}
+
+.solo-form > button[type="submit"] {
+  margin-top: 3px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--solo-gold);
+  background: var(--solo-gold);
+  color: #16202a;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.solo-form > button[type="submit"]:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.solo-scale {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.solo-scale legend {
+  font-size: 0.83rem;
+  color: var(--solo-muted);
+  margin-bottom: 5px;
+}
+
+.solo-scale button {
+  min-width: 40px;
+  padding: 7px 11px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--solo-line);
+  background: #101922;
+  color: var(--solo-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.solo-scale button.active {
+  border-color: var(--solo-gold);
+  background: var(--solo-gold-dim);
+  color: var(--solo-text);
+}
+
+.solo-log ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.solo-log li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--solo-line);
+  background: var(--solo-panel);
+  font-size: 0.85rem;
+}
+
+.solo-log-date,
+.solo-log-amount {
+  color: var(--solo-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.solo-log-evidence {
+  flex: 1 1 180px;
+  color: var(--solo-muted);
+}
+
+.solo-log-xp {
+  color: var(--solo-gold);
+  font-weight: 600;
+}
+
+.solo-log li button {
+  border: 0;
+  background: transparent;
+  color: var(--solo-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.solo-log p,
+.solo-quests p {
+  color: var(--solo-muted);
+  margin: 8px 0 0;
+}
+
+.solo-zero {
+  border-top: 1px solid var(--solo-line);
+  padding-top: 16px;
+}
+
+.solo-zero ul {
+  margin: 9px 0;
+  padding-left: 20px;
+  color: var(--solo-muted);
+  font-size: 0.87rem;
+}
+
+.solo-zero p {
+  margin: 0;
+  color: var(--solo-muted);
+  font-size: 0.87rem;
+  max-width: 62ch;
+}
+
+.solo-error {
+  color: #f0a08a;
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.solo-loading {
+  color: var(--ink-soft);
+}
+
+@media (max-width: 900px) {
+  .solo {
+    padding: 18px;
+  }
+
+  .solo-stats,
+  .solo-tree,
+  .solo-forms {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .solo-node-tip {
+    width: 200px;
+  }
+}
+
+/* Mitt spår is a board, not an article. The reading-width cap that suits the
+   family views squeezes the talent tree into three narrow columns, so this one
+   view opts out of it. */
+.app-content > main.full-bleed {
+  width: calc(100% - 48px);
+  max-width: none;
+  padding-top: 34px;
+}
+
+@media (max-width: 900px) {
+  .app-content > main.full-bleed {
+    width: calc(100% - 24px);
+  }
+}
+
+/* The public page. Same palette as the product, because a stranger who signs in
+   should recognise where they landed. */
+.landing {
+  width: min(940px, calc(100% - 44px));
+  margin: 0 auto;
+  padding: 26px 0 84px;
+  color: var(--ink);
+}
+
+.landing-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 44px;
+}
+
+.landing-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 1.06rem;
+}
+
+.landing-login {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 20px;
+  border-radius: 999px;
+  background: var(--green);
+  color: var(--cream);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+  box-shadow: var(--shadow-soft);
+}
+
+.landing-login:hover {
+  background: var(--green-dark);
+}
+
+.landing-hero h1 {
+  margin: 0;
+  font-size: clamp(2.1rem, 5.4vw, 3.3rem);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+
+.landing-lead {
+  margin: 18px 0 0;
+  max-width: 58ch;
+  font-size: 1.13rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.landing-principle {
+  display: inline-block;
+  margin: 26px 0 0;
+  padding: 9px 17px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green-dark);
+  font-weight: 600;
+}
+
+.landing h2 {
+  margin: 0 0 14px;
+  font-size: 1.42rem;
+  letter-spacing: -0.01em;
+}
+
+.landing section {
+  padding-top: 62px;
+}
+
+.landing-problem p,
+.landing-maker p {
+  margin: 0 0 14px;
+  max-width: 66ch;
+  line-height: 1.68;
+  color: var(--ink-soft);
+}
+
+.landing-section-lead {
+  margin: 0 0 22px;
+  max-width: 64ch;
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+
+.landing-steps ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.landing-steps li {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.landing-step-number {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--green);
+  color: var(--cream);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.landing-steps h3,
+.landing-grid h3 {
+  margin: 0 0 5px;
+  font-size: 1rem;
+}
+
+.landing-steps p,
+.landing-grid p {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  font-size: 0.94rem;
+}
+
+.landing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.landing-grid article {
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.landing-maker {
+  margin-top: 62px;
+  padding: 30px 30px 26px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.landing-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landing-stack li {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--cream);
+  font-size: 0.83rem;
+  color: var(--ink-soft);
+}
+
+.landing-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 62px;
+  padding-top: 26px;
+  border-top: 1px solid var(--line);
+}
+
+.landing-foot p {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 720px) {
+  .landing section {
+    padding-top: 46px;
+  }
+
+  .landing-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .landing-maker {
+    padding: 22px 20px;
+  }
+}
+
+.landing-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 26px;
+  margin: 22px 0 0;
+  padding: 18px 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.landing-contact li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.landing-contact span {
+  font-size: 0.76rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.landing-contact a {
+  color: var(--green-dark);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid var(--green-soft);
+}
+
+.landing-contact a:hover {
+  border-bottom-color: var(--green);
+}
