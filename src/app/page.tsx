@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import { connection } from "next/server";
 
 import { FamilyApp } from "@/components/FamilyApp";
+import { LandingPage } from "@/components/LandingPage";
 import { requireActorFromHeaders } from "@/server/actor";
 import { demoFallbackAllowed } from "@/server/config";
 import { loadDashboard } from "@/server/database";
@@ -16,14 +16,16 @@ export default async function HomePage() {
     const actor = await requireActorFromHeaders(await headers());
     initialData = await loadDashboard(actor);
   } catch (error) {
-    // Not signed in, or signed in without a household: both mean there is
-    // nothing this visitor may see, and the login page is where they say who
-    // they are. Any other failure is a real error and must not be hidden.
+    // Not signed in, or signed in without a household: both mean there is no
+    // family data this visitor may see. They get the public page, which needs
+    // no session and shows nothing about the household, rather than a login box
+    // that explains nothing. Any other failure is a real error and must not be
+    // hidden behind it.
     if (
       error instanceof AppError &&
       (error.code === "NOT_AUTHENTICATED" || error.code === "NO_HOUSEHOLD_MEMBERSHIP")
     ) {
-      redirect("/login");
+      return <LandingPage />;
     }
     throw error;
   }
