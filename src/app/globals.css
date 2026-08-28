@@ -5267,3 +5267,48 @@ button.event-row:hover {
 .login-secondary:hover:not(:disabled) {
   color: var(--green-dark);
 }
+
+/* Byt lösenord */
+.password-modal {
+  width: min(100%, 400px);
+  padding: 26px 24px 22px;
+}
+
+.password-modal form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.password-modal h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.password-modal-intro {
+  margin: -4px 0 2px;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+}
+
+.password-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 4px;
+  gap: 10px;
+}
+
+.password-modal-actions .login-submit {
+  margin-top: 0;
+}
+
+.password-modal-cancel {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 600;
+}

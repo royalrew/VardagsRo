@@ -11,6 +11,7 @@ import {
   Menu,
   Plus,
   Bug,
+  KeyRound,
   LogOut,
   Settings,
   Sparkles,
@@ -22,6 +23,7 @@ import { AddDocumentModal } from "@/components/AddDocumentModal";
 import { AskView } from "@/components/AskView";
 import { BrandMark } from "@/components/BrandMark";
 import { CalendarView } from "@/components/CalendarView";
+import { ChangePasswordModal } from "@/components/ChangePasswordModal";
 import { DocumentDetailModal, EventDetailModal } from "@/components/DetailsModals";
 import { DebugPanel } from "@/components/DebugPanel";
 import { DocumentsView } from "@/components/DocumentsView";
@@ -72,6 +74,7 @@ export function FamilyApp({
   const [activeView, setActiveView] = useState<View>("home");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [familySettingsOpen, setFamilySettingsOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const [debugReport, setDebugReport] = useState<DiagnosticsReport | null>(null);
   const [eventEditor, setEventEditor] = useState<{
     event: FamilyEvent | null;
@@ -732,6 +735,9 @@ export function FamilyApp({
           >
             <Bug size={16} /> Fels&ouml;kning
           </button>
+          <button type="button" className="sidebar-tool" onClick={() => setPasswordOpen(true)}>
+            <KeyRound size={16} /> Byt l&ouml;senord
+          </button>
           <button type="button" className="sidebar-tool" onClick={() => void signOut()}>
             <LogOut size={16} /> Logga ut
           </button>
@@ -793,6 +799,11 @@ export function FamilyApp({
         timezone={data.timezone}
         onClose={() => setUploadOpen(false)}
         onSaved={handleDocumentSaved}
+      />
+      <ChangePasswordModal
+        open={passwordOpen}
+        onClose={() => setPasswordOpen(false)}
+        onChanged={showToast}
       />
       {eventEditor ? (
         <ManualEventModal

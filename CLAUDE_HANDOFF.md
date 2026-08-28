@@ -1188,7 +1188,8 @@ funktion som finns till för att någon är utelåst.
 ## Två fällor när Railway-variabler läses från Windows
 
 `railway variables --kv` avslutar rader med CRLF. Ett värde som plockas ut med
-`cut` bär då med sig ett ``, och Basic Auth misslyckas med 401 trots att
+`cut` bär då med sig ett `
+`, och Basic Auth misslyckas med 401 trots att
 lösenordet ser rätt ut och har rätt längd. Trimma alltid: `tr -d '
 '`.
 
@@ -1201,3 +1202,27 @@ loggen. `-o /dev/null -w '%{http_code}'` räcker för en hälsokontroll.
 `/api/health` svarar `ok` med `database: ok`, `openai: configured`, `r2: ok` och
 `mail: configured`. `/` ger 307 till `/login`, `/login` och `/nytt-losenord` ger
 200, och `/api/documents` utan produktsession ger 401.
+
+
+## 2026-08-28: byta lösenord inifrån appen
+
+Tidigare gick det bara att byta genom att logga ut och gå via "glömt lösenordet".
+Nu finns `Byt lösenord` i sidofoten, bredvid utloggningen, där kontoåtgärder hör
+hemma. Familjeinställningarna är ägarens; det här behöver alla, även barnen som
+är `viewer`.
+
+Det nuvarande lösenordet krävs trots att personen redan är inloggad. En session
+som står öppen på en delad familjedator ska inte räcka för att ta över kontot,
+och i ett hushåll är datorn oftast delad.
+
+`revokeOtherSessions` är på. Var skälet till bytet att någon annan kände till det
+gamla, vore det meningslöst att låta deras session leva vidare.
+
+Verifierat lokalt: fel nuvarande lösenord ger 400 `INVALID_PASSWORD`, rätt ger
+200, det gamla slutar fungera och det nya fungerar. En andra session på en annan
+enhet blir 401 direkt.
+
+En detalj värd att minnas: Better Auth roterar sessionscookien vid bytet. Ett
+test som skickar men inte sparar cookies ser därför ut som att även den egna
+sessionen dog. I webbläsaren hanteras det automatiskt och personen förblir
+inloggad.
