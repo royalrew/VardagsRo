@@ -5,6 +5,9 @@ import { storageIsHealthy } from "@/server/storage";
 export type ConfiguredServiceStatus = "configured" | "not_configured";
 export type R2Status = "ok" | "not_configured" | "unavailable";
 
+export const READINESS_CACHE_TTL_MS = 5_000;
+export const READINESS_CHECK_TIMEOUT_MS = 6_000;
+
 export interface ServiceReadiness {
   ready: boolean;
   services: {
@@ -44,11 +47,40 @@ export function readinessFrom(input: {
   };
 }
 
-export async function serviceReadiness(): Promise<ServiceReadiness> {
+let cachedReadiness:
+  | { value: ServiceReadiness; expiresAt: number }
+  | undefined;
+let readinessInFlight: Promise<ServiceReadiness> | undefined;
+
+/**
+ * A public readiness request must not be able to hold the route open forever.
+ * The underlying client may finish later, so always observe both fulfillment
+ * and rejection even after the deadline has returned the fail-closed fallback.
+ */
+function settleWithin<T>(work: Promise<T>, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value: T) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const timer = setTimeout(
+      () => finish(fallback),
+      READINESS_CHECK_TIMEOUT_MS,
+    );
+    void work.then(finish, () => finish(fallback));
+  });
+}
+
+async function freshServiceReadiness(): Promise<ServiceReadiness> {
   const configured = configuredServices();
   const [database, r2Healthy] = await Promise.all([
-    databaseStatus(),
-    configured.r2 ? storageIsHealthy() : Promise.resolve(false),
+    settleWithin(databaseStatus(), "unavailable"),
+    configured.r2
+      ? settleWithin(storageIsHealthy(), false)
+      : Promise.resolve(false),
   ]);
 
   return readinessFrom({
@@ -58,4 +90,34 @@ export async function serviceReadiness(): Promise<ServiceReadiness> {
     r2Healthy,
     mailConfigured: configured.mail,
   });
+}
+
+/**
+ * Railway and anonymous callers share this deep dependency probe. Keep the
+ * response dynamic, but coalesce concurrent work and briefly reuse the result
+ * so a public endpoint cannot turn every request into database and R2 traffic.
+ * A new deployment starts in a new process with an empty cache, so its first
+ * health check still proves the new container against live dependencies.
+ */
+export function serviceReadiness(): Promise<ServiceReadiness> {
+  const now = Date.now();
+  if (cachedReadiness && cachedReadiness.expiresAt > now) {
+    return Promise.resolve(cachedReadiness.value);
+  }
+  if (readinessInFlight) return readinessInFlight;
+
+  const check = freshServiceReadiness();
+  const shared: Promise<ServiceReadiness> = check
+    .then((value) => {
+      cachedReadiness = {
+        value,
+        expiresAt: Date.now() + READINESS_CACHE_TTL_MS,
+      };
+      return value;
+    })
+    .finally(() => {
+      if (readinessInFlight === shared) readinessInFlight = undefined;
+    });
+  readinessInFlight = shared;
+  return shared;
 }

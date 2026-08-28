@@ -36,6 +36,7 @@ describe("GET /api/ready", () => {
 
     expect(response.status).toBe(503);
     expect(JSON.parse(text)).toEqual({ status: "not_ready" });
+    expect(response.headers.get("cache-control")).toBe("no-store");
     expect(text).not.toContain("database");
     expect(text).not.toContain("openai");
     expect(text).not.toContain("r2");
