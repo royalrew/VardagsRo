@@ -104,13 +104,27 @@ Lägg dem i Railway Variables, aldrig i repositoryt eller en deploylogg. R2-buck
 ska fortsätta vara privat; appen lämnar bara ut kortlivade signerade källänkar.
 `.railwayignore` och `.dockerignore` stoppar lokala `.env`-filer från deployarkivet.
 
-Länka och driftsätt med CLI:
+Driftsättning sker från GitHub. Tjänsten `vardagsro-web` bygger `main` i
+`royalrew/VardagsRo`, så **en push till main är en driftsättning**:
 
 ```powershell
-railway login
-railway link
-railway up --ci
+git push origin main
 ```
+
+Deploya inte med `railway up`. Under en övergång låg en CLI-deploy aktiv samtidigt
+som GitHub-kopplingen, och de två serverade olika kod medan båda rapporterade
+lyckat resultat. En väg in är hela poängen.
+
+Ett grönt deploy-status betyder att bygget gick igenom, inte att just den koden
+körs. Det kontrolleras genom att leta efter en fras som bara finns i den nya
+versionen:
+
+```powershell
+railway ssh sh -c 'grep -rl <ny-fras> /app/.next/server | wc -l'
+```
+
+I Git Bash krävs `MSYS_NO_PATHCONV=1`, annars skrivs `/app` om till en
+Windows-sökväg innan kommandot når containern.
 
 En helt ny, dedikerad stagingdatabas kan bootstrapas med uttrycklig, ofarlig
 demodata. Sätt då de två skyddsflaggorna tillfälligt och använd

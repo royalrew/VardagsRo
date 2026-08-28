@@ -345,6 +345,8 @@ vill säga ingen hydration mismatch mellan server och klient.
 
 Railway-CLI:t var inte längre länkat till katalogen vid den här sessionen.
 Länka om med projekt-, environment- och service-ID:na ovan innan `railway up`.
+**Föråldrat sedan 2026-08-28:** driftsättning sker numera genom att pusha till
+`main`. Se avsnittet "Railway bygger från GitHub" längst ned.
 `railway up --ci` kan tappa loggströmmen ("Failed to retrieve build log") utan att
 bygget påverkas; följ upp med `railway logs --build` i stället.
 
