@@ -12,10 +12,6 @@ const viewportWidth = Number(process.argv[5] ?? 1440);
 const viewportHeight = Number(process.argv[6] ?? 1000);
 if (!targetUrl || !outputPath) throw new Error("usage: visual-audit URL OUTPUT");
 
-const username = process.env.VARDAGSRO_GATE_USERNAME || process.env.ZICKARIS_ADMIN_EMAIL;
-const password = process.env.VARDAGSRO_GATE_PASSWORD || process.env.ZICKARIS_ADMIN_PASSWORD;
-if (!username || !password) throw new Error("gate credentials missing");
-
 const chromePath = process.env.PROGRAMFILES
   ? join(process.env.PROGRAMFILES, "Google", "Chrome", "Application", "chrome.exe")
   : "chrome";
@@ -63,11 +59,6 @@ try {
     height: viewportHeight,
     deviceScaleFactor: 1,
     mobile: viewportWidth < 700,
-  });
-  await command("Network.setExtraHTTPHeaders", {
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${username}:${password}`, "utf8").toString("base64")}`,
-    },
   });
   await command("Page.navigate", { url: targetUrl });
   await new Promise((resolve) => setTimeout(resolve, 3000));

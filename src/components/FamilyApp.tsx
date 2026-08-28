@@ -361,12 +361,6 @@ export function FamilyApp({
     return folder;
   }
 
-  /**
-   * Basic Auth has no true sign-out. Asking for the always-401 endpoint with a
-   * throwaway credential makes most browsers drop what they cached for the
-   * realm; the reload then hits the gate again. If the browser holds on anyway,
-   * the toast tells the family to close the tab.
-   */
   async function openDebugReport() {
     setDebugReport(
       await collectDiagnosticsReport({

@@ -1,6 +1,6 @@
 # Vardagsro / Family OS — handoff till Claude Code
 
-Senast uppdaterad: 2026-08-25 (Europe/Stockholm).
+Senast uppdaterad: 2026-08-28 (Europe/Stockholm).
 
 Det här är en levande överlämning. Börja med att läsa hela filen, därefter
 `AGENTS.md`, `koncept.tct`, `README.md` och relevanta källfiler. Kontrollera alltid
@@ -48,21 +48,20 @@ Produktionsmiljön är fail-closed: den får inte falla tillbaka till demo-data 
 
 ## Säkerhets- och releasehärdning som är klar
 
-- Next.js 16-proxy med Basic Auth framför UI, statiska resurser och alla API:er.
-- Endast exakt `/api/ready` är publik för Railway health checks.
-- Saknade gate-secrets i production ger `503` (fail-closed).
-- Fel/saknad Basic Auth ger `401`, `WWW-Authenticate`, `no-store` och `noindex`.
-- Primära secrets är `VARDAGSRO_GATE_USERNAME` och
-  `VARDAGSRO_GATE_PASSWORD`.
-- Staging använder ett unikt gate-lösenord, inte adminlösenordet.
+- Den gemensamma Basic Auth-grinden är borttagen; familjen använder bara sina
+  individuella produktkonton.
+- `/api/ready` är publik och minimal för Railway health checks.
+- UI:t omdirigerar anonyma besökare till `/login`; privata API-rutter verifierar
+  produktsession och hushållsmedlemskap nära datakällan.
 - Separat, idempotent databasmigrering körs före deploy.
 - Bootstrap-seed är redan genomförd. Återkommande staging-seed är avstängd.
-- `/api/health` är skyddad och detaljerad; `/api/ready` är publik och minimal.
+- `/api/health` kräver verifierad familjesession och är detaljerad.
 - Dockerimagen kör som icke-root och innehåller runtime-migreringarna.
 - Secrets och `.env`-filer exkluderas från build context och Git-mönster.
 
-Basic Auth är bara en privat staginggrind. Den ersätter inte framtida riktig
-inloggning, hushållsisolering eller permissions.
+Registrering är avstängd. Konton skapas av hushållets ägare eller med det
+explicita bootstrap-kommandot; lösenordsåterställning avslöjar inte om en adress
+finns.
 
 ## Railway-status vid överlämningen
 
@@ -78,9 +77,9 @@ inloggning, hushållsisolering eller permissions.
 - Railway CLI är inloggad och katalogen är länkad till projektet.
 
 Hemligheter finns i Railway och lokalt i `.env.local`. Skriv aldrig ut dem i
-terminaloutput, loggar, artifacts eller den här filen. Staging-användarnamnet är
-`vardagsro`; lösenordet finns som Railway-variable. Vid senaste uppdateringen låg
-det även i Windows urklipp, men anta inte att det fortfarande gör det.
+terminaloutput, loggar, artifacts eller den här filen. Gate-variablerna
+`VARDAGSRO_GATE_USERNAME` och `VARDAGSRO_GATE_PASSWORD` ska tas bort från Railway
+först efter att den grindlösa koden har driftsatts och verifierats.
 
 ### Tillfällig Railway-domän är borttagen
 
@@ -559,15 +558,10 @@ svarar på olika frågor och ersätter inte varandra.
 Under 860 pixlar döljs personrutnätet och mobilagendan tar över. Åtta kolumner
 går inte att läsa på en telefon.
 
-### Utloggning är med flit ärlig om sin begränsning
+### Utloggning använder produktsessionen
 
-`/api/logout` svarar alltid 401 med en Basic-utmaning. Knappen anropar den med
-ett förbrukat lösenord, vilket får de flesta webbläsare att släppa det de cachat
-för realmet, och laddar sedan om.
-
-Basic Auth har ingen äkta utloggning. Toasten säger därför rakt ut att fliken kan
-behöva stängas. Riktig utloggning kommer först med riktig inloggning; lova inget
-annat i gränssnittet.
+Knappen anropar Better Auths `signOut`, går till `/login` och uppdaterar routen.
+Den gamla `/api/logout`-rutten för Basic Auth är borttagen.
 
 ### Felrapporten får inte innehålla familjeinnehåll
 
@@ -665,7 +659,6 @@ som körs före AI-planeraren. Somaliska uppgiftsfrågor hanteras därför inte 
 - Hemvy: `src/components/HomeView.tsx`
 - Frågemotor: `src/lib/question-engine.ts`
 - Ask API: `src/app/api/ask/route.ts`
-- Access gate: `src/proxy.ts`, `src/lib/access-gate.ts`
 - Readiness/health: `src/app/api/ready`, `src/app/api/health`
 - Railway config: `railway.json`
 - Docker: `Dockerfile`
@@ -691,8 +684,8 @@ Next.js-versionen har brytande ändringar. Läs relevant dokumentation under
    pnpm build
    ```
 
-4. Nästa stora säkerhetssteg i planen är riktig inloggning, hushållsisolering och
-   permissions-before-retrieval/actions. Basic Auth är fortfarande bara staging.
+4. Riktig inloggning, hushållsisolering och permissions-before-retrieval/actions
+   är genomförda. Behåll dessa kontroller nära varje datakälla när nya rutter byggs.
 5. För varje framtida databasändring: kör migrationen två gånger lokalt, bygg
    slutimagen och kör production-smoke innan Railway.
 6. Efter varje framtida deploy: kör smoke/full-E2E mot
@@ -704,21 +697,20 @@ Exempel på säker fjärrkörning utan att skriva lösenordet i kommandot:
 
 ```powershell
 $env:BASE_URL = 'https://www.zickaris.se'
-$env:VARDAGSRO_GATE_USERNAME = 'vardagsro'
-$env:VARDAGSRO_GATE_PASSWORD = [string](Get-Clipboard)
+$env:VARDAGSRO_TEST_EMAIL = '<testkontots e-post>'
+$env:VARDAGSRO_TEST_PASSWORD = [string](Get-Clipboard)
 $env:RAILWAY_DEPLOYMENT_ID = '<aktuell deployment-id>'
 try {
   pnpm release:smoke
   pnpm release:e2e
 } finally {
-  Remove-Item Env:BASE_URL,Env:VARDAGSRO_GATE_USERNAME,
-    Env:VARDAGSRO_GATE_PASSWORD,Env:RAILWAY_DEPLOYMENT_ID `
+  Remove-Item Env:BASE_URL,Env:VARDAGSRO_TEST_EMAIL,
+    Env:VARDAGSRO_TEST_PASSWORD,Env:RAILWAY_DEPLOYMENT_ID `
     -ErrorAction SilentlyContinue
 }
 ```
 
-Verifiera först att urklippet faktiskt matchar Railway-variable utan att skriva
-ut något av värdena.
+Läs testkontots lösenord från urklipp och skriv aldrig ut det i terminalen.
 
 ## Compliance: trösklar och beslut
 

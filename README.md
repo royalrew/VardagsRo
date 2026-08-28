@@ -98,7 +98,7 @@ Följande servervariabler krävs i Railway:
 - `OPENAI_API_KEY` och valfri `OPENAI_MODEL`
 - `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` samt
   `R2_ACCOUNT_ID` eller `R2_ENDPOINT_URL`
-- `VARDAGSRO_GATE_USERNAME` och ett långt, unikt `VARDAGSRO_GATE_PASSWORD`
+- `VARDAGSRO_AUTH_SECRET` och `VARDAGSRO_BASE_URL` för produktinloggningen
 
 Lägg dem i Railway Variables, aldrig i repositoryt eller en deploylogg. R2-bucketen
 ska fortsätta vara privat; appen lämnar bara ut kortlivade signerade källänkar.
@@ -160,10 +160,10 @@ Railways angivna mål. Låt rotdomänen göra en permanent `301`-omdirigering ti
 `www` om DNS-leverantören inte erbjuder lämplig CNAME-flattening. Railway utfärdar
 TLS-certifikatet automatiskt.
 
-Lösenordsgrinden gäller oavsett om någon använder den egna domänen eller en
-eventuell `*.up.railway.app`-adress. Endast `/api/ready` är publik och den lämnar
-bara readiness-status. Cloudflare R2 är filstorage och behöver inte vara samma
-leverantör som domänens DNS.
+Produktinloggningen gäller på både den egna domänen och en eventuell
+`*.up.railway.app`-adress. `/api/ready` är publik och lämnar bara readiness-status;
+den detaljerade `/api/health` kräver en verifierad familjesession. Cloudflare R2
+är filstorage och behöver inte vara samma leverantör som domänens DNS.
 
 ### Svart-på-vitt-test efter deploy
 
@@ -175,18 +175,17 @@ task-completion, signerad källa och en manuell override utan falsk dokumentkäl
 Slutligen inventeras och raderas alla testevents, tasks, dokument och R2-objekt —
 även efter ett osäkert nätverkssvar.
 
-Använd `Get-Credential` så att lösenordet inte hamnar i PowerShell-historiken:
+Läs testlösenordet från urklipp så att det inte hamnar i PowerShell-historiken:
 
 ```powershell
 $env:BASE_URL = "https://familj.example.se"
-$gate = Get-Credential -Message "Vardagsros lösenordsgrind"
-$env:VARDAGSRO_GATE_USERNAME = $gate.UserName
-$env:VARDAGSRO_GATE_PASSWORD = $gate.GetNetworkCredential().Password
+$env:VARDAGSRO_TEST_EMAIL = "testkonto@familj.example.se"
+$env:VARDAGSRO_TEST_PASSWORD = [string](Get-Clipboard)
 
 pnpm release:smoke
 pnpm release:e2e
 
-Remove-Item Env:\BASE_URL, Env:\VARDAGSRO_GATE_USERNAME, Env:\VARDAGSRO_GATE_PASSWORD
+Remove-Item Env:\BASE_URL, Env:\VARDAGSRO_TEST_EMAIL, Env:\VARDAGSRO_TEST_PASSWORD
 ```
 
 Testet skriver endast ett sanitiserat kvitto under `artifacts/releases/`: värdnamn,
@@ -195,18 +194,15 @@ Inga credentials, familjeuppgifter, API-svar eller signerade R2-länkar sparas.
 
 ## Viktig avgränsning
 
-Det här är en MVP för ett hushåll. Railway-staging skyddas av en gemensam Basic
-Auth-grind, men individuell inloggning och riktig hushållsisolering ingår ännu
-inte. Lägg därför inte in verkliga dokument om barn eller andra känsliga uppgifter
-innan personliga konton, åtkomstkontroll, gallring och en integritetsbedömning har
-lagts till.
+Det här är en MVP för ett hushåll. Individuella konton, hushållsisolering och
+rollbaserad åtkomstkontroll finns, men gallring, export och en fullständig
+integritetsbedömning återstår. Lägg inte in medicinska dokument eller andra
+särskilt känsliga personuppgifter innan de delarna är klara.
 
 AI:n föreslår; en människa godkänner. Ett tomt sökresultat betyder inte automatiskt att någon är ledig — assistenten svarar att underlag saknas när den inte kan styrka svaret.
 
 ## Nästa naturliga steg
 
-1. Familjekonton, inbjudningar och hushållsisolering.
-2. Riktiga profiler och alias i gränssnittet.
-3. Notiser samt Google-, Apple- och Outlook-synk.
-4. Dokumentgallring, export och revisionslogg.
-5. Installationsbar PWA med offline-läsning av redan synkade tider.
+1. Dokumentgallring, export och revisionslogg.
+2. Notiser samt Google-, Apple- och Outlook-synk.
+3. Installationsbar PWA med offline-läsning av redan synkade tider.

@@ -25,10 +25,6 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-function basicAuth(username, password) {
-  return `Basic ${Buffer.from(`${username}:${password}`, "utf8").toString("base64")}`;
-}
-
 function futureTuesday() {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-CA", {
@@ -153,20 +149,16 @@ async function main() {
   baseUrl.search = "";
   baseUrl.hash = "";
 
-  const username = requiredEnv("VARDAGSRO_GATE_USERNAME");
-  const password = requiredEnv("VARDAGSRO_GATE_PASSWORD");
   const testEmail = requiredEnv("VARDAGSRO_TEST_EMAIL");
   const testPassword = requiredEnv("VARDAGSRO_TEST_PASSWORD");
 
   /*
-   * Two separate gates, and the run has to pass both. Basic Auth keeps the whole
-   * staging site private; the product session decides which household the
-   * requests below may touch. Origin is sent from the start because the server
-   * refuses cross-site mutations, and a release test that skipped it would be
-   * testing a weaker server than the one being shipped.
+   * The product session decides which household the requests below may touch.
+   * Origin is sent from the start because the server refuses cross-site
+   * mutations, and a release test that skipped it would be testing a weaker
+   * server than the one being shipped.
    */
   const authHeaders = {
-    Authorization: basicAuth(username, password),
     Origin: baseUrl.origin,
   };
   const url = (pathname) => new URL(pathname.replace(/^\/+/, ""), baseUrl);
@@ -202,38 +194,8 @@ async function main() {
       assert(body.status === "ready", "Readiness ar inte ready.");
     });
 
-    await runCheck("gate_rejects_anonymous_ui", async () => {
-      const response = await request(url("/"));
-      assert(response.status === 401, `UI utan auth gav HTTP ${response.status}.`);
-      assert(
-        (response.headers.get("www-authenticate") ?? "").startsWith("Basic "),
-        "Basic Auth-utmaning saknas.",
-      );
-    });
-
-    await runCheck("gate_protects_health", async () => {
-      const response = await request(url("api/health"));
-      assert(response.status === 401, `Health utan auth gav HTTP ${response.status}.`);
-    });
-
-    await runCheck("gate_accepts_credentials", async () => {
-      // Proved before the credentials are used everywhere else. Without this the
-      // first check that sends them fails with "expected a redirect", which
-      // describes the symptom and hides the cause: a wrong gate password.
-      const response = await request(url("login"), { headers: authHeaders });
-      assert(
-        response.status !== 401,
-        "Grinden avvisade uppgifterna. Kontrollera VARDAGSRO_GATE_USERNAME och VARDAGSRO_GATE_PASSWORD mot Railway.",
-      );
-      assert(response.status === 200, `Inloggningssidan gav HTTP ${response.status}.`);
-    });
-
     await runCheck("product_requires_login", async () => {
       const page = await request(url("/"), { headers: authHeaders });
-      assert(
-        page.status !== 401,
-        "Grinden avvisade uppgifterna innan produktsessionen hann provas.",
-      );
       assert(
         page.status >= 300 && page.status < 400,
         `UI utan produktsession gav HTTP ${page.status}, vantade en omdirigering.`,
@@ -245,6 +207,12 @@ async function main() {
       assert(
         api.status === 401,
         `API utan produktsession gav HTTP ${api.status}, vantade 401.`,
+      );
+
+      const health = await request(url("api/health"), { headers: authHeaders });
+      assert(
+        health.status === 401,
+        `Health utan produktsession gav HTTP ${health.status}, vantade 401.`,
       );
     });
 

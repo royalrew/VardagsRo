@@ -128,8 +128,6 @@ Först efter att 1–8 är gröna, och efter din deploy:
 
 ```powershell
 $env:BASE_URL = 'https://www.zickaris.se'
-$env:VARDAGSRO_GATE_USERNAME = 'vardagsro'
-$env:VARDAGSRO_GATE_PASSWORD = [string](Get-Clipboard)
 $env:VARDAGSRO_TEST_EMAIL = '<testkontots e-post>'
 $env:VARDAGSRO_TEST_PASSWORD = [string](Get-Clipboard)
 $env:RAILWAY_DEPLOYMENT_ID = '<aktuell deployment-id>'
@@ -137,8 +135,7 @@ try {
   pnpm release:smoke
   pnpm release:e2e
 } finally {
-  Remove-Item Env:BASE_URL,Env:VARDAGSRO_GATE_USERNAME,
-    Env:VARDAGSRO_GATE_PASSWORD,Env:VARDAGSRO_TEST_EMAIL,
+  Remove-Item Env:BASE_URL,Env:VARDAGSRO_TEST_EMAIL,
     Env:VARDAGSRO_TEST_PASSWORD,Env:RAILWAY_DEPLOYMENT_ID `
     -ErrorAction SilentlyContinue
 }
@@ -147,18 +144,16 @@ try {
 Godkänt: smoke 6/6 och full E2E 27/27 eller fler, cleanup körd, och produktionen
 tillbaka på samma antal events och dokument som före körningen.
 
-Scriptet loggar numera in på riktigt. Det kräver `VARDAGSRO_TEST_EMAIL` och
-`VARDAGSRO_TEST_PASSWORD` utöver grindens uppgifter, skickar `Origin` på alla
-anrop eftersom servern nekar skrivningar från annan webbplats, och har fått två
-nya kontroller före inloggningen:
+Scriptet loggar in på riktigt. Det kräver `VARDAGSRO_TEST_EMAIL` och
+`VARDAGSRO_TEST_PASSWORD`, skickar `Origin` på alla anrop eftersom servern nekar
+skrivningar från annan webbplats, och provar produktgränsen före inloggningen:
 
 - `product_requires_login`: `/` omdirigerar till `/login` och `/api/documents`
-  svarar 401 när bara Basic Auth finns, alltså utan produktsession
+  samt `/api/health` svarar 401 utan produktsession
 - `product_login`: inloggningen lyckas och sätter en `vardagsro.`-sessionscookie
 
-Smoke är därmed 9 kontroller i stället för 6, och full E2E 30 i stället för 27.
-Godkänt betyder de nya siffrorna. En körning som fortfarande ger 6/6 har inte
-kört den nya koden.
+Smoke har 6 kontroller och full E2E minst 27. Godkänt betyder att samtliga är
+gröna och att full E2E har städat sina tillfälliga data.
 
 ## 10. Efter godkänd körning
 
