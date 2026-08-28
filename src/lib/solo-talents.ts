@@ -13,6 +13,7 @@ import {
   type SoloSettings,
   type SoloSummary,
 } from "@/lib/solo";
+import { SOLO_TALENT_HOWTO } from "@/lib/solo-howto";
 
 /** A night that counts. Low enough to be reachable after a late shift. */
 const SLEEP_NIGHT_HOURS = 6.5;
@@ -82,6 +83,8 @@ export type SoloTalentState = "unlocked" | "available" | "locked";
 export interface SoloTalentNode extends Omit<SoloTalent, "progressOf"> {
   progress: number;
   state: SoloTalentState;
+  /** What to actually do about it tonight. */
+  how: readonly string[];
 }
 
 function countKind(
@@ -480,6 +483,7 @@ export function buildSoloTalents(
       requires: talent.requires,
       unit: talent.unit,
       target: talent.target,
+      how: SOLO_TALENT_HOWTO[talent.id] ?? [],
       progress,
       state: isUnlocked ? "unlocked" : openable ? "available" : "locked",
     };
@@ -513,6 +517,7 @@ export function buildSoloQuests(
       id: "next-" + node.id,
       title: node.requirement,
       detail: node.meaning,
+      how: node.how,
     });
   }
 
@@ -530,6 +535,7 @@ export function buildSoloQuests(
             (summary.streak.weeks + 1) +
             " veckor i rad."
           : "De minsta handlingarna räknas lika mycket mot kvoten som de stora.",
+      how: [],
     });
   }
 

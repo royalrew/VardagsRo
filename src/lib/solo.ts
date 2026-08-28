@@ -331,6 +331,8 @@ export interface SoloQuest {
   id: string;
   title: string;
   detail: string;
+  /** Concrete steps, when the quest came from a node that has them. */
+  how: readonly string[];
 }
 
 export interface SoloSummary {

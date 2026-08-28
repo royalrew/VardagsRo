@@ -6133,3 +6133,36 @@ button.event-row:hover {
 .solo-unlogged {
   color: var(--solo-muted);
 }
+
+/* The practical half of a node. Wider than the rest of the tooltip because
+   three concrete steps are worth more room than one abstract sentence. */
+.solo-how {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--solo-text);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.solo-how li::marker {
+  color: var(--solo-gold);
+}
+
+.solo-node-tip {
+  width: 290px;
+}
+
+.solo-quests .solo-how {
+  color: var(--solo-muted);
+  font-size: 0.83rem;
+  margin-top: 8px;
+}
+
+@media (max-width: 900px) {
+  .solo-node-tip {
+    width: 240px;
+  }
+}

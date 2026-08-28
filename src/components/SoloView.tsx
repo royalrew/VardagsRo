@@ -115,6 +115,13 @@ function TalentNode({ node }: { node: SoloTalentNode }) {
         <span className="solo-node-progress">
           {node.state === "unlocked" ? "Öppnad" : progressLabel(node)}
         </span>
+        {node.how.length === 0 ? null : (
+          <ul className="solo-how">
+            {node.how.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
@@ -605,6 +612,13 @@ export function SoloView() {
               <li key={quest.id}>
                 <strong>{quest.title}</strong>
                 <span>{quest.detail}</span>
+                {quest.how.length === 0 ? null : (
+                  <ul className="solo-how">
+                    {quest.how.map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ol>
