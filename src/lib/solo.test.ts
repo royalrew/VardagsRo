@@ -62,6 +62,7 @@ function healthDay(
     weightKg: null,
     energy: null,
     dietHeld: null,
+    mobility: null,
     note: null,
     ...overrides,
   };
@@ -85,6 +86,7 @@ describe("the experience rules", () => {
       "application_sent",
       "portfolio_published",
       "interview_held",
+      "inbound_received",
       "proposal_sent",
       "offer_received",
       "invoice_sent",

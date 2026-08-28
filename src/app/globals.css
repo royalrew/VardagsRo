@@ -6102,3 +6102,14 @@ button.event-row:hover {
 .landing-contact a:hover {
   border-bottom-color: var(--green);
 }
+
+/* Three nodes now share a tier in the endurance branch, so a row wraps rather
+   than pushing the column wider than its third of the board. */
+.solo-tier {
+  flex-wrap: wrap;
+}
+
+.solo-form small {
+  color: var(--solo-muted);
+  font-size: 0.75rem;
+}

@@ -6,6 +6,7 @@ import {
   type SoloAction,
   type SoloActionKind,
   type SoloHealthDay,
+  type SoloSettings,
 } from "@/lib/solo";
 import {
   SOLO_TALENTS,
@@ -36,19 +37,56 @@ function action(
   };
 }
 
-function context(actions: SoloAction[] = [], healthDays: SoloHealthDay[] = []) {
+const NO_GOAL: SoloSettings = { weightGoalKg: null };
+
+function context(
+  actions: SoloAction[] = [],
+  healthDays: SoloHealthDay[] = [],
+  settings: SoloSettings = NO_GOAL,
+) {
   const summary = buildSoloSummary({ actions, healthDays, today: TODAY });
   return {
     summary,
-    nodes: buildSoloTalents({ actions, healthDays, summary, today: TODAY }),
+    nodes: buildSoloTalents({
+      actions,
+      healthDays,
+      settings,
+      summary,
+      today: TODAY,
+    }),
   };
 }
 
 function tree(
   actions: SoloAction[] = [],
   healthDays: SoloHealthDay[] = [],
+  settings: SoloSettings = NO_GOAL,
 ): SoloTalentNode[] {
-  return context(actions, healthDays).nodes;
+  return context(actions, healthDays, settings).nodes;
+}
+
+/** `count` days back from today, each one overridden the same way. */
+function healthDays(
+  count: number,
+  overrides: Partial<SoloHealthDay> = {},
+  startOffset = 0,
+): SoloHealthDay[] {
+  return Array.from({ length: count }, (_unused, index) => ({
+    date: dayBack(index + startOffset),
+    sleepHours: null,
+    workouts: 0,
+    weightKg: null,
+    energy: null,
+    dietHeld: null,
+    mobility: null,
+    note: null,
+    ...overrides,
+  }));
+}
+
+function dayBack(days: number): string {
+  const base = Date.UTC(2026, 7, 28) - days * 86_400_000;
+  return new Date(base).toISOString().slice(0, 10);
 }
 
 function node(nodes: SoloTalentNode[], id: string): SoloTalentNode {
@@ -161,6 +199,71 @@ describe("opening a node", () => {
   });
 });
 
+describe("the two ways of being visible", () => {
+  const opened = [action("made_visible"), action("portfolio_published")];
+
+  it("forks into reaching out and being found", () => {
+    const nodes = tree(opened);
+    expect(node(nodes, "shown").state).toBe("available");
+    expect(node(nodes, "profile").state).toBe("available");
+  });
+
+  it("wants a second public place before the inbound path opens", () => {
+    expect(node(tree(opened), "profile")).toMatchObject({
+      progress: 1,
+      target: 2,
+    });
+    const nodes = tree([...opened, action("made_visible")]);
+    expect(node(nodes, "profile").state).toBe("unlocked");
+    expect(node(nodes, "voice").state).toBe("available");
+  });
+
+  it("rewards repetition rather than one perfect post", () => {
+    const posting = Array.from({ length: 4 }, () =>
+      action("portfolio_published", "2026-08-20"),
+    );
+    expect(node(tree([...opened, ...posting]), "voice")).toMatchObject({
+      state: "unlocked",
+      progress: 5,
+    });
+  });
+
+  it("forgets publishing that fell outside the thirty day window", () => {
+    const old = Array.from({ length: 4 }, () =>
+      action("portfolio_published", "2026-06-01"),
+    );
+    // Reach decays. Four posts last spring is not a voice today.
+    expect(node(tree([...opened, ...old]), "voice").progress).toBe(1);
+  });
+
+  it("cannot open the inbound node without someone else moving first", () => {
+    const loud = [
+      ...opened,
+      ...Array.from({ length: 8 }, () =>
+        action("portfolio_published", "2026-08-20"),
+      ),
+      action("outreach_sent"),
+      action("application_sent"),
+    ];
+    expect(node(tree(loud), "recognised")).toMatchObject({
+      state: "available",
+      progress: 0,
+    });
+
+    const answered = [...loud, action("inbound_received")];
+    expect(node(tree(answered), "recognised").state).toBe("unlocked");
+  });
+
+  it("pays the inbound kind more than anything you can do alone", () => {
+    const alone = ["outreach_sent", "application_sent", "portfolio_published"];
+    for (const kind of alone) {
+      expect(soloActionRule("inbound_received").xp).toBeGreaterThan(
+        soloActionRule(kind as SoloActionKind).xp,
+      );
+    }
+  });
+});
+
 describe("the money nodes", () => {
   it("keeps the floor shut below thirty thousand", () => {
     const nodes = tree([action("payment_received", "2026-08-20", 29_999_00)]);
@@ -188,40 +291,145 @@ describe("the money nodes", () => {
 });
 
 describe("the endurance branch", () => {
-  const logged = Array.from({ length: 7 }, (_unused, index) => ({
-    date: `2026-08-${String(28 - index).padStart(2, "0")}`,
-    sleepHours: 7,
-    workouts: 1,
-    weightKg: null,
-    energy: 4,
-    dietHeld: true,
-    note: null,
-  }));
-
-  it("needs seven logged days out of the last fourteen", () => {
-    const nodes = tree([], logged);
+  it("opens on logging alone, not on performance", () => {
+    const nodes = tree([], healthDays(7, { sleepHours: 7 }));
     expect(node(nodes, "rhythm")).toMatchObject({
       state: "unlocked",
       progress: 7,
     });
-    expect(node(nodes, "rested").state).toBe("unlocked");
-    expect(node(nodes, "strong")).toMatchObject({
-      state: "available",
-      progress: 7,
-      target: 24,
+    expect(node(nodes, "moving").state).toBe("available");
+  });
+
+  it("counts every session the same, however short", () => {
+    // Fifteen minutes on the mat is a session. So is a walk. The failure this
+    // guards against is "tiden räcker inte till", not a lack of ambition.
+    const nodes = tree([], healthDays(8, { workouts: 1 }));
+    expect(node(nodes, "moving")).toMatchObject({
+      state: "unlocked",
+      progress: 8,
+      target: 8,
     });
   });
 
-  it("does not count days that fell outside the window", () => {
-    const stale = logged.map((day, index) => ({
-      ...day,
-      date: `2026-07-${String(10 + index).padStart(2, "0")}`,
-    }));
-    const nodes = tree([], stale);
-    expect(node(nodes, "rhythm")).toMatchObject({
+  it("counts sessions over thirty days rather than per week", () => {
+    // Eight sessions clustered in one good week still opens the node: no two
+    // weeks look alike on a shift schedule.
+    const nodes = tree([], healthDays(4, { workouts: 2 }));
+    expect(node(nodes, "moving").progress).toBe(8);
+  });
+
+  it("counts nights of sleep instead of an average", () => {
+    const mixed = [
+      ...healthDays(7, { sleepHours: 7 }),
+      ...healthDays(7, { sleepHours: 3 }, 7),
+    ];
+    // A single broken night must not erase two good weeks.
+    expect(node(tree([], mixed), "sleeping")).toMatchObject({
+      state: "unlocked",
+      progress: 7,
+    });
+    expect(
+      node(tree([], healthDays(14, { sleepHours: 6 })), "sleeping").progress,
+    ).toBe(0);
+  });
+
+  it("tracks the evenings there was anything left", () => {
+    const nodes = tree([], healthDays(7, { energy: 3 }));
+    expect(node(nodes, "energy_kept")).toMatchObject({
+      state: "unlocked",
+      progress: 7,
+    });
+    expect(
+      node(tree([], healthDays(7, { energy: 2 })), "energy_kept").progress,
+    ).toBe(0);
+  });
+
+  it("keeps the comeback shut while training never stopped", () => {
+    const nodes = tree([], healthDays(10, { workouts: 1 }));
+    expect(node(nodes, "moving").state).toBe("unlocked");
+    expect(node(nodes, "comeback")).toMatchObject({
       state: "available",
       progress: 0,
     });
+  });
+
+  it("rewards coming back after a break of a week or more", () => {
+    // The only node that cannot be earned without first falling off.
+    const withGap = [
+      ...healthDays(4, { workouts: 1 }),
+      ...healthDays(8, { workouts: 1 }, 14),
+    ];
+    expect(node(tree([], withGap), "comeback")).toMatchObject({
+      state: "unlocked",
+      progress: 1,
+    });
+  });
+
+  it("counts back care apart from training", () => {
+    const nodes = tree([], healthDays(10, { workouts: 1, mobility: true }));
+    expect(node(nodes, "back_care")).toMatchObject({
+      state: "unlocked",
+      progress: 10,
+    });
+    // A day of training with no mobility work does not count toward the back.
+    expect(
+      node(tree([], healthDays(10, { workouts: 1 })), "back_care").progress,
+    ).toBe(0);
+  });
+
+  it("stays shut on weight until a goal has been set", () => {
+    const weighed = [
+      ...healthDays(1, { weightKg: 96 }),
+      ...healthDays(1, { weightKg: 99 }, 20),
+    ];
+    expect(node(tree([], weighed), "direction").progress).toBe(0);
+  });
+
+  it("opens when the distance to the goal has shrunk", () => {
+    const losing = [
+      ...healthDays(1, { weightKg: 96 }),
+      ...healthDays(1, { weightKg: 99 }, 20),
+    ];
+    const goal: SoloSettings = { weightGoalKg: 90 };
+    expect(node(tree([], losing, goal), "direction")).toMatchObject({
+      state: "unlocked",
+      progress: 1,
+    });
+  });
+
+  it("reads the same when the goal is to gain", () => {
+    const gaining = [
+      ...healthDays(1, { weightKg: 72 }),
+      ...healthDays(1, { weightKg: 69 }, 20),
+    ];
+    const goal: SoloSettings = { weightGoalKg: 78 };
+    expect(node(tree([], gaining, goal), "direction").progress).toBe(1);
+  });
+
+  it("does not punish a scale that stood still", () => {
+    // Logged enough days for the branch root to be open, so the node is
+    // genuinely reachable and its shut state says something about the weight
+    // rather than about the logging.
+    const flat = [
+      ...healthDays(1, { weightKg: 96 }),
+      ...healthDays(6, {}, 1),
+      ...healthDays(1, { weightKg: 96 }, 20),
+    ];
+    const goal: SoloSettings = { weightGoalKg: 90 };
+    const nodes = tree([], flat, goal);
+    expect(node(nodes, "rhythm").state).toBe("unlocked");
+    expect(node(nodes, "direction")).toMatchObject({
+      state: "available",
+      progress: 0,
+    });
+  });
+
+  it("measures a quarter with the gaps included", () => {
+    const spread = [
+      ...healthDays(12, { workouts: 1 }),
+      ...healthDays(12, { workouts: 1 }, 60),
+    ];
+    expect(node(tree([], spread), "durable")).toMatchObject({ progress: 24 });
   });
 });
 

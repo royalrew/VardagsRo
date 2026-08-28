@@ -2,6 +2,7 @@ import type {
   SoloAction,
   SoloHealthDay,
   SoloQuest,
+  SoloSettings,
   SoloSummary,
 } from "@/lib/solo";
 import type { SoloTalentNode } from "@/lib/solo-talents";
@@ -17,6 +18,7 @@ export interface SoloProgressView {
   talents: SoloTalentNode[];
   /** The smallest rungs that are actually open, read off the tree. */
   quests: SoloQuest[];
+  settings: SoloSettings;
   recentActions: SoloAction[];
   healthToday: SoloHealthDay | null;
   zeroXpActivities: readonly string[];

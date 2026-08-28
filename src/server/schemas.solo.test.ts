@@ -103,8 +103,17 @@ describe("the solo health schema", () => {
       weightKg: null,
       energy: null,
       dietHeld: null,
+      mobility: null,
       note: null,
     });
+  });
+
+  it("keeps back care apart from training", () => {
+    // A day with no session left in it can still hold five minutes for the
+    // back, so the two are answered separately.
+    expect(
+      soloHealthSchema.parse({ date: "2026-08-28", mobility: true }),
+    ).toMatchObject({ mobility: true, workouts: 0 });
   });
 
   it("keeps energy on the scale it is asked for", () => {

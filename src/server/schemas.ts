@@ -486,9 +486,21 @@ export const soloHealthSchema = z
     weightKg: z.number().min(20).max(400).nullable().default(null),
     energy: z.number().int().min(1).max(5).nullable().default(null),
     dietHeld: z.boolean().nullable().default(null),
+    mobility: z.boolean().nullable().default(null),
     note: z.string().trim().max(500).nullable().default(null),
+  })
+  .strict();
+
+/**
+ * A weight goal is set deliberately or not at all. Null clears it, and the
+ * node that reads it then simply stays shut rather than inventing a direction.
+ */
+export const soloSettingsSchema = z
+  .object({
+    weightGoalKg: z.number().min(20).max(400).nullable().default(null),
   })
   .strict();
 
 export type SoloActionInput = z.infer<typeof soloActionSchema>;
 export type SoloHealthInput = z.infer<typeof soloHealthSchema>;
+export type SoloSettingsInput = z.infer<typeof soloSettingsSchema>;

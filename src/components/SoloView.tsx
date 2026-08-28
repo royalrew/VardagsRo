@@ -227,10 +227,12 @@ function ActionForm({
 function HealthForm({
   today,
   current,
+  settings,
   onSaved,
 }: {
   today: string;
   current: SoloProgressView["healthToday"];
+  settings: SoloProgressView["settings"];
   onSaved: () => void;
 }) {
   const [sleep, setSleep] = useState(current?.sleepHours?.toString() ?? "");
@@ -239,6 +241,12 @@ function HealthForm({
   const [energy, setEnergy] = useState(current?.energy ?? 0);
   const [dietHeld, setDietHeld] = useState<boolean | null>(
     current?.dietHeld ?? null,
+  );
+  const [mobility, setMobility] = useState<boolean | null>(
+    current?.mobility ?? null,
+  );
+  const [weightGoal, setWeightGoal] = useState(
+    settings.weightGoalKg?.toString() ?? "",
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -263,10 +271,23 @@ function HealthForm({
           weightKg: optionalNumber(weight),
           energy: energy === 0 ? null : energy,
           dietHeld,
+          mobility,
           note: null,
         }),
       });
       if (!response.ok) throw new Error("Kunde inte spara dagen.");
+
+      // The goal describes a body rather than a day, so it is only written when
+      // it actually changed.
+      const goal = optionalNumber(weightGoal);
+      if (goal !== settings.weightGoalKg) {
+        const saved = await fetch("/api/solo/settings", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ weightGoalKg: goal }),
+        });
+        if (!saved.ok) throw new Error("Kunde inte spara viktmålet.");
+      }
       onSaved();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Kunde inte spara.");
@@ -296,7 +317,27 @@ function HealthForm({
           value={workouts}
           onChange={(event) => setWorkouts(Number(event.target.value))}
         />
+        <small>Femton minuter räknas. En promenad räknas.</small>
       </label>
+      <fieldset className="solo-scale">
+        <legend>Rörlighet för ryggen</legend>
+        <button
+          type="button"
+          className={mobility === true ? "active" : ""}
+          onClick={() => setMobility(true)}
+          aria-pressed={mobility === true}
+        >
+          Ja
+        </button>
+        <button
+          type="button"
+          className={mobility === false ? "active" : ""}
+          onClick={() => setMobility(false)}
+          aria-pressed={mobility === false}
+        >
+          Nej
+        </button>
+      </fieldset>
       <label>
         Vikt i kg (valfritt)
         <input
@@ -305,6 +346,16 @@ function HealthForm({
           value={weight}
           onChange={(event) => setWeight(event.target.value)}
         />
+      </label>
+      <label>
+        Viktmål i kg
+        <input
+          type="text"
+          inputMode="decimal"
+          value={weightGoal}
+          onChange={(event) => setWeightGoal(event.target.value)}
+        />
+        <small>Utan mål har vikten ingen riktning att mätas mot.</small>
       </label>
       <fieldset className="solo-scale">
         <legend>Energi i kväll</legend>
@@ -529,6 +580,7 @@ export function SoloView() {
         <HealthForm
           today={progress.today}
           current={progress.healthToday}
+          settings={progress.settings}
           onSaved={load}
         />
       </div>

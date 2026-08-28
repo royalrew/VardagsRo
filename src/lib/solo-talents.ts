@@ -1,13 +1,21 @@
 import {
   MONTHLY_FLOOR_ORE,
   MONTHLY_FREEDOM_ORE,
+  soloActionCount,
+  soloComebacks,
+  soloHealthWindow,
+  soloWeightTowardGoal,
+  soloWorkoutCount,
   type SoloAction,
   type SoloActionKind,
   type SoloHealthDay,
   type SoloQuest,
+  type SoloSettings,
   type SoloSummary,
 } from "@/lib/solo";
-import { calendarDateDifference } from "@/lib/dates";
+
+/** A night that counts. Low enough to be reachable after a late shift. */
+const SLEEP_NIGHT_HOURS = 6.5;
 
 /**
  * A talent tree, with one rule taken from the ledger and not from the genre:
@@ -50,6 +58,7 @@ export type SoloTalentUnit = "count" | "ore" | "percent" | "weeks";
 export interface SoloTalentContext {
   actions: readonly SoloAction[];
   healthDays: readonly SoloHealthDay[];
+  settings: SoloSettings;
   summary: SoloSummary;
   today: string;
 }
@@ -86,6 +95,13 @@ export const SOLO_TALENTS: readonly SoloTalent[] = [
   // The courage ladder. The old first rung was "contact a stranger", which is
   // not a first step for someone who has never sold anything, so the branch now
   // starts with things nobody can say no to and gets braver one rung at a time.
+  // The courage ladder. The old first rung was "contact a stranger", which is
+  // not a first step for someone who has never sold anything, so the branch
+  // starts with things nobody can say no to and gets braver one rung at a time.
+  //
+  // After "Publik" it forks. The left path reaches out and ends in an offer.
+  // The right path is built to be found, and ends with someone arriving on
+  // their own. Both are visibility; only one of them can be forced.
   {
     id: "visible",
     branch: "visibility",
@@ -125,6 +141,19 @@ export const SOLO_TALENTS: readonly SoloTalent[] = [
     progressOf: (context) => countKind(context, "shown_to_someone"),
   },
   {
+    id: "profile",
+    branch: "visibility",
+    tier: 3,
+    title: "Profilen",
+    requirement: "Gör en profil publik där rekryterare letar",
+    meaning:
+      "Svenska rekryterare söker på ett fåtal ställen. En profil som säger undersköterska och produktionssystem i samma mening finns det nästan ingen av.",
+    requires: "case_published",
+    unit: "count",
+    target: 2,
+    progressOf: (context) => countKind(context, "made_visible"),
+  },
+  {
     id: "asked",
     branch: "visibility",
     tier: 4,
@@ -138,6 +167,25 @@ export const SOLO_TALENTS: readonly SoloTalent[] = [
     progressOf: (context) => countKind(context, "question_asked"),
   },
   {
+    id: "voice",
+    branch: "visibility",
+    tier: 4,
+    title: "Röst",
+    requirement: "Fyra publiceringar på trettio dagar",
+    meaning:
+      "Räckvidd kommer av upprepning, aldrig av en perfekt post. Fyra medelmåttiga slår en genomarbetad varje gång.",
+    requires: "profile",
+    unit: "count",
+    target: 4,
+    progressOf: (context) =>
+      soloActionCount(
+        context.actions,
+        "portfolio_published",
+        context.today,
+        30,
+      ),
+  },
+  {
     id: "first_contact",
     branch: "visibility",
     tier: 5,
@@ -149,6 +197,19 @@ export const SOLO_TALENTS: readonly SoloTalent[] = [
     unit: "count",
     target: 1,
     progressOf: (context) => countKind(context, "outreach_sent"),
+  },
+  {
+    id: "recognised",
+    branch: "visibility",
+    tier: 5,
+    title: "Igenkänd",
+    requirement: "Någon hör av sig till dig först",
+    meaning:
+      "Den enda noden i trädet som kräver att en annan människa tog initiativet. Den går inte att forcera, och den är beviset på att synligheten växlade över till något.",
+    requires: "voice",
+    unit: "count",
+    target: 1,
+    progressOf: (context) => countKind(context, "inbound_received"),
   },
   {
     id: "applicant",
@@ -262,6 +323,10 @@ export const SOLO_TALENTS: readonly SoloTalent[] = [
     progressOf: (context) => context.summary.incomeOre,
   },
 
+  // Endurance carries the other two branches, so it is measured on rolling
+  // windows rather than on calendar weeks: with shift work and five children
+  // no two weeks look alike, and a quota that assumes they do only ever
+  // reports failure.
   {
     id: "rhythm",
     branch: "endurance",
@@ -273,60 +338,116 @@ export const SOLO_TALENTS: readonly SoloTalent[] = [
     unit: "count",
     target: 7,
     progressOf: (context) =>
-      context.healthDays.filter((day) => {
-        const age = calendarDateDifference(day.date, context.today);
-        return age >= 0 && age < 14;
-      }).length,
+      soloHealthWindow(context.healthDays, context.today, 14).length,
   },
   {
-    id: "rested",
+    id: "moving",
     branch: "endurance",
     tier: 2,
-    title: "Utvilad",
-    requirement: "Hälsostat på 60 eller mer",
-    meaning: "Sömn och mat på en nivå där kvällarna räcker till mer än att orka.",
+    title: "Igång",
+    requirement: "Åtta pass på trettio dagar",
+    meaning:
+      "Femton minuter på mattan räknas lika mycket som en timme. Det är regelbundenheten som mäts, aldrig mängden.",
     requires: "rhythm",
-    unit: "percent",
-    target: 60,
-    progressOf: (context) => context.summary.stats.health ?? 0,
+    unit: "count",
+    target: 8,
+    progressOf: (context) =>
+      soloWorkoutCount(context.healthDays, context.today, 30),
   },
   {
-    id: "four_weeks",
+    id: "sleeping",
     branch: "endurance",
     tier: 2,
-    title: "Fyra veckor",
-    requirement: "Fyra veckor i rad med full kvot",
-    meaning: "Beviset på att det här inte var ännu en bra vecka i februari.",
+    title: "Sömnen",
+    requirement: "Sju nätter av fjorton med minst 6,5 timmar",
+    meaning:
+      "Nätter, inte snitt. Ett enda nattpass ska inte kunna radera två goda veckor.",
     requires: "rhythm",
-    unit: "weeks",
-    target: 4,
-    progressOf: (context) => context.summary.streak.weeks,
+    unit: "count",
+    target: 7,
+    progressOf: (context) =>
+      soloHealthWindow(context.healthDays, context.today, 14).filter(
+        (day) => (day.sleepHours ?? 0) >= SLEEP_NIGHT_HOURS,
+      ).length,
   },
   {
-    id: "strong",
+    id: "energy_kept",
+    branch: "endurance",
+    tier: 2,
+    title: "Orken",
+    requirement: "Sju kvällar av fjorton med energi 3 eller mer",
+    meaning:
+      "Det här är noden som karriärgrenen står på. Finns ingen ork kvar när barnen somnat blir inget av det andra gjort.",
+    requires: "rhythm",
+    unit: "count",
+    target: 7,
+    progressOf: (context) =>
+      soloHealthWindow(context.healthDays, context.today, 14).filter(
+        (day) => (day.energy ?? 0) >= 3,
+      ).length,
+  },
+  {
+    id: "comeback",
     branch: "endurance",
     tier: 3,
-    title: "Stark",
-    requirement: "Tjugofyra träningspass totalt",
-    meaning: "Ett år av hemvård sliter på en kropp. Den behöver byggas tillbaka.",
-    requires: "rested",
+    title: "Återkomsten",
+    requirement: "Träna igen efter ett uppehåll på minst en vecka",
+    meaning:
+      "Den enda noden i trädet som kräver att du först misslyckats. Att komma tillbaka är färdigheten som avgör allt annat, så den räknas som en merit och inte som en reparation.",
+    requires: "moving",
+    unit: "count",
+    target: 1,
+    progressOf: (context) => soloComebacks(context.healthDays),
+  },
+  {
+    id: "back_care",
+    branch: "endurance",
+    tier: 3,
+    title: "Ryggen",
+    requirement: "Tio rörlighetspass på trettio dagar",
+    meaning:
+      "Att lyfta människor för sitt levebröd sliter ut en rygg. Fem minuter går att göra även den kväll då ingenting annat går.",
+    requires: "moving",
+    unit: "count",
+    target: 10,
+    progressOf: (context) =>
+      soloHealthWindow(context.healthDays, context.today, 30).filter(
+        (day) => day.mobility === true,
+      ).length,
+  },
+  {
+    id: "direction",
+    branch: "endurance",
+    tier: 3,
+    title: "Riktning",
+    requirement: "Vikten rör sig mot ditt mål över trettio dagar",
+    meaning:
+      "Riktning, aldrig en siffra. Noden frågar bara om avståndet till målet blivit mindre, och den straffar aldrig en våg som står stilla.",
+    requires: "rhythm",
+    unit: "count",
+    target: 1,
+    progressOf: (context) =>
+      soloWeightTowardGoal(
+        context.healthDays,
+        context.today,
+        context.settings.weightGoalKg,
+      )
+        ? 1
+        : 0,
+  },
+  {
+    id: "durable",
+    branch: "endurance",
+    tier: 4,
+    title: "Uthållig",
+    requirement: "Tjugofyra pass på nittio dagar",
+    meaning:
+      "Ett kvartal med i snitt två pass i veckan, uppehållen inräknade. Det är beviset på att det här inte var ännu en bra vecka i februari.",
+    requires: "comeback",
     unit: "count",
     target: 24,
     progressOf: (context) =>
-      context.healthDays.reduce((total, day) => total + day.workouts, 0),
-  },
-  {
-    id: "quarter",
-    branch: "endurance",
-    tier: 3,
-    title: "Kvartalet",
-    requirement: "Tolv veckor i rad med full kvot",
-    meaning:
-      "Tre månaders utåtriktat arbete i rad har aldrig lämnat någon kvar på samma plats.",
-    requires: "four_weeks",
-    unit: "weeks",
-    target: 12,
-    progressOf: (context) => context.summary.streak.weeks,
+      soloWorkoutCount(context.healthDays, context.today, 90),
   },
 ] as const;
 

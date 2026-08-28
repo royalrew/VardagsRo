@@ -9,13 +9,18 @@ import {
   type SoloAction,
   type SoloActionKind,
   type SoloHealthDay,
+  type SoloSettings,
 } from "@/lib/solo";
 import { buildSoloQuests, buildSoloTalents } from "@/lib/solo-talents";
 import { recordAudit } from "@/server/audit";
 import type { ActorContext } from "@/server/authorization-types";
 import { readyClient } from "@/server/database";
 import { AppError } from "@/server/errors";
-import type { SoloActionInput, SoloHealthInput } from "@/server/schemas";
+import type {
+  SoloActionInput,
+  SoloHealthInput,
+  SoloSettingsInput,
+} from "@/server/schemas";
 
 /**
  * Solo progress belongs to one account and to no household. Every statement in
@@ -47,7 +52,12 @@ interface SoloHealthRow {
   weight_kg: string | null;
   energy: number | null;
   diet_held: boolean | null;
+  mobility: boolean | null;
   note: string | null;
+}
+
+interface SoloSettingsRow {
+  weight_goal_kg: string | null;
 }
 
 /** `numeric` and `bigint` arrive as strings, so every one is converted once. */
@@ -77,6 +87,7 @@ function mapHealthDay(row: SoloHealthRow): SoloHealthDay {
     weightKg: asNumber(row.weight_kg),
     energy: row.energy,
     dietHeld: row.diet_held,
+    mobility: row.mobility,
     note: row.note,
   };
 }
@@ -93,11 +104,13 @@ export function soloToday(): string {
 /** One shape, defined next to the view that renders it. */
 export type SoloProgress = SoloProgressView;
 
-async function loadRows(
-  userId: string,
-): Promise<{ actions: SoloAction[]; healthDays: SoloHealthDay[] }> {
+async function loadRows(userId: string): Promise<{
+  actions: SoloAction[];
+  healthDays: SoloHealthDay[];
+  settings: SoloSettings;
+}> {
   const sql = await readyClient();
-  const [actionRows, healthRows] = await Promise.all([
+  const [actionRows, healthRows, settingsRows] = await Promise.all([
     sql<SoloActionRow[]>`
       select id, kind, to_char(occurred_on, 'YYYY-MM-DD') as occurred_on,
              evidence, amount_ore, xp, created_at
@@ -108,17 +121,23 @@ async function loadRows(
     `,
     sql<SoloHealthRow[]>`
       select to_char(day, 'YYYY-MM-DD') as day, sleep_hours, workouts,
-             weight_kg, energy, diet_held, note
+             weight_kg, energy, diet_held, mobility, note
       from solo_health_days
       where user_id = ${userId}
       order by day desc
       limit ${MAX_ROWS}
+    `,
+    sql<SoloSettingsRow[]>`
+      select weight_goal_kg from solo_settings where user_id = ${userId} limit 1
     `,
   ]);
 
   return {
     actions: actionRows.map(mapAction),
     healthDays: healthRows.map(mapHealthDay),
+    settings: {
+      weightGoalKg: asNumber(settingsRows[0]?.weight_goal_kg ?? null),
+    },
   };
 }
 
@@ -126,14 +145,21 @@ export async function loadSoloProgress(
   actor: ActorContext,
 ): Promise<SoloProgress> {
   const today = soloToday();
-  const { actions, healthDays } = await loadRows(actor.userId);
+  const { actions, healthDays, settings } = await loadRows(actor.userId);
   const summary = buildSoloSummary({ actions, healthDays, today });
-  const talents = buildSoloTalents({ actions, healthDays, summary, today });
+  const talents = buildSoloTalents({
+    actions,
+    healthDays,
+    settings,
+    summary,
+    today,
+  });
 
   return {
     today,
     summary,
     talents,
+    settings,
     quests: buildSoloQuests(talents, summary),
     recentActions: actions.slice(0, RECENT_ACTIONS),
     healthToday: healthDays.find((day) => day.date === today) ?? null,
@@ -232,20 +258,23 @@ export async function saveSoloHealthDay(
   const saved = await sql.begin(async (tx) => {
     const rows = await tx<SoloHealthRow[]>`
       insert into solo_health_days
-        (user_id, day, sleep_hours, workouts, weight_kg, energy, diet_held, note)
+        (user_id, day, sleep_hours, workouts, weight_kg, energy, diet_held,
+         mobility, note)
       values
         (${actor.userId}, ${input.date}, ${input.sleepHours}, ${input.workouts},
-         ${input.weightKg}, ${input.energy}, ${input.dietHeld}, ${input.note})
+         ${input.weightKg}, ${input.energy}, ${input.dietHeld},
+         ${input.mobility}, ${input.note})
       on conflict (user_id, day) do update set
         sleep_hours = excluded.sleep_hours,
         workouts = excluded.workouts,
         weight_kg = excluded.weight_kg,
         energy = excluded.energy,
         diet_held = excluded.diet_held,
+        mobility = excluded.mobility,
         note = excluded.note,
         updated_at = now()
       returning to_char(day, 'YYYY-MM-DD') as day, sleep_hours, workouts,
-                weight_kg, energy, diet_held, note
+                weight_kg, energy, diet_held, mobility, note
     `;
     await recordAudit(tx, actor, {
       action: "solo.health.save",
@@ -256,4 +285,24 @@ export async function saveSoloHealthDay(
   });
 
   return mapHealthDay(saved);
+}
+
+/**
+ * The weight goal is the only number here that describes a body rather than a
+ * day, so it is stored on its own and never derived from the log.
+ */
+export async function saveSoloSettings(
+  actor: ActorContext,
+  input: SoloSettingsInput,
+): Promise<SoloSettings> {
+  const sql = await readyClient();
+  const rows = await sql<SoloSettingsRow[]>`
+    insert into solo_settings (user_id, weight_goal_kg)
+    values (${actor.userId}, ${input.weightGoalKg})
+    on conflict (user_id) do update set
+      weight_goal_kg = excluded.weight_goal_kg,
+      updated_at = now()
+    returning weight_goal_kg
+  `;
+  return { weightGoalKg: asNumber(rows[0]?.weight_goal_kg ?? null) };
 }

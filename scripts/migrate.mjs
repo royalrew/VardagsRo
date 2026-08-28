@@ -444,6 +444,40 @@ const migrations = [
       ))`,
     ],
   },
+  {
+    version: "013_solo_endurance",
+    name: "Back care, and a weight goal to measure direction against",
+    statements: [
+      // Lifting people for a living wears a back out. This is the small daily
+      // thing that protects it, kept apart from workouts on purpose: it has to
+      // stay loggable on a day with nothing left for training.
+      `alter table solo_health_days add column if not exists mobility boolean`,
+      // A weight trend has no good direction without a target, so the target is
+      // stored rather than guessed. Nothing else about a body belongs here.
+      `create table if not exists solo_settings (
+        user_id text primary key references auth_users(id) on delete cascade,
+        weight_goal_kg numeric(5, 2) check (
+          weight_goal_kg is null or (weight_goal_kg > 0 and weight_goal_kg < 400)
+        ),
+        updated_at timestamptz not null default now()
+      )`,
+    ],
+  },
+  {
+    version: "014_solo_inbound",
+    name: "The one kind that needs someone else to move first",
+    statements: [
+      // Being contacted cannot be manufactured, which is exactly why it is
+      // worth recording separately from every outreach that went the other way.
+      `alter table solo_actions drop constraint if exists solo_actions_kind_check`,
+      `alter table solo_actions add constraint solo_actions_kind_check check (kind in (
+        'made_visible', 'shown_to_someone', 'question_asked',
+        'outreach_sent', 'application_sent', 'portfolio_published',
+        'interview_held', 'inbound_received', 'proposal_sent',
+        'offer_received', 'invoice_sent', 'payment_received'
+      ))`,
+    ],
+  },
 ];
 
 function checksum(migration) {

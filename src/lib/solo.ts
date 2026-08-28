@@ -25,6 +25,7 @@ export type SoloActionKind =
   | "application_sent"
   | "portfolio_published"
   | "interview_held"
+  | "inbound_received"
   | "proposal_sent"
   | "offer_received"
   | "invoice_sent"
@@ -103,6 +104,17 @@ export const SOLO_ACTION_RULES: readonly SoloActionRule[] = [
     label: "Genomfört intervju",
     evidenceHint: "Företag och datum för samtalet",
     xp: 150,
+    amount: "none",
+  },
+  {
+    // The one kind nobody can manufacture: it requires another person to have
+    // moved first. That makes it the only honest proof that being visible
+    // actually worked.
+    kind: "inbound_received",
+    track: "career",
+    label: "Någon hörde av sig",
+    evidenceHint: "Vem som hörde av sig och om vad",
+    xp: 250,
     amount: "none",
   },
   {
@@ -185,7 +197,15 @@ export interface SoloHealthDay {
   energy: number | null;
   /** Whether the day's eating held. Halal: no pork, ever. */
   dietHeld: boolean | null;
+  /** The short back and mobility routine. Kept apart from workouts because it
+   * has to stay doable on a day with nothing left for training. */
+  mobility: boolean | null;
   note: string | null;
+}
+
+export interface SoloSettings {
+  /** What the weight is aiming at. Without it, a trend has no good direction. */
+  weightGoalKg: number | null;
 }
 
 /** Ören, so money never passes through a float. */
@@ -205,6 +225,13 @@ export const WEIGHT_WINDOW_DAYS = 30;
 
 /** Outward actions per week that keep the streak alive. */
 export const WEEKLY_QUOTA = 3;
+
+/**
+ * A break this long, followed by a workout, counts as a comeback. Coming back
+ * is the skill that decides whether any of this lasts, so it is measured and
+ * rewarded rather than treated as the repair of a failure.
+ */
+export const COMEBACK_GAP_DAYS = 7;
 
 /** Career experience within the window that counts as a full career stat. */
 export const CAREER_XP_FOR_FULL_STAT = 750;
@@ -424,7 +451,15 @@ export function soloHealthStat(
           dietDays.length) *
         100;
 
-  const scores = [sleep, workouts, energy, diet].filter(
+  const mobilityDays = window.filter((day) => day.mobility !== null);
+  const mobility =
+    mobilityDays.length === 0
+      ? null
+      : (mobilityDays.filter((day) => day.mobility === true).length /
+          mobilityDays.length) *
+        100;
+
+  const scores = [sleep, workouts, energy, diet, mobility].filter(
     (score): score is number => score !== null,
   );
   if (scores.length === 0) return null;
@@ -516,4 +551,89 @@ export function buildSoloSummary(input: {
     weightTrendKg: weight.trend,
     actionsInWindow: inIncomeWindow.length,
   };
+}
+
+/** The logged days inside a rolling window ending today. */
+export function soloHealthWindow(
+  days: readonly SoloHealthDay[],
+  today: string,
+  windowDays: number,
+): SoloHealthDay[] {
+  return days.filter((day) => withinDays(day.date, today, windowDays));
+}
+
+/** Sessions inside a rolling window. A short walk counts as a whole one. */
+export function soloWorkoutCount(
+  days: readonly SoloHealthDay[],
+  today: string,
+  windowDays: number,
+): number {
+  return soloHealthWindow(days, today, windowDays).reduce(
+    (total, day) => total + day.workouts,
+    0,
+  );
+}
+
+/**
+ * How many times training resumed after a break of at least a week.
+ *
+ * All-or-nothing is the thing that ends attempts: one missed stretch and the
+ * whole effort is written off. So the return is what gets counted. A gap is not
+ * a failure to be forgiven here — it is the precondition for the only node in
+ * the tree that cannot be earned without one.
+ */
+export function soloComebacks(days: readonly SoloHealthDay[]): number {
+  const trained = days
+    .filter((day) => day.workouts > 0)
+    .map((day) => day.date)
+    .sort((left, right) => left.localeCompare(right));
+
+  let comebacks = 0;
+  for (let index = 1; index < trained.length; index += 1) {
+    if (
+      calendarDateDifference(trained[index - 1], trained[index]) >=
+      COMEBACK_GAP_DAYS
+    ) {
+      comebacks += 1;
+    }
+  }
+  return comebacks;
+}
+
+/**
+ * Whether the weight moved toward the target across the window. Distance to the
+ * goal is what is compared, so it reads the same whether the goal is above or
+ * below where you stand, and reaching it counts as arrival rather than as a
+ * direction that stopped.
+ */
+export function soloWeightTowardGoal(
+  days: readonly SoloHealthDay[],
+  today: string,
+  goalKg: number | null,
+  windowDays = WEIGHT_WINDOW_DAYS,
+): boolean {
+  if (goalKg === null) return false;
+  const weighed = soloHealthWindow(days, today, windowDays)
+    .filter((day) => day.weightKg !== null)
+    .sort((left, right) => left.date.localeCompare(right.date));
+  if (weighed.length < 2) return false;
+
+  const first = Math.abs((weighed[0].weightKg as number) - goalKg);
+  const latest = Math.abs(
+    (weighed[weighed.length - 1].weightKg as number) - goalKg,
+  );
+  return latest < first;
+}
+
+/** Actions of one kind inside a rolling window ending today. */
+export function soloActionCount(
+  actions: readonly SoloAction[],
+  kind: SoloActionKind,
+  today: string,
+  windowDays: number,
+): number {
+  return actions.filter(
+    (action) =>
+      action.kind === kind && withinDays(action.occurredOn, today, windowDays),
+  ).length;
 }
