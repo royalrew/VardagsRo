@@ -345,7 +345,6 @@ function resolvePeople(
     unresolvedReference: hasGenericReference && matches.size === 0,
   };
 }
-
 function detectActivities(text: string): string[] {
   const found: Array<{ index: number; term: string }> = [];
   const definitions: ReadonlyArray<{ canonical: string; terms: readonly string[] }> = [
@@ -536,8 +535,52 @@ function validInterval(event: FamilyEvent): EventInterval | null {
   return { event, start, end };
 }
 
+/**
+ * Words that ask a question rather than name an activity.
+ *
+ * An activity term the family's calendar does not contain narrows the search to
+ * nothing, and the answer then claims there is no information for the day. That
+ * is what happened to "Vad händer på torsdag?": the planner offered "händer" as
+ * an activity, no event contains that word, and a day full of entries was
+ * reported as empty. A question word must never be able to do that.
+ */
+const QUESTION_WORDS = new Set([
+  "vad",
+  "vem",
+  "vilka",
+  "vilken",
+  "vilket",
+  "nar",
+  "hur",
+  "hander",
+  "handa",
+  "hant",
+  "gor",
+  "gora",
+  "ar",
+  "finns",
+  "ska",
+  "skall",
+  "nagot",
+  "nagon",
+  "nat",
+  "allt",
+  "alla",
+  "dag",
+  "dagen",
+  "schemat",
+  "planerat",
+  "planer",
+]);
+
 function normalizedPlanTerms(plan: QuestionPlan): string[] {
-  const terms = [...new Set(plan.activityTerms.map(canonicalActivityTerm).filter(Boolean))];
+  const terms = [
+    ...new Set(
+      plan.activityTerms
+        .map(canonicalActivityTerm)
+        .filter((term) => Boolean(term) && !QUESTION_WORDS.has(term)),
+    ),
+  ];
   if (terms.length === 0 && plan.intent === "work") terms.push("work");
   return terms;
 }
@@ -744,7 +787,30 @@ function formatPeriod(plan: Pick<QuestionPlan, "from" | "to">, timeZone: string)
   if (days === 1) return formatDate(from, timeZone);
 
   const lastMoment = new Date(to.getTime() - 1);
-  return `${formatDate(from, timeZone)}–${formatDate(lastMoment, timeZone)}`;
+  const first = formatDate(from, timeZone);
+  const last = formatDate(lastMoment, timeZone);
+  // A window that starts and ends on the same day is one day, whatever its
+  // boundaries happen to be. "Torsdag 27 augusti–torsdag 27 augusti" is a range
+  // in the arithmetic and a single day to everyone reading it.
+  return first === last ? first : `${first}–${last}`;
+}
+
+/**
+ * The period as a sentence-opening adverbial. A single day takes "på"; a range
+ * reads well on its own, so it is left bare rather than forced into a
+ * preposition that does not fit it.
+ */
+function periodPhrase(
+  plan: Pick<QuestionPlan, "from" | "to">,
+  periodLabel: string,
+): string {
+  const from = new Date(plan.from);
+  const to = new Date(plan.to);
+  const spansOneLabel = !periodLabel.includes("–");
+  const valid = Number.isFinite(from.getTime()) && Number.isFinite(to.getTime());
+  return valid && spansOneLabel
+    ? `På ${periodLabel.toLocaleLowerCase("sv-SE")}`
+    : periodLabel;
 }
 
 function formatDuration(minutes: number): string {
@@ -781,20 +847,71 @@ function personLabel(
   return person.name || person.role || "Okänd person";
 }
 
-function eventLabel(
+/**
+ * Answers are assembled as sentences rather than as rows of data.
+ *
+ * "Du – Hemvården kl. 07.00–16.00" is correct and reads like a database. A
+ * family asking their own calendar a question should get an answer in the shape
+ * a person would give it. None of this lets a model near the facts: the times,
+ * names and titles are the same values, arranged into Swedish by code.
+ */
+
+/** "du", "Hanni", "hela familjen". */
+function subjectFor(
+  event: FamilyEvent,
+  people: readonly FamilyPerson[],
+  currentPersonId?: string,
+): string {
+  if (event.personId === null) return "hela familjen";
+  const person = people.find((candidate) => candidate.id === event.personId);
+  if (!person) return "någon";
+  if (currentPersonId && person.id === currentPersonId) return "du";
+  return person.name || person.role || "någon";
+}
+
+function timeFor(event: FamilyEvent, timeZone: string): string {
+  return event.allDay
+    ? "hela dagen"
+    : `${formatClock(event.startsAt, timeZone)}–${formatClock(event.endsAt, timeZone)}`;
+}
+
+/**
+ * Swedish puts the verb second, so a clause after a leading time expression has
+ * to invert: "På torsdag **har du** simskola", not "På torsdag du har".
+ */
+function activityClause(
   event: FamilyEvent,
   people: readonly FamilyPerson[],
   timeZone: string,
-  currentPersonId?: string,
+  currentPersonId: string | undefined,
+  inverted = false,
 ): string {
-  const time = event.allDay
-    ? "hela dagen"
-    : `kl. ${formatClock(event.startsAt, timeZone)}–${formatClock(event.endsAt, timeZone)}`;
-  const who =
-    event.personId === null
-      ? "Hela familjen"
-      : personLabel(event.personId, people, currentPersonId);
-  return `${who} – ${event.title} ${time}`;
+  const subject = subjectFor(event, people, currentPersonId);
+  const head = inverted ? `har ${subject}` : `${subject} har`;
+  return `${head} ${event.title} ${timeFor(event, timeZone)}`;
+}
+
+const GENERIC_WORK_TITLES = new Set(["jobb", "arbete", "arbetspass", "pass"]);
+
+/** "du jobbar 07.00–16.00", with the shift's own name only when it adds something. */
+function workClause(
+  event: FamilyEvent,
+  people: readonly FamilyPerson[],
+  timeZone: string,
+  currentPersonId: string | undefined,
+): string {
+  const subject = subjectFor(event, people, currentPersonId);
+  const named = !GENERIC_WORK_TITLES.has(event.title.trim().toLocaleLowerCase("sv-SE"));
+  const time = timeFor(event, timeZone);
+  return named
+    ? `${subject} jobbar ${time} och passet heter ${event.title}`
+    : `${subject} jobbar ${time}`;
+}
+
+/** "a", "a och b", "a, b och c" — the way a list is spoken, not printed. */
+function joinClauses(parts: readonly string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  return `${parts.slice(0, -1).join(", ")} och ${parts[parts.length - 1]}`;
 }
 
 function buildSources(
@@ -973,13 +1090,16 @@ export function answerTaskQuestionDeterministically({
     );
   }
 
-  const descriptions = relevantTasks.map((task) => {
+  const descriptions = relevantTasks.map((task, index) => {
     const person = personLabel(task.personId, people, currentPersonId);
+    const subject = person === "Du" && index > 0 ? "du" : person;
     const due = taskDueLabel(task, timeZone);
-    return `${person} – ${task.title}${due ? `, senast ${due}` : ", utan angiven deadline"}`;
+    return due
+      ? `${subject} ska ha ”${task.title}” klar ${due}`
+      : `${subject} har ”${task.title}”, utan angiven deadline`;
   });
   return taskAnswer(
-    `${periodLabel}: ${descriptions.join("; ")}.`,
+    `${capitalize(joinClauses(descriptions))}.`,
     true,
     periodLabel,
     relevantTasks,
@@ -1102,27 +1222,41 @@ export function answerQuestionDeterministically({
       const pair = overlap.firstOverlappingPair;
       return {
         ...common,
-        text: `Ja. ${eventLabel(pair.first, people, timeZone, currentPersonId)} och ${eventLabel(pair.second, people, timeZone, currentPersonId)} överlappar med ${formatDuration(overlap.minutes)}.`,
+        text: `Ja, det krockar. ${capitalize(activityClause(pair.first, people, timeZone, currentPersonId))}, samtidigt som ${activityClause(pair.second, people, timeZone, currentPersonId)}. De går omlott ${formatDuration(overlap.minutes)}.`,
         overlapMinutes: overlap.minutes,
       };
     }
     return {
       ...common,
-      text: `Nej. De bekräftade kalenderposterna för ${periodLabel.toLocaleLowerCase("sv-SE")} överlappar inte.`,
+      text: `Nej, det krockar inte. Inget av det som är bekräftat för ${periodLabel.toLocaleLowerCase("sv-SE")} går omlott.`,
       overlapMinutes: 0,
     };
   }
 
-  const eventDescriptions = relevantEvents
-    .map((event) => eventLabel(event, people, timeZone, currentPersonId))
-    .join(", ");
   const planTerms = normalizedPlanTerms(plan);
   const workOnly = plan.intent === "work" && planTerms.every((term) => term === "work");
+
+  if (workOnly) {
+    const clauses = joinClauses(
+      relevantEvents.map((event) => workClause(event, people, timeZone, currentPersonId)),
+    );
+    return {
+      ...common,
+      text: `Ja, ${clauses}.`,
+      overlapMinutes: 0,
+    };
+  }
+
+  // A leading time expression inverts the first clause and only the first one:
+  // "På torsdag har du simskola 10.30 och Cuzeyr har träning 17.00".
+  const [first, ...rest] = relevantEvents;
+  const clauses = joinClauses([
+    activityClause(first, people, timeZone, currentPersonId, true),
+    ...rest.map((event) => activityClause(event, people, timeZone, currentPersonId)),
+  ]);
   return {
     ...common,
-    text: workOnly
-      ? `Ja. ${eventDescriptions} enligt det bekräftade underlaget.`
-      : `${periodLabel}: ${eventDescriptions}.`,
+    text: `${periodPhrase(plan, periodLabel)} ${clauses}.`,
     overlapMinutes: 0,
   };
 }

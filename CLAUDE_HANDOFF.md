@@ -1254,3 +1254,46 @@ kl. 07.00–16.00" är korrekt men inte hur en människa svarar. Att formulera o
 dem är en egen uppgift, och den ska göras utan att släppa in en modell mellan
 fakta och svar — hela poängen med den deterministiska motorn är att siffrorna
 inte kan ändras på vägen.
+
+
+## 2026-08-28: svaren låter som en människa, och hittar hela familjen
+
+### Tonen
+
+Svaren byggdes som datarader: `Du – Hemvården kl. 07.00–16.00`. Korrekt, och
+läser som en databas. De byggs nu som meningar, fortfarande helt i kod — ingen
+modell kommer nära siffrorna.
+
+- `Ja, du jobbar 07.00–16.00 och passet heter Hemvården.`
+- `På onsdag 26 augusti har du Hemvården 07.00–16.00, Bella har Näckrosen
+  08.00–15.00 och Cuzeyr har Fotbollsträning 17.00–18.30.`
+- `Nej, det krockar inte. Inget av det som är bekräftat för torsdag 27 augusti
+  går omlott.`
+
+Svenskan kräver omvänd ordföljd efter ett inledande tidsuttryck, så första satsen
+inverteras och bara den: *På torsdag **har du** simskola*, inte *På torsdag du
+har*. Det är därför satsbyggaren har ett `inverted`-läge.
+
+### Buggen som gömde halva familjen
+
+`Vad händer den 27 augusti?` svarade att underlag saknades, trots att två i
+familjen hade poster den dagen. Frågade man om en av dem vid namn hittades de.
+
+Planeraren fyllde i `personIds` med den som frågade när frågan inte namngav
+någon. Svaret gällde alltså bara en person, och en dag full av familjens poster
+rapporterades som tom så fort just den personen var ledig.
+
+Vem frågan gäller avgörs nu i koden, av frågans egen text, inte av modellen.
+Modellens lista används bara för att avvisa en plan som missar någon som
+uttryckligen nämnts. Prompten säger dessutom att `personIds` ska vara tom när
+ingen namnges.
+
+Samma runda rättade också en periodetikett som skrev ut en enda dag som ett
+intervall: `torsdag 27 augusti–torsdag 27 augusti`.
+
+### Vad som inte är testat i enhetstest
+
+Överstyrningen av `personIds` ligger i `planQuestionWithAI`, som anropar
+modellen. Den är verifierad genom riktiga frågor mot den lokala databasen, inte
+med ett enhetstest. Motsvarande regel på motorsidan — att en tom personlista ger
+hela familjen — är testad i `src/lib/answer-labels.test.ts`.

@@ -668,7 +668,7 @@ describe("answerQuestionDeterministically", () => {
 
     expect(answer.hasEnoughData).toBe(true);
     expect(answer.overlapMinutes).toBe(0);
-    expect(answer.text).toMatch(/^Nej\./);
+    expect(answer.text).toMatch(/^Nej[,.]/);
   });
 
   it("does not turn a missing event into an unsupported no", () => {

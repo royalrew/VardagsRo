@@ -520,7 +520,7 @@ export async function planQuestionWithAI(input: {
         {
           role: "system",
           content:
-            "Du planerar endast en kalenderfråga. Frågan kan vara skriven på svenska eller somaliska; ange vilket i language. Du får inte besvara frågan eller hitta på kalenderposter. Tolka tidsperiod, personer och aktivitetstermer. För överlapp ska needsOverlap vara true. Använd exakt person-id från listan. Sätt hasEnoughInformation=false om en entydig tidsperiod saknas. Sätt unresolvedPerson=true om frågan nämner en person som inte säkert kan kopplas till listan.",
+            "Du planerar endast en kalenderfråga. Frågan kan vara skriven på svenska eller somaliska; ange vilket i language. Du får inte besvara frågan eller hitta på kalenderposter. Tolka tidsperiod, personer och aktivitetstermer. Lämna personIds tom när frågan inte namnger någon: en fråga om vad som händer gäller hela familjen, inte den som frågar. Lämna activityTerms tom när frågan inte namnger en aktivitet; frågeord som vad, händer eller gör är inte aktiviteter. För överlapp ska needsOverlap vara true. Använd exakt person-id från listan. Sätt hasEnoughInformation=false om en entydig tidsperiod saknas. Sätt unresolvedPerson=true om frågan nämner en person som inte säkert kan kopplas till listan.",
         },
         {
           role: "user",
@@ -556,13 +556,20 @@ export async function planQuestionWithAI(input: {
       input.currentPersonId,
     );
     if (referencedIds.some((id) => !personIds.includes(id))) return null;
+
+    // Who the question is about is decided here, from the question itself, not
+    // by the model. Left to its own judgement it quietly narrowed general
+    // questions to the person asking: "Vad händer på torsdag?" answered only
+    // about them, and a day full of the family's entries was reported as empty
+    // whenever they personally had nothing.
+    const askedAbout = referencedIds.length > 0 ? referencedIds : [];
     return {
       // "other" falls back to Swedish rather than guessing at a language we
       // have not verified we can answer in.
       language: parsed.language === "so" ? "so" : "sv",
       from: parsed.from,
       to: parsed.to,
-      personIds,
+      personIds: askedAbout,
       activityTerms: [...new Set(parsed.activityTerms.map((term) => term.trim()).filter(Boolean))],
       intent: parsed.intent,
       needsOverlap: parsed.needsOverlap,
