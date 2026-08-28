@@ -116,6 +116,22 @@ describe("the solo health schema", () => {
     ).toMatchObject({ mobility: true, workouts: 0 });
   });
 
+  it("accepts exactly what the form sends", () => {
+    // The payload from a real evening in the browser, field for field.
+    expect(
+      soloHealthSchema.parse({
+        date: "2026-08-28",
+        sleepHours: 9,
+        workouts: 0,
+        weightKg: null,
+        energy: 2,
+        dietHeld: true,
+        mobility: false,
+        note: null,
+      }),
+    ).toMatchObject({ sleepHours: 9, energy: 2, mobility: false });
+  });
+
   it("keeps energy on the scale it is asked for", () => {
     expect(() =>
       soloHealthSchema.parse({ date: "2026-08-28", energy: 0 }),

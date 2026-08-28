@@ -6113,3 +6113,23 @@ button.event-row:hover {
   color: var(--solo-muted);
   font-size: 0.75rem;
 }
+
+.solo-saved {
+  margin: 0;
+  color: #7fd6a2;
+  font-size: 0.85rem;
+}
+
+.solo-logged,
+.solo-unlogged {
+  margin: -4px 0 0;
+  font-size: 0.83rem;
+}
+
+.solo-logged {
+  color: #7fd6a2;
+}
+
+.solo-unlogged {
+  color: var(--solo-muted);
+}

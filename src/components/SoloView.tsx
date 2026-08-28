@@ -10,12 +10,44 @@ import {
   type SoloActionKind,
 } from "@/lib/solo";
 import { SOLO_BRANCHES, type SoloTalentNode } from "@/lib/solo-talents";
-import type { SoloProgressView } from "@/components/solo-contracts";
+import {
+  readNumber,
+  type SoloProgressView,
+} from "@/components/solo-contracts";
 
 const number = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 });
+const clock = new Intl.DateTimeFormat("sv-SE", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/**
+ * A saved form that looks exactly like an unsaved one reads as a failure. The
+ * time is part of the receipt on purpose: pressing save again changes it, so
+ * the second attempt is visibly a second attempt rather than silence twice.
+ */
+function Receipt({ at, children }: { at: string | null; children: string }) {
+  if (at === null) return null;
+  return (
+    <p className="solo-saved" role="status">
+      {children} kl. {at}
+    </p>
+  );
+}
 
 function formatOre(ore: number): string {
   return `${number.format(Math.round(ore / 100))} kr`;
+}
+
+async function failureFrom(
+  response: Response,
+  fallback: string,
+): Promise<Error> {
+  const body = (await response.json().catch(() => null)) as {
+    error?: string;
+    details?: string;
+  } | null;
+  return new Error(body?.details ?? body?.error ?? fallback);
 }
 
 function progressLabel(node: SoloTalentNode): string {
@@ -131,6 +163,8 @@ function ActionForm({
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [savedXp, setSavedXp] = useState(0);
 
   const rule = soloActionRule(kind);
 
@@ -138,6 +172,7 @@ function ActionForm({
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setSavedAt(null);
     const kronor = Number(amount.replace(/\s/g, "").replace(",", "."));
     const amountOre =
       rule.amount === "none" || amount.trim() === ""
@@ -149,15 +184,11 @@ function ActionForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ kind, occurredOn, evidence, amountOre }),
       });
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as {
-          error?: string;
-          details?: string;
-        } | null;
-        throw new Error(body?.details ?? body?.error ?? "Kunde inte spara.");
-      }
+      if (!response.ok) throw await failureFrom(response, "Kunde inte spara.");
       setEvidence("");
       setAmount("");
+      setSavedXp(rule.xp);
+      setSavedAt(clock.format(new Date()));
       onLogged();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Kunde inte spara.");
@@ -217,6 +248,7 @@ function ActionForm({
         </label>
       )}
       {error ? <p className="solo-error">{error}</p> : null}
+      <Receipt at={savedAt}>{`Loggat, +${savedXp} XP`}</Receipt>
       <button type="submit" disabled={busy}>
         {busy ? "Sparar…" : `Logga för ${rule.xp} XP`}
       </button>
@@ -236,7 +268,7 @@ function HealthForm({
   onSaved: () => void;
 }) {
   const [sleep, setSleep] = useState(current?.sleepHours?.toString() ?? "");
-  const [workouts, setWorkouts] = useState(current?.workouts ?? 0);
+  const [workouts, setWorkouts] = useState(String(current?.workouts ?? 0));
   const [weight, setWeight] = useState(current?.weightKg?.toString() ?? "");
   const [energy, setEnergy] = useState(current?.energy ?? 0);
   const [dietHeld, setDietHeld] = useState<boolean | null>(
@@ -250,44 +282,46 @@ function HealthForm({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  function optionalNumber(value: string): number | null {
-    const parsed = Number(value.replace(",", "."));
-    return value.trim() === "" || !Number.isFinite(parsed) ? null : parsed;
-  }
+  const [savedAt, setSavedAt] = useState<string | null>(null);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setSavedAt(null);
     try {
       const response = await fetch("/api/solo/health", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           date: today,
-          sleepHours: optionalNumber(sleep),
-          workouts,
-          weightKg: optionalNumber(weight),
+          sleepHours: readNumber(sleep, "Sömnen"),
+          workouts: readNumber(workouts, "Träningspassen") ?? 0,
+          weightKg: readNumber(weight, "Vikten"),
           energy: energy === 0 ? null : energy,
           dietHeld,
           mobility,
           note: null,
         }),
       });
-      if (!response.ok) throw new Error("Kunde inte spara dagen.");
+      if (!response.ok) {
+        throw await failureFrom(response, "Kunde inte spara dagen.");
+      }
 
       // The goal describes a body rather than a day, so it is only written when
       // it actually changed.
-      const goal = optionalNumber(weightGoal);
+      const goal = readNumber(weightGoal, "Viktmålet");
       if (goal !== settings.weightGoalKg) {
         const saved = await fetch("/api/solo/settings", {
           method: "PUT",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ weightGoalKg: goal }),
         });
-        if (!saved.ok) throw new Error("Kunde inte spara viktmålet.");
+        if (!saved.ok) {
+          throw await failureFrom(saved, "Kunde inte spara viktmålet.");
+        }
       }
+      setSavedAt(clock.format(new Date()));
       onSaved();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Kunde inte spara.");
@@ -299,6 +333,9 @@ function HealthForm({
   return (
     <form className="solo-form" onSubmit={submit}>
       <h3>Dagen i dag</h3>
+      <p className={current ? "solo-logged" : "solo-unlogged"}>
+        {current ? "Loggad. Spara igen för att ändra." : "Inte loggad än."}
+      </p>
       <label>
         Sömn i natt, timmar
         <input
@@ -315,7 +352,7 @@ function HealthForm({
           min={0}
           max={10}
           value={workouts}
-          onChange={(event) => setWorkouts(Number(event.target.value))}
+          onChange={(event) => setWorkouts(event.target.value)}
         />
         <small>Femton minuter räknas. En promenad räknas.</small>
       </label>
@@ -391,6 +428,7 @@ function HealthForm({
         </button>
       </fieldset>
       {error ? <p className="solo-error">{error}</p> : null}
+      <Receipt at={savedAt}>Dagen sparad</Receipt>
       <button type="submit" disabled={busy}>
         {busy ? "Sparar…" : "Spara dagen"}
       </button>
