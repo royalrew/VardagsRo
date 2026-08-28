@@ -361,6 +361,31 @@ const migrations = [
       `alter table auth_rate_limits alter column id set default gen_random_uuid()::text`,
     ],
   },
+  {
+    version: "010_undo_entries",
+    name: "A way back from a deletion",
+    statements: [
+      // Deletions stay hard. Marking rows as deleted instead would put
+      // "and deleted_at is null" into every read in the product, and the one
+      // that got forgotten would quietly serve deleted family data. The removed
+      // row is copied here in the same transaction instead, where no read path
+      // can trip over it.
+      `create table if not exists family_undo_entries (
+        id bigint generated always as identity primary key,
+        household_id text not null references family_households(id) on delete cascade,
+        actor_id text,
+        action text not null,
+        label text not null,
+        payload jsonb not null,
+        created_at timestamptz not null default now(),
+        expires_at timestamptz not null
+      )`,
+      `create index if not exists family_undo_entries_household_idx
+        on family_undo_entries (household_id, created_at desc)`,
+      `create index if not exists family_undo_entries_expiry_idx
+        on family_undo_entries (expires_at)`,
+    ],
+  },
 ];
 
 function checksum(migration) {

@@ -29,6 +29,8 @@ vi.mock("@/server/database", () => ({
   saveManualEvent: vi.fn(),
   createPerson: vi.fn(),
   updateHouseholdName: vi.fn(),
+  latestUndoableDeletion: vi.fn(async () => null),
+  undoDeletion: vi.fn(async () => ({ label: "Träning", kind: "event" as const })),
   createHouseholdLogin: vi.fn(async () => ({
     email: "ny@exempel.se",
     personName: "Ida",
@@ -39,6 +41,7 @@ vi.mock("@/server/database", () => ({
 
 import { PATCH as householdPatch } from "@/app/api/household/route";
 import { GET as loginsGet } from "@/app/api/logins/route";
+import { POST as undoPost } from "@/app/api/undo/route";
 import { POST as createLogin } from "@/app/api/people/[id]/login/route";
 import { POST as peoplePost } from "@/app/api/people/route";
 import { GET as tasksGet, POST as tasksPost } from "@/app/api/tasks/route";
@@ -108,6 +111,23 @@ describe("routes refuse anyone without a verified session", () => {
 describe("roles decide what a member may change", () => {
   beforeEach(() => {
     harness.state.session = { user: { id: "user-1" } };
+  });
+
+  it("keeps a viewer from undoing, since they could not have deleted either", async () => {
+    harness.state.membership = membership("viewer");
+
+    const response = await undoPost(jsonPost("http://localhost/api/undo", { id: "1" }));
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "READ_ONLY_MEMBER" });
+  });
+
+  it("lets an adult undo their own deletion", async () => {
+    harness.state.membership = membership("adult");
+
+    const response = await undoPost(jsonPost("http://localhost/api/undo", { id: "1" }));
+
+    expect(response.status).toBe(200);
   });
 
   it("keeps a viewer from writing while still letting them read", async () => {

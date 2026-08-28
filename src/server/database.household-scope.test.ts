@@ -33,8 +33,25 @@ const database = vi.hoisted(() => {
       }]);
     }
     if (text.includes("delete from family_events")) {
-      return Promise.resolve([{ id: "event-1" }]);
+      // The deletion now returns the whole row so it can be put back again.
+      return Promise.resolve([{
+        id: "event-1",
+        household_id: "household-demo",
+        person_id: "person-nora",
+        document_id: null,
+        title: "Träning",
+        category: "sport",
+        starts_at: "2026-08-24T15:00:00.000Z",
+        ends_at: "2026-08-24T16:00:00.000Z",
+        all_day: false,
+        location: null,
+        notes: null,
+        status: "confirmed",
+        confidence: 1,
+        source_excerpt: null,
+      }]);
     }
+    if (text.includes("family_undo_entries")) return Promise.resolve([]);
     if (text.includes("insert into family_audit_log")) return Promise.resolve([]);
     throw new Error(`Unexpected query in test: ${text}`);
   });

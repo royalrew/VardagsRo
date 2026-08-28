@@ -12,6 +12,7 @@ import type {
   FamilyTask,
 } from "@/lib/types";
 import { recordAudit } from "@/server/audit";
+import { captureUndo } from "@/server/undo";
 import type { ActorContext } from "@/server/authorization-types";
 import { databaseUrl, demoFallbackAllowed } from "@/server/config";
 import { HEALTH_DOCUMENT_MESSAGE, unsupportedHealthDocument } from "@/server/health-documents";
@@ -35,7 +36,7 @@ type QueryClient = SqlClient | TransactionClient;
 let sqlClient: SqlClient | null = null;
 let sqlUrl = "";
 
-export const LATEST_DATABASE_MIGRATION = "009_auth_generated_ids";
+export const LATEST_DATABASE_MIGRATION = "010_undo_entries";
 
 const DOCUMENT_FOLDER_LOCK_NAMESPACE = 1_947_046_335;
 
@@ -1219,12 +1220,19 @@ export async function updateTaskCompletion(
 export async function removeTask(actor: ActorContext, id: string): Promise<boolean> {
   const sql = await readyClient();
   return await sql.begin(async (tx) => {
-    const rows = await tx<{ id: string }[]>`
+    const rows = await tx<TaskRow[]>`
       delete from family_tasks
       where id = ${id} and household_id = ${actor.householdId}
-      returning id
+      returning id, household_id, person_id, document_id, title, kind, due_at,
+                completed_at, notes, review_status, confidence, source_excerpt
     `;
     if (!rows.length) return false;
+    const removed = mapTask(rows[0]);
+    await captureUndo(tx, actor, {
+      action: "task.delete",
+      label: removed.title,
+      payload: { task: removed },
+    });
     await recordAudit(tx, actor, {
       action: "task.delete",
       targetType: "task",
@@ -1237,12 +1245,19 @@ export async function removeTask(actor: ActorContext, id: string): Promise<boole
 export async function removeEvent(actor: ActorContext, id: string): Promise<boolean> {
   const sql = await readyClient();
   return await sql.begin(async (tx) => {
-    const rows = await tx<{ id: string }[]>`
+    const rows = await tx<EventRow[]>`
       delete from family_events
       where id = ${id} and household_id = ${actor.householdId}
-      returning id
+      returning id, household_id, person_id, document_id, title, category, starts_at,
+                ends_at, all_day, location, notes, status, confidence, source_excerpt
     `;
     if (!rows.length) return false;
+    const removed = mapEvent(rows[0]);
+    await captureUndo(tx, actor, {
+      action: "event.delete",
+      label: removed.title,
+      payload: { event: removed },
+    });
     await recordAudit(tx, actor, {
       action: "event.delete",
       targetType: "event",
@@ -1530,4 +1545,121 @@ export async function listHouseholdLogins(actor: ActorContext): Promise<Househol
     order by m.created_at asc
   `;
   return rows.map((row) => ({ personId: row.person_id, email: row.email, role: row.role }));
+}
+
+export interface UndoableDeletion {
+  id: string;
+  label: string;
+  action: "event.delete" | "task.delete";
+  createdAt: string;
+}
+
+/** The most recent deletion that can still be taken back, or null. */
+export async function latestUndoableDeletion(
+  actor: ActorContext,
+): Promise<UndoableDeletion | null> {
+  const sql = await readyClient();
+  const rows = await sql<
+    Array<{ id: string; label: string; action: UndoableDeletion["action"]; created_at: Date | string }>
+  >`
+    select id::text, label, action, created_at
+    from family_undo_entries
+    where household_id = ${actor.householdId} and expires_at > now()
+    order by created_at desc, id desc
+    limit 1
+  `;
+  const row = rows[0];
+  return row
+    ? { id: row.id, label: row.label, action: row.action, createdAt: asIso(row.created_at) }
+    : null;
+}
+
+/**
+ * Puts back what a deletion removed.
+ *
+ * The entry is consumed whether or not the row could be restored, so a family
+ * cannot be offered the same broken undo twice. What makes a restore impossible
+ * is that something the row pointed at is gone too — the person, or the document
+ * it came from — and that is said plainly rather than worked around.
+ */
+export async function undoDeletion(
+  actor: ActorContext,
+  entryId: string,
+): Promise<{ label: string; kind: "event" | "task" }> {
+  const sql = await readyClient();
+  return await sql.begin(async (tx) => {
+    const entries = await tx<
+      Array<{ id: string; action: string; label: string; payload: { event?: FamilyEvent; task?: FamilyTask } }>
+    >`
+      select id::text, action, label, payload
+      from family_undo_entries
+      where id = ${entryId}::bigint
+        and household_id = ${actor.householdId}
+        and expires_at > now()
+      for update
+    `;
+    const entry = entries[0];
+    if (!entry) {
+      throw new AppError(404, "NOTHING_TO_UNDO", "Det finns inget kvar att ångra.");
+    }
+
+    await tx`delete from family_undo_entries where id = ${entryId}::bigint`;
+
+    try {
+      if (entry.payload.event) {
+        const event = entry.payload.event;
+        await tx`
+          insert into family_events
+            (id, household_id, person_id, document_id, title, category, starts_at, ends_at,
+             all_day, location, notes, status, confidence, source_excerpt)
+          values
+            (${event.id}, ${actor.householdId}, ${event.personId}, ${event.documentId},
+             ${event.title}, ${event.category}, ${event.startsAt}, ${event.endsAt},
+             ${event.allDay}, ${event.location}, ${event.notes}, ${event.status},
+             ${event.confidence}, ${event.sourceExcerpt})
+        `;
+        await recordAudit(tx, actor, {
+          action: "event.create",
+          targetType: "event",
+          targetId: event.id,
+          metadata: { restored: true },
+        });
+        return { label: entry.label, kind: "event" as const };
+      }
+
+      const task = entry.payload.task;
+      if (!task) {
+        throw new AppError(500, "UNDO_PAYLOAD_BROKEN", "Ångra kunde inte läsa vad som togs bort.");
+      }
+      await tx`
+        insert into family_tasks
+          (id, household_id, person_id, document_id, title, kind, due_at, completed_at,
+           notes, review_status, confidence, source_excerpt)
+        values
+          (${task.id}, ${actor.householdId}, ${task.personId}, ${task.documentId},
+           ${task.title}, ${task.kind}, ${task.dueAt}, ${task.completedAt}, ${task.notes},
+           ${task.reviewStatus}, ${task.confidence}, ${task.sourceExcerpt})
+      `;
+      await recordAudit(tx, actor, {
+        action: "task.create",
+        targetType: "task",
+        targetId: task.id,
+        metadata: { restored: true },
+      });
+      return { label: entry.label, kind: "task" as const };
+    } catch (cause) {
+      if (cause instanceof AppError) throw cause;
+      if (isPostgresError(cause, "23503")) {
+        throw new AppError(
+          409,
+          "UNDO_TARGET_GONE",
+          "Det går inte att ångra: familjemedlemmen eller dokumentet posten hörde till är borttaget.",
+        );
+      }
+      if (isPostgresError(cause, "23505")) {
+        throw new AppError(409, "UNDO_ALREADY_THERE", "Posten finns redan.");
+      }
+      throw cause;
+    }
+  });
 }

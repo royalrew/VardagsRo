@@ -815,8 +815,10 @@ Klart och i produktion:
 
 Får ännu inte beskrivas som klart:
 
-- **Ångra.** Audit finns, men ingen väg tillbaka från en ändring. Safe Action
-  Engine är därmed halv.
+- **Ångra.** Halvvägs. Servern kan ta tillbaka en borttagen kalenderpost eller
+  uppgift, men gränssnittet kan inte ta bort dem, så funktionen går inte att nå.
+  Det som familjen faktiskt kan råka ta bort är ett dokument — och det tar med
+  sig alla poster det skapade. Se avsnittet om ångra nedan.
 - **Källmarkering etapp 2–4.** Sidor och segment i databasen, källklick från
   kalendern, dokumentversioner och segmenten i retrieval.
 - **Reminders och leveransscheduler.** Krävs innan något kan skickas oombett.
@@ -1368,3 +1370,37 @@ Windows-sökväg innan kommandot når containern.
 
 Att pusha är numera en driftsättning. Commita gärna klart lokalt och pusha när
 ändringen ska ut, inte som ett sätt att spara.
+
+
+## 2026-08-28: ångra, halvvägs
+
+Servern kan ta tillbaka en borttagen kalenderpost eller uppgift. Migration 010
+lade till `family_undo_entries`: den borttagna raden kopieras dit i samma
+transaktion som tar bort den, med 30 dagars livslängd och opportunistisk städning
+av utgångna poster.
+
+Deletion är fortsatt hård. Alternativet, att markera rader som borttagna, hade
+lagt `and deleted_at is null` i ett femtiotal läsningar, och den som glömdes
+hade tyst serverat familjens raderade uppgifter. Undo-tabellen rör ingen läsväg.
+
+`POST /api/undo` kräver samma behörighet som borttagningen: en `viewer` som inte
+kan ta bort ska inte kunna återställa heller. Testat.
+
+Verifierat mot den lokala databasen: skapa, ta bort, ångra, posten är tillbaka
+med rätt tid, och samma ångra går inte att använda två gånger.
+
+### Varför det ändå inte är klart
+
+**Gränssnittet kan inte ta bort kalenderposter eller uppgifter.** Bara dokument,
+personer och mappar går att radera i appen. Ångra byggdes alltså för precis det
+som inte går att råka ta bort. Den UI-koppling som fanns togs bort igen hellre än
+att ligga kvar oanträffbar.
+
+Det som familjen faktiskt kan råka ta bort är ett **dokument**, och det tar med
+sig varje kalenderpost och uppgift det skapade — 189 stycken i ett verkligt prov.
+Att kunna ångra det kräver ett beslut som inte är tekniskt: originalfilen tas i
+dag bort ur R2 **innan** databasposten, så en ångring skulle ge tillbaka posterna
+men inte filen. Antingen skjuts raderingen i R2 upp tills ångra-fönstret gått ut,
+eller så accepteras att originalet är borta och det sägs rakt ut i gränssnittet.
+
+Nästa steg är alltså ett produktbeslut, inte mer kod.

@@ -227,6 +227,10 @@ export const askRequestSchema = z
   })
   .strict();
 
+export const undoRequestSchema = z
+  .object({ id: z.string().trim().regex(/^\d{1,19}$/, "Ogiltigt ångra-id") })
+  .strict();
+
 export const householdLoginSchema = z
   .object({
     personId: z.string().trim().min(1).max(128),
