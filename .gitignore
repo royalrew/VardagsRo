@@ -14,7 +14,9 @@ artifacts/
 .env*
 !.env.example
 
-# Local data
+# Local data. .data/ är Postgres egen datakatalog från compose och innehåller
+# hela familjens databas i binär form. Den ska aldrig till ett repo.
+.data/
 data/
 uploads/
 *.db
