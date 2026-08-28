@@ -2,7 +2,7 @@ import "server-only";
 
 import type postgres from "postgres";
 
-import type { FamilyEvent, FamilyTask } from "@/lib/types";
+import type { FamilyDocument, FamilyEvent, FamilyTask } from "@/lib/types";
 import type { ActorContext } from "@/server/authorization-types";
 
 type UndoClient = postgres.Sql | postgres.TransactionSql;
@@ -22,7 +22,7 @@ type UndoClient = postgres.Sql | postgres.TransactionSql;
 /** Long enough to notice a mistake, short enough not to become a second archive. */
 export const UNDO_RETENTION_DAYS = 30;
 
-export type UndoAction = "event.delete" | "task.delete";
+export type UndoAction = "event.delete" | "task.delete" | "document.delete";
 
 export interface UndoEntry {
   id: string;
@@ -34,6 +34,15 @@ export interface UndoEntry {
 interface UndoPayload {
   event?: FamilyEvent;
   task?: FamilyTask;
+  /**
+   * A document takes everything it produced with it, so putting it back means
+   * putting all of that back too. The original file is not part of this: it is
+   * removed from storage before the row is, and the family is told plainly that
+   * it did not come back.
+   */
+  document?: FamilyDocument;
+  events?: FamilyEvent[];
+  tasks?: FamilyTask[];
 }
 
 /**

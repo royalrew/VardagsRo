@@ -815,10 +815,9 @@ Klart och i produktion:
 
 Får ännu inte beskrivas som klart:
 
-- **Ångra.** Halvvägs. Servern kan ta tillbaka en borttagen kalenderpost eller
-  uppgift, men gränssnittet kan inte ta bort dem, så funktionen går inte att nå.
-  Det som familjen faktiskt kan råka ta bort är ett dokument — och det tar med
-  sig alla poster det skapade. Se avsnittet om ångra nedan.
+- **Ångra vid ändring.** Borttagningar går att ångra. Att ta tillbaka en
+  *ändring* gör det inte: en redigerad kalenderpost har inget gammalt värde
+  sparat.
 - **Källmarkering etapp 2–4.** Sidor och segment i databasen, källklick från
   kalendern, dokumentversioner och segmenten i retrieval.
 - **Reminders och leveransscheduler.** Krävs innan något kan skickas oombett.
@@ -1389,18 +1388,26 @@ kan ta bort ska inte kunna återställa heller. Testat.
 Verifierat mot den lokala databasen: skapa, ta bort, ångra, posten är tillbaka
 med rätt tid, och samma ångra går inte att använda två gånger.
 
-### Varför det ändå inte är klart
+### Dokument, som är det familjen faktiskt kan råka ta bort
 
-**Gränssnittet kan inte ta bort kalenderposter eller uppgifter.** Bara dokument,
-personer och mappar går att radera i appen. Ångra byggdes alltså för precis det
-som inte går att råka ta bort. Den UI-koppling som fanns togs bort igen hellre än
-att ligga kvar oanträffbar.
+Ett dokument tar med sig varje kalenderpost och uppgift det skapade. Ångra tar
+tillbaka alltihop: dokumentet, posterna och uppgifterna, fångade i samma
+transaktion som tar bort dem.
 
-Det som familjen faktiskt kan råka ta bort är ett **dokument**, och det tar med
-sig varje kalenderpost och uppgift det skapade — 189 stycken i ett verkligt prov.
-Att kunna ångra det kräver ett beslut som inte är tekniskt: originalfilen tas i
-dag bort ur R2 **innan** databasposten, så en ångring skulle ge tillbaka posterna
-men inte filen. Antingen skjuts raderingen i R2 upp tills ångra-fönstret gått ut,
-eller så accepteras att originalet är borta och det sägs rakt ut i gränssnittet.
+**Originalfilen kommer inte tillbaka.** Den raderas ur R2 innan databasposten,
+och beslutet 2026-08-28 var att acceptera det i stället för att skjuta upp
+raderingen — familjen bad om att ta bort filen, och att behålla den i tysthet
+vore en retention-fråga ingen ställt. Dokumentet återställs därför utan
+lagringsnyckel, och toasten säger det rakt ut: *"Originalfilen gick inte att
+återställa."* En nyckel som pekar på ingenting vore sämre än ingen nyckel.
 
-Nästa steg är alltså ett produktbeslut, inte mer kod.
+Verifierat lokalt: ett schema med 108 poster togs bort och ångrades. Alla 108
+kom tillbaka, dokumentet står som `(ingen fil)`.
+
+Toasten lever 12 sekunder när det finns något att ångra i stället för 3,5, och
+erbjudandet nollställs med meddelandet. Annars hade "Ångra" hängt kvar och
+dykt upp bredvid nästa toast, med en helt annan borttagning bakom sig.
+
+Kalenderposter och uppgifter går fortfarande inte att ta bort i gränssnittet, så
+den delen av ångra nås bara via API:t. Den dagen radering läggs till är servern
+redan klar.

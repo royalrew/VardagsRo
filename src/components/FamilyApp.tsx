@@ -86,6 +86,9 @@ export function FamilyApp({
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // What can still be taken back. Offered beside the confirmation of a deletion,
+  // because that is the moment a mistake is noticed.
+  const [undoable, setUndoable] = useState<{ id: string; label: string } | null>(null);
   const hydrated = useRef(false);
 
   const currentPerson = data.people.find((person) => person.id === data.currentPersonId) ?? data.people[0];
@@ -140,9 +143,19 @@ export function FamilyApp({
 
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 3500);
+    // An undo offer needs time to be read and acted on, and it must disappear
+    // with the message it belongs to. Left behind, it would attach itself to the
+    // next toast and offer to undo something the family had stopped thinking
+    // about.
+    const timer = window.setTimeout(
+      () => {
+        setToast(null);
+        setUndoable(null);
+      },
+      undoable ? 12_000 : 3500,
+    );
     return () => window.clearTimeout(timer);
-  }, [toast]);
+  }, [toast, undoable]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -298,6 +311,7 @@ export function FamilyApp({
       tasks: current.tasks.filter((task) => task.documentId !== document.id),
     }));
     showToast("Dokumentet är raderat");
+    void offerUndo();
   }
 
   async function createDocumentFolder(input: {
@@ -379,6 +393,51 @@ export function FamilyApp({
     }
     router.replace("/login");
     router.refresh();
+  }
+
+  /** Asks what can be taken back, right after something was removed. */
+  async function offerUndo() {
+    try {
+      const response = await fetch("/api/undo", { cache: "no-store" });
+      if (!response.ok) return;
+      const body = (await response.json()) as { undo?: { id: string; label: string } | null };
+      setUndoable(body.undo ?? null);
+    } catch {
+      // Undo is an offer, not a promise. If we cannot ask, we do not offer.
+    }
+  }
+
+  async function undoLastDeletion() {
+    if (!undoable) return;
+    const entry = undoable;
+    setUndoable(null);
+    try {
+      const response = await fetch("/api/undo", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: entry.id }),
+      });
+      const body = (await response.json()) as {
+        error?: string;
+        restoredEvents?: number;
+        originalFileLost?: boolean;
+      };
+      if (!response.ok) throw new Error(body.error ?? "Det gick inte att ångra.");
+
+      // The file really is gone: it was removed from storage before the row was.
+      // Saying so is the honest half of an undo that cannot be complete.
+      const times = body.restoredEvents
+        ? ` med ${body.restoredEvents} ${body.restoredEvents === 1 ? "tid" : "tider"}`
+        : "";
+      showToast(
+        body.originalFileLost
+          ? `”${entry.label}” är tillbaka${times}. Originalfilen gick inte att återställa.`
+          : `”${entry.label}” är tillbaka${times}`,
+      );
+      router.refresh();
+    } catch (cause) {
+      showToast(cause instanceof Error ? cause.message : "Det gick inte att ångra.");
+    }
   }
 
   function requireDatabase(): boolean {
@@ -865,6 +924,15 @@ export function FamilyApp({
       {toast ? (
         <div className="toast" role="status">
           <Check size={17} /> {toast}
+          {undoable ? (
+            <button
+              type="button"
+              className="toast-undo"
+              onClick={() => void undoLastDeletion()}
+            >
+              Ångra
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -1018,6 +1018,22 @@ export async function removeDocument(
   const deletedEvents = document.eventsCount;
   const deletedTasks = document.tasksCount;
   return await sql.begin(async (tx) => {
+    // Captured before the delete, because the cascade takes them with it.
+    const [eventRows, taskRows] = await Promise.all([
+      tx<EventRow[]>`
+        select id, household_id, person_id, document_id, title, category, starts_at,
+               ends_at, all_day, location, notes, status, confidence, source_excerpt
+        from family_events
+        where document_id = ${id} and household_id = ${actor.householdId}
+      `,
+      tx<TaskRow[]>`
+        select id, household_id, person_id, document_id, title, kind, due_at,
+               completed_at, notes, review_status, confidence, source_excerpt
+        from family_tasks
+        where document_id = ${id} and household_id = ${actor.householdId}
+      `,
+    ]);
+
     const deletedRows = await tx<{ id: string }[]>`
       delete from family_documents
       where id = ${id} and household_id = ${actor.householdId}
@@ -1026,6 +1042,19 @@ export async function removeDocument(
     if (!deletedRows[0]) {
       throw new AppError(404, "DOCUMENT_NOT_FOUND", "Dokumentet finns inte.");
     }
+
+    await captureUndo(tx, actor, {
+      action: "document.delete",
+      label: document.title,
+      payload: {
+        // The storage key is dropped on purpose: the file behind it is already
+        // gone, and a key pointing at nothing is worse than no key.
+        document: { ...document, storageKey: null },
+        events: eventRows.map(mapEvent),
+        tasks: taskRows.map(mapTask),
+      },
+    });
+
     await recordAudit(tx, actor, {
       action: "document.delete",
       targetType: "document",
@@ -1582,14 +1611,102 @@ export async function latestUndoableDeletion(
  * is that something the row pointed at is gone too — the person, or the document
  * it came from — and that is said plainly rather than worked around.
  */
+/**
+ * Puts a document back together with everything it produced.
+ *
+ * The original file is not restored: it was removed from storage before the row
+ * was, which is the family's own deletion carried out. The caller says so
+ * plainly rather than leaving a document that looks complete and has no source.
+ */
+async function restoreDocument(
+  tx: TransactionClient,
+  actor: ActorContext,
+  label: string,
+  payload: { document?: FamilyDocument; events?: FamilyEvent[]; tasks?: FamilyTask[] },
+): Promise<UndoResult> {
+  const document = payload.document!;
+  const events = payload.events ?? [];
+  const tasks = payload.tasks ?? [];
+
+  await tx`
+    insert into family_documents
+      (id, household_id, title, filename, mime_type, document_type, person_id,
+       folder_id, status, uploaded_at, period_label, summary, storage_key, sha256)
+    values
+      (${document.id}, ${actor.householdId}, ${document.title}, ${document.filename},
+       ${document.mimeType}, ${document.documentType}, ${document.personId},
+       ${document.folderId}, ${document.status}, ${document.uploadedAt},
+       ${document.periodLabel}, ${document.summary}, null, ${document.hash ?? null})
+  `;
+
+  for (const event of events) {
+    await tx`
+      insert into family_events
+        (id, household_id, person_id, document_id, title, category, starts_at, ends_at,
+         all_day, location, notes, status, confidence, source_excerpt)
+      values
+        (${event.id}, ${actor.householdId}, ${event.personId}, ${event.documentId},
+         ${event.title}, ${event.category}, ${event.startsAt}, ${event.endsAt},
+         ${event.allDay}, ${event.location}, ${event.notes}, ${event.status},
+         ${event.confidence}, ${event.sourceExcerpt})
+    `;
+  }
+  for (const task of tasks) {
+    await tx`
+      insert into family_tasks
+        (id, household_id, person_id, document_id, title, kind, due_at, completed_at,
+         notes, review_status, confidence, source_excerpt)
+      values
+        (${task.id}, ${actor.householdId}, ${task.personId}, ${task.documentId},
+         ${task.title}, ${task.kind}, ${task.dueAt}, ${task.completedAt}, ${task.notes},
+         ${task.reviewStatus}, ${task.confidence}, ${task.sourceExcerpt})
+    `;
+  }
+
+  await recordAudit(tx, actor, {
+    action: "document.confirm",
+    targetType: "document",
+    targetId: document.id,
+    metadata: { restored: true, events: events.length, tasks: tasks.length },
+  });
+
+  return {
+    label,
+    kind: "document",
+    restoredEvents: events.length,
+    restoredTasks: tasks.length,
+    originalFileLost: true,
+  };
+}
+
+export interface UndoResult {
+  label: string;
+  kind: "event" | "task" | "document";
+  restoredEvents: number;
+  restoredTasks: number;
+  /** True when the document is back but its original file could not be. */
+  originalFileLost: boolean;
+}
+
 export async function undoDeletion(
   actor: ActorContext,
   entryId: string,
-): Promise<{ label: string; kind: "event" | "task" }> {
+): Promise<UndoResult> {
   const sql = await readyClient();
   return await sql.begin(async (tx) => {
     const entries = await tx<
-      Array<{ id: string; action: string; label: string; payload: { event?: FamilyEvent; task?: FamilyTask } }>
+      Array<{
+        id: string;
+        action: string;
+        label: string;
+        payload: {
+          event?: FamilyEvent;
+          task?: FamilyTask;
+          document?: FamilyDocument;
+          events?: FamilyEvent[];
+          tasks?: FamilyTask[];
+        };
+      }>
     >`
       select id::text, action, label, payload
       from family_undo_entries
@@ -1624,7 +1741,17 @@ export async function undoDeletion(
           targetId: event.id,
           metadata: { restored: true },
         });
-        return { label: entry.label, kind: "event" as const };
+        return {
+          label: entry.label,
+          kind: "event" as const,
+          restoredEvents: 1,
+          restoredTasks: 0,
+          originalFileLost: false,
+        };
+      }
+
+      if (entry.payload.document) {
+        return await restoreDocument(tx, actor, entry.label, entry.payload);
       }
 
       const task = entry.payload.task;
@@ -1646,7 +1773,13 @@ export async function undoDeletion(
         targetId: task.id,
         metadata: { restored: true },
       });
-      return { label: entry.label, kind: "task" as const };
+      return {
+        label: entry.label,
+        kind: "task" as const,
+        restoredEvents: 0,
+        restoredTasks: 1,
+        originalFileLost: false,
+      };
     } catch (cause) {
       if (cause instanceof AppError) throw cause;
       if (isPostgresError(cause, "23503")) {

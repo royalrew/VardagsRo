@@ -5349,3 +5349,18 @@ button.event-row:hover {
   background: var(--surface-muted);
   gap: 10px;
 }
+
+.toast-undo {
+  margin-left: 12px;
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.toast-undo:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
