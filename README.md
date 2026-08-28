@@ -1,6 +1,22 @@
 # Vardagsro
 
-Vardagsro samlar familjens scheman, kallelser och viktiga tider på ett ställe. Lägg in en bild eller PDF, kontrollera vad som hittades och fråga sedan på vanlig svenska.
+Familjens gemensamma minne. Skicka in en bild eller en PDF, kontrollera vad som
+hittades, och fråga sedan på vanlig svenska.
+
+**[www.zickaris.se](https://www.zickaris.se)** — Next.js 16 · TypeScript ·
+PostgreSQL · Cloudflare R2 · OpenAI Responses API · Better Auth · Docker · Railway
+
+> **AI tolkar. Familjen bestämmer.**
+
+Kraven kom från ett verkligt hushåll: sju personer, två vuxna med varsitt
+arbetsschema, fem barn på en skola och en förskola, och träningar och matcher
+däremellan. Informationen kommer från fem håll — en lapp i en ryggsäck, en PDF i
+ett mejl, ett schema i en skolplattform, en träningstid i en chattgrupp, ett
+datum någon försöker minnas.
+
+Byggt av en undersköterska i hemvården, för det egna hushållet. Det är inget
+övningsprojekt: det körs i produktion, det är familjens riktiga kalender, och
+det som inte fungerar märks samma kväll.
 
 ## Version 1
 
@@ -31,6 +47,58 @@ Det som fungerar i denna version:
 - Deterministisk beräkning av tider och överlapp; AI:n får aldrig hitta på kalenderfakta.
 - Lokal demodata och webbläsarlagring i utvecklingsläge. Production är fail-closed
   och får aldrig se fungerande ut genom demo-data när databas eller lagring är trasig.
+
+## Beslut värda att titta på
+
+Det mesta av arbetet ligger i vad systemet gör när det *inte* vet något. Knappt
+fyrahundra tester håller de här besluten på plats.
+
+**Produktionen får aldrig se ut att fungera när den inte gör det.**
+Demodata finns bara i utveckling, bakom en dubbel grind som kräver både
+okonfigurerad databas och icke-produktionsmiljö — den kan alltså inte öppna där
+databasen alltid är konfigurerad. En trasig databas ger fel, aldrig påhittad
+familjedata. [`src/server/actor.ts`](src/server/actor.ts)
+
+**Ingenting blir familjedata utan att en människa sagt ja.**
+AI:n föreslår tider och uppgifter; varje fält går att ändra i en granskningsvy,
+och först vid godkännandet skrivs något. [`src/server/database.ts`](src/server/database.ts)
+
+**Originalfilen skrivs inte till lagring under granskningen.**
+Vid sparande verifieras filsignatur, MIME-typ, filnamn och SHA-256 på nytt innan
+den når R2. En fil som ändrat sig mellan uppladdning och godkännande stoppas.
+
+**Svaren räknas ut, de genereras inte.**
+Språkmodellen får producera en typad frågeplan — datumintervall, personer,
+aktivitetstermer — men aldrig ett kalenderfaktum. Tider, överlapp och urval
+beräknas deterministiskt ur bekräftade rader, och svaret pekar på sin källa.
+[`src/lib/question-engine.ts`](src/lib/question-engine.ts)
+
+**Ett tomt sökresultat är inte samma sak som att någon är ledig.**
+Assistenten svarar att underlag saknas när den inte kan styrka svaret. Det är
+skillnaden mellan ett system familjen kan lita på och ett som låter övertygande.
+
+**Revisionsloggen går inte att ändra i.**
+Databasen vägrar `update` och `delete` på loggtabellen via trigger, så en felaktig
+rad rättas genom att en ny läggs till — aldrig genom att historien skrivs om.
+Loggen beskriver formen på en ändring, aldrig dess innehåll.
+[`src/server/audit.ts`](src/server/audit.ts)
+
+**En borttagning går att ångra.**
+Raderingar är hårda, för mjuka raderingar skulle lägga `and deleted_at is null` i
+varenda läsning i produkten och den som glömdes bort skulle tyst servera raderad
+familjedata. Den borttagna raden kopieras i stället undan i samma transaktion.
+[`src/server/undo.ts`](src/server/undo.ts)
+
+**En publik endpoint får inte kosta ett databasanrop per besökare.**
+`/api/ready` är öppen, så samtidiga anrop delar samma probe och svaret återanvänds
+i fem sekunder. En ny deploy startar med tom cache, så första hälsokontrollen
+bevisar fortfarande den nya containern mot riktiga beroenden.
+[`src/server/readiness.ts`](src/server/readiness.ts)
+
+**En väg in till produktion.**
+Under en övergång låg en CLI-deploy aktiv samtidigt som GitHub-kopplingen. De två
+serverade olika kod medan båda rapporterade lyckat resultat. Nu är en push till
+`main` den enda driftsättningen som finns.
 
 ## Kom igång
 

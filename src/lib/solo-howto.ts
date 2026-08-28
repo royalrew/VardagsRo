@@ -12,8 +12,8 @@
 export const SOLO_TALENT_HOWTO: Record<string, readonly string[]> = {
   // Synlighet
   visible: [
-    "Enklast: gör VardagsRo publikt på GitHub. Settings → General → Change visibility.",
-    "Gå igenom git-historiken efter hemligheter först. Borttagna filer ligger kvar i gamla commits.",
+    "Gör VardagsRo publikt. Det är det enda du byggt som kör i produktion, och skillnaden mot ett övningsprojekt syns på en gång.",
+    "Gå igenom git-historiken efter hemligheter först. Borttagna filer ligger kvar i gamla commits även när de är borta i dag.",
     "Beviset är länken någon annan kan öppna utan att fråga dig om lov.",
   ],
   case_published: [
@@ -27,9 +27,10 @@ export const SOLO_TALENT_HOWTO: Record<string, readonly string[]> = {
     "Vad de svarar spelar ingen roll för noden. Att du skickade gör det.",
   ],
   profile: [
-    "LinkedIn. Rubriken är det enda de flesta läser — gör den till en mening: undersköterska som bygger och driftsätter produktionssystem.",
-    "Sätt Öppen för arbete med Växjö som ort. Rekryterare filtrerar på just det.",
-    "Ett inlägg som beskriver Vardagsro, med länken. Sedan är profilen inte tom.",
+    "Skriv en mening som beskrivning på varje publikt repo. Ett repo utan beskrivning är en mapp med ett namn, och en besökare ger profilen trettio sekunder.",
+    "Fäst de sex du är stoltast över högst upp. GitHub visar dem först, så det är i praktiken din portfölj — låt inte sorteringen välja åt dig.",
+    "LinkedIn-rubriken är det enda de flesta läser: undersköterska som bygger och driftsätter produktionssystem.",
+    "Sätt Öppen för arbete med Växjö som ort. Rekryterare filtrerar på just det fältet.",
   ],
   asked: [
     "Skriv till någon som bygger vårdteknik och ställ en enda fråga. Be inte om något.",
