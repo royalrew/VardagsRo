@@ -797,17 +797,37 @@ eventuell certifiering beskriver en produkt som ännu inte har sin slutform. De 
 hemma strax före första externa hushållet. Att skriva dem nu innebär att de skrivs
 om flera gånger utan att skydda någon.
 
-## Saker som ännu inte får beskrivas som klara
+## Läget, uppdaterat 2026-08-28
 
-- Riktig produktinloggning och flerhushållsisolering
-- serverstyrda roller/permissions före retrieval och actions
-- skapa/redigera familj och familjemedlemmar
-- reminders/leveransscheduler
-- countdowns
-- Daily Brief som genererad och levererad produktfunktion
-- Telegram-kontokoppling, inbox, röst och Mini App
-- Safe Action Engine med audit och Ångra
-- full multimodal RAG med OCR/layoutsegment, sida och bbox
+Klart och i produktion:
+
+- Riktig produktinloggning, hushållsisolering och serverstyrda roller före
+  retrieval och actions
+- Skapa och redigera familj och familjemedlemmar, samt en inloggning per
+  familjemedlem med behörighet
+- Lösenordsåterställning med e-post, och lösenordsbyte inifrån appen
+- Append-only audit över vem som gjorde vad och när
+- Telegram-kontokoppling, fortsatt strikt read-only, med svar i naturlig ton
+- Skolscheman: gruppdelade lektioner läggs fram för granskning i stället för att
+  kastas, och ett schema kan gälla längre än sin egen vecka
+- Hälsospärr: vårddokument nekas innan något lagras eller läses av sidan
+- Källmarkering, etapp 1: OCR och markerat område i granskningssteget
+
+Får ännu inte beskrivas som klart:
+
+- **Ångra.** Audit finns, men ingen väg tillbaka från en ändring. Safe Action
+  Engine är därmed halv.
+- **Källmarkering etapp 2–4.** Sidor och segment i databasen, källklick från
+  kalendern, dokumentversioner och segmenten i retrieval.
+- **Reminders och leveransscheduler.** Krävs innan något kan skickas oombett.
+- **Daily Brief.** Kanalen är vald: Telegram, inte e-post. Kräver schemaläggaren.
+- **Countdowns.**
+- **Telegram inbox, röst och Mini App.**
+- **Lovveckor** i schemaupprepningen. Ett schema som spänner över ett lov lägger
+  in lektioner på lediga dagar.
+- **Flerhushåll i praktiken.** Isoleringen finns i koden, men inget andra hushåll
+  har lagts in, och compliance-tröskeln i det här dokumentet gäller fortfarande.
+- **Release-testet mot produktion.** Kräver ett konto och de två testvariablerna.
 
 BBox är uttryckligen placerat i Version 2 i `koncept.tct`. Det ska lagras med
 dokument-/sidreferens, normaliserade koordinater, rotation och renderingsversion.
