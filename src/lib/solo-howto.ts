@@ -23,7 +23,7 @@ export const SOLO_TALENT_HOWTO: Record<string, readonly string[]> = {
   ],
   shown: [
     "Skicka länken till en person med en enda fråga: förstår du vad det gör på trettio sekunder?",
-    "Hanni räknas. En kollega på jobbet räknas.",
+    "Din fru räknas. En kollega på jobbet räknas.",
     "Vad de svarar spelar ingen roll för noden. Att du skickade gör det.",
   ],
   profile: [

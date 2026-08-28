@@ -54,11 +54,11 @@ describe("Telegram is for the adults in the household", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     services.loadDashboard.mockResolvedValue({
-      people: [person("person-adult", "Hanni", "adult"), person("person-child", "Alma", "child")],
+      people: [person("person-adult", "Nora", "adult"), person("person-child", "Leo", "child")],
     });
     services.consumeTelegramLinkRequest.mockResolvedValue({
       chatId: "1",
-      personName: "Hanni",
+      personName: "Nora",
     });
   });
 

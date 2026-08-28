@@ -43,3 +43,7 @@ Familjen.txt
 # Den versionerade kopian ligger i vendor/tessdata och ska användas i stället.
 /*.traineddata
 /*.traineddata.gz
+
+# Interna arbetsanteckningar. Innehåller familjens namn och tider och
+# ska aldrig följa med repot någonstans.
+CLAUDE_HANDOFF.md

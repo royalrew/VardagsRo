@@ -137,7 +137,7 @@ export const SOLO_TALENTS: readonly SoloTalent[] = [
     title: "Visad",
     requirement: "Visa det för någon du redan känner",
     meaning:
-      "Första gången en annan människa tittar. Hanni räknas, en kollega räknas.",
+      "Första gången en annan människa tittar. Din fru räknas, en kollega räknas.",
     requires: "case_published",
     unit: "count",
     target: 1,

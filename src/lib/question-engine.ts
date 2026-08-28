@@ -856,7 +856,7 @@ function personLabel(
  * names and titles are the same values, arranged into Swedish by code.
  */
 
-/** "du", "Hanni", "hela familjen". */
+/** "du", "Nora", "hela familjen". */
 function subjectFor(
   event: FamilyEvent,
   people: readonly FamilyPerson[],
@@ -1248,7 +1248,7 @@ export function answerQuestionDeterministically({
   }
 
   // A leading time expression inverts the first clause and only the first one:
-  // "På torsdag har du simskola 10.30 och Cuzeyr har träning 17.00".
+  // "På torsdag har du simskola 10.30 och Leo har träning 17.00".
   const [first, ...rest] = relevantEvents;
   const clauses = joinClauses([
     activityClause(first, people, timeZone, currentPersonId, true),
