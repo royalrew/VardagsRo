@@ -78,8 +78,7 @@ finns.
 
 Hemligheter finns i Railway och lokalt i `.env.local`. Skriv aldrig ut dem i
 terminaloutput, loggar, artifacts eller den här filen. Gate-variablerna
-`VARDAGSRO_GATE_USERNAME` och `VARDAGSRO_GATE_PASSWORD` ska tas bort från Railway
-först efter att den grindlösa koden har driftsatts och verifierats.
+`VARDAGSRO_GATE_USERNAME` och `VARDAGSRO_GATE_PASSWORD` är borttagna från Railway.
 
 ### Tillfällig Railway-domän är borttagen
 
@@ -1462,3 +1461,23 @@ $env:VARDAGSRO_GATE_PASSWORD = ((railway variables --service vardagsro-web --kv)
 En varning värd att minnas: `railway variables` kan returnera tomt vid tillfälliga
 fel. En tom variabel ger samma 401 som ett felaktigt lösenord, så kontrollera
 längden innan felsökningen börjar.
+
+
+## 2026-08-28: den gemensamma lösenordsgrinden är borttagen
+
+Familjen använder nu bara den riktiga produktinloggningen. `src/proxy.ts`,
+`src/lib/access-gate.ts` och den gamla Basic Auth-utloggningen är borttagna.
+`/api/ready` är fortsatt publik och minimal; `/api/health` kräver nu verifierad
+produktsession innan servicedetaljer hämtas.
+
+Deploy `4c2469ef-4d99-4448-9bd7-a60c14e572a1` kör commit `465e2d9` och är
+`SUCCESS`. Därefter togs `VARDAGSRO_GATE_USERNAME` och
+`VARDAGSRO_GATE_PASSWORD` bort från Railway. Slut-smoke passerade 6/6:
+`artifacts/releases/railway-smoke-2026-08-28T14-25-50-222Z.json`.
+
+Skarpt anonymt beteende efter borttagningen:
+
+- `/api/ready` ger 200
+- `/` ger 307 till `/login`
+- `/api/documents` ger 401
+- `/api/health` ger 401
