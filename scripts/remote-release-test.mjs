@@ -225,9 +225,11 @@ async function main() {
       assert(response.status === 200, `Inloggning gav HTTP ${response.status}.`);
 
       const cookies = response.headers.getSetCookie?.() ?? [];
+      const combinedCookie = response.headers.get("set-cookie");
+      if (cookies.length === 0 && combinedCookie) cookies.push(combinedCookie);
       const session = cookies
         .map((cookie) => cookie.split(";")[0])
-        .filter((pair) => pair.startsWith("vardagsro."));
+        .filter((pair) => /^(?:__Secure-)?vardagsro\./.test(pair));
       assert(session.length > 0, "Inloggningen satte ingen sessionscookie.");
       authHeaders.Cookie = session.join("; ");
     });
