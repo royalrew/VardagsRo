@@ -1323,3 +1323,26 @@ Verifierat mot den lokala databasen hela vägen: ägaren skapade ett viewer-kont
 personen loggade in, kunde läsa hushållet, och fick 403 på att skriva, på att se
 inloggningar och på att skapa konton. Regressioner i
 `src/app/api/route-permissions.test.ts`.
+
+
+## 2026-08-28: Railway bygger från GitHub
+
+Tjänsten är kopplad till `royalrew/VardagsRo`, gren `main`. **Varje push
+deployar.** `railway up` ska inte längre användas: under övergången låg en
+CLI-deploy aktiv medan GitHub-kopplingen sattes upp, och de två drog åt olika
+håll. Telegram svarade då fortfarande med den gamla formuleringen trots att
+deployen rapporterade SUCCESS.
+
+Läxan är värd att skriva ner: **grönt deploy-status betyder att ett bygge gick
+igenom, inte att just den koden serveras.** Det går att kontrollera vad som
+faktiskt kör:
+
+```powershell
+railway ssh sh -c 'grep -rl <fras-som-bara-finns-i-nya-koden> /app/.next/server | wc -l'
+```
+
+Sätt `MSYS_NO_PATHCONV=1` i Git Bash, annars skriver MSYS om `/app` till en
+Windows-sökväg innan kommandot når containern.
+
+Att pusha är numera en driftsättning. Commita gärna klart lokalt och pusha när
+ändringen ska ut, inte som ett sätt att spara.
