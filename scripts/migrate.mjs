@@ -768,6 +768,53 @@ const migrations = [
        on conflict (user_id, measured_on, metric) do nothing`,
     ],
   },
+  {
+    version: "018_project100_journal",
+    name: "A private diary the assistant can be shut out of",
+    statements: [
+      // One entry per day, like the body log next to it. A day is the unit the
+      // rest of Projekt 100 is read in, and a diary that agreed with the
+      // calendar everywhere else would be easier to look back through.
+      `create table if not exists project100_journal_entries (
+        user_id text not null references auth_users(id) on delete cascade,
+        written_on date not null,
+        body text check (body is null or char_length(body) <= 20000),
+        mood integer check (mood is null or (mood >= 1 and mood <= 5)),
+        energy integer check (energy is null or (energy >= 1 and energy <= 5)),
+        sleep_hours numeric(4, 2) check (
+          sleep_hours is null or (sleep_hours >= 0 and sleep_hours <= 24)
+        ),
+        -- The one flag that keeps a thought out of the assistant's memory.
+        -- It defaults to false so nothing is silently withheld, and the user
+        -- decides per entry rather than per account.
+        excluded_from_ai boolean not null default false,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        primary key (user_id, written_on),
+        check (
+          body is not null or mood is not null or energy is not null
+          or sleep_hours is not null
+        )
+      )`,
+      `create index if not exists project100_journal_recent_idx
+        on project100_journal_entries (user_id, written_on desc)`,
+      // Searching your own years of writing should not read every row.
+      `create index if not exists project100_journal_search_idx
+        on project100_journal_entries
+        using gin (to_tsvector('swedish', coalesce(body, '')))`,
+      // The daily note from the old health log was diary writing all along; it
+      // was left out of the body tables on purpose and belongs here instead,
+      // together with the day's energy and sleep.
+      `insert into project100_journal_entries
+         (user_id, written_on, body, energy, sleep_hours)
+       select user_id, day, nullif(btrim(note), ''), energy, sleep_hours
+       from solo_health_days
+       where nullif(btrim(note), '') is not null
+          or energy is not null
+          or sleep_hours is not null
+       on conflict (user_id, written_on) do nothing`,
+    ],
+  },
 ];
 
 function checksum(migration) {

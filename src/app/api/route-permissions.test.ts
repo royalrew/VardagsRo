@@ -49,6 +49,27 @@ vi.mock("@/server/project100-training", () => ({
   updateProject100TrainingSession: vi.fn(async () => ({ id: "session-1" })),
   archiveProject100TrainingTemplate: vi.fn(async () => true),
 }));
+vi.mock("@/server/project100-journal", () => ({
+  loadProject100Journal: vi.fn(async () => ({
+    today: "2026-08-29",
+    from: "2025-08-29",
+    to: "2026-08-29",
+    query: null,
+    entries: [],
+    totalEntries: 0,
+    excludedCount: 0,
+  })),
+  saveProject100JournalEntry: vi.fn(async () => ({
+    writtenOn: "2026-08-26",
+    body: "Kändes starkt",
+    mood: null,
+    energy: null,
+    sleepHours: null,
+    excludedFromAi: false,
+    updatedAt: "2026-08-26T20:14:00.000Z",
+  })),
+  deleteProject100JournalEntry: vi.fn(async () => true),
+}));
 vi.mock("@/server/project100-body", () => ({
   loadProject100BodyJourney: vi.fn(async () => ({
     today: "2026-08-29",
@@ -101,6 +122,8 @@ import {
   PATCH as trainingSessionPatch,
 } from "@/app/api/project100/training/sessions/[id]/route";
 import { POST as trainingTemplatesPost } from "@/app/api/project100/training/templates/route";
+import { GET as journalGet, POST as journalPost } from "@/app/api/project100/journal/route";
+import { DELETE as journalDelete } from "@/app/api/project100/journal/[date]/route";
 import { GET as bodyGet, POST as bodyPost } from "@/app/api/project100/body/route";
 import { DELETE as bodyDelete } from "@/app/api/project100/body/[date]/route";
 import { PATCH as settingsPatch } from "@/app/api/project100/settings/route";
@@ -607,6 +630,99 @@ describe("Projekt 100 body data is the most private of all", () => {
         method: "POST",
         headers: { "content-type": "application/json", origin: "https://elak.example" },
         body: JSON.stringify(measurement()),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+  });
+});
+
+describe("The diary is the most closed door in the workspace", () => {
+  const journalUrl = "http://localhost/api/project100/journal";
+
+  function written() {
+    return {
+      writtenOn: "2026-08-26",
+      body: "Kändes starkt idag",
+      mood: 4,
+      energy: 3,
+      sleepHours: 7.5,
+      excludedFromAi: true,
+    };
+  }
+
+  beforeEach(() => {
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("owner");
+  });
+
+  it("answers 401 before it admits that a diary exists", async () => {
+    harness.state.session = null;
+    harness.state.membership = null;
+
+    expect((await journalGet(new Request(journalUrl))).status).toBe(401);
+    expect((await journalPost(jsonPost(journalUrl, written()))).status).toBe(401);
+  });
+
+  it("keeps a child in the household out of an adult's writing", async () => {
+    harness.state.membership = membership("viewer", "child");
+
+    const read = await journalGet(new Request(journalUrl));
+
+    expect(read.status).toBe(403);
+    expect(await read.json()).toMatchObject({ code: "PROJECT100_ADULT_ONLY" });
+  });
+
+  it("keeps a read-only adult from writing in it", async () => {
+    harness.state.membership = membership("viewer");
+
+    expect((await journalGet(new Request(journalUrl))).status).toBe(200);
+    const write = await journalPost(jsonPost(journalUrl, written()));
+    expect(write.status).toBe(403);
+    expect(await write.json()).toMatchObject({ code: "READ_ONLY_MEMBER" });
+  });
+
+  it("refuses a filter it does not understand", async () => {
+    const response = await journalGet(new Request(`${journalUrl}?userId=someone-else`));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "PROJECT100_UNKNOWN_QUERY" });
+  });
+
+  it("refuses an entry with neither writing nor a check-in in it", async () => {
+    const response = await journalPost(
+      jsonPost(journalUrl, {
+        writtenOn: "2026-08-26",
+        body: null,
+        mood: null,
+        energy: null,
+        sleepHours: null,
+        excludedFromAi: false,
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it("refuses a day that is not a real date", async () => {
+    const response = await journalDelete(
+      new Request(`${journalUrl}/2026-13-01`, {
+        method: "DELETE",
+        headers: { origin: "http://localhost" },
+      }),
+      { params: Promise.resolve({ date: "2026-13-01" }) },
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it("refuses writing posted from another site", async () => {
+    const response = await journalPost(
+      new Request(journalUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://elak.example" },
+        body: JSON.stringify(written()),
       }),
     );
 
