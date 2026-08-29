@@ -35,6 +35,8 @@ export type AuditAction =
   | "project100.training.session.delete"
   | "project100.training.template.create"
   | "project100.training.template.delete"
+  | "project100.body.save"
+  | "project100.body.delete"
   | "project100.media.create"
   | "project100.media.delete"
   | "login.create";

@@ -696,6 +696,78 @@ const migrations = [
         where session_id is not null`,
     ],
   },
+  {
+    version: "017_project100_body",
+    name: "Weight, measurements and the goal they point at",
+    statements: [
+      // Projekt 100 gets its own settings rather than borrowing the Solo table
+      // it is meant to replace. The goal is stored because a weight trend has
+      // no direction without one; nothing else about a body belongs here.
+      `create table if not exists project100_settings (
+        user_id text primary key references auth_users(id) on delete cascade,
+        weight_goal_kg numeric(5, 2) check (
+          weight_goal_kg is null or (weight_goal_kg > 0 and weight_goal_kg < 400)
+        ),
+        start_weight_kg numeric(5, 2) check (
+          start_weight_kg is null or (start_weight_kg > 0 and start_weight_kg < 400)
+        ),
+        height_cm numeric(4, 1) check (
+          height_cm is null or (height_cm > 50 and height_cm < 260)
+        ),
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      )`,
+      // One row per measured day carries what the numbers cannot: how the day
+      // felt. The measurements themselves hang off it.
+      `create table if not exists project100_body_entries (
+        user_id text not null references auth_users(id) on delete cascade,
+        measured_on date not null,
+        note text check (note is null or char_length(note) <= 1000),
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        primary key (user_id, measured_on)
+      )`,
+      // A long row of nullable columns would have to be altered for every new
+      // tape measure. One row per measured thing charts directly and lets the
+      // user add their own without a migration.
+      `create table if not exists project100_body_measurements (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        measured_on date not null,
+        metric text not null check (metric ~ '^[a-z][a-z0-9_]{0,39}$'),
+        label text check (label is null or char_length(btrim(label)) between 1 and 40),
+        unit text not null check (unit in ('kg', 'cm')),
+        value numeric(7, 2) not null check (value > 0 and value < 100000),
+        unique (user_id, measured_on, metric),
+        constraint project100_body_measurements_entry_fk
+          foreign key (user_id, measured_on)
+          references project100_body_entries(user_id, measured_on)
+          on delete cascade
+      )`,
+      // The chart reads one metric across time; the day view reads one day.
+      `create index if not exists project100_body_metric_idx
+        on project100_body_measurements (user_id, metric, measured_on)`,
+      `create index if not exists project100_body_entries_recent_idx
+        on project100_body_entries (user_id, measured_on desc)`,
+      // Carry the goal over from the ladder this workspace replaces.
+      `insert into project100_settings (user_id, weight_goal_kg)
+       select user_id, weight_goal_kg from solo_settings
+       where weight_goal_kg is not null
+       on conflict (user_id) do nothing`,
+      // Every weight already logged is part of this journey. The daily note is
+      // deliberately left behind: it was written about sleep and diet, and
+      // moving it here would put words next to a body they were not about.
+      `insert into project100_body_entries (user_id, measured_on)
+       select user_id, day from solo_health_days
+       where weight_kg is not null
+       on conflict (user_id, measured_on) do nothing`,
+      `insert into project100_body_measurements (id, user_id, measured_on, metric, unit, value)
+       select md5(user_id || ':' || day::text || ':weight'), user_id, day, 'weight', 'kg', weight_kg
+       from solo_health_days
+       where weight_kg is not null
+       on conflict (user_id, measured_on, metric) do nothing`,
+    ],
+  },
 ];
 
 function checksum(migration) {

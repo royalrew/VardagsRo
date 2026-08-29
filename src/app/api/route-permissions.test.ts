@@ -49,6 +49,27 @@ vi.mock("@/server/project100-training", () => ({
   updateProject100TrainingSession: vi.fn(async () => ({ id: "session-1" })),
   archiveProject100TrainingTemplate: vi.fn(async () => true),
 }));
+vi.mock("@/server/project100-body", () => ({
+  loadProject100BodyJourney: vi.fn(async () => ({
+    today: "2026-08-29",
+    from: "2026-06-01",
+    to: "2026-08-29",
+    entries: [],
+    goal: { weightGoalKg: 100, startWeightKg: 80, heightCm: null },
+    weightHistory: [],
+  })),
+  saveProject100BodyEntry: vi.fn(async () => ({
+    measuredOn: "2026-08-26",
+    note: null,
+    measurements: [],
+  })),
+  deleteProject100BodyEntry: vi.fn(async () => true),
+  saveProject100Settings: vi.fn(async () => ({
+    weightGoalKg: 100,
+    startWeightKg: 80,
+    heightCm: null,
+  })),
+}));
 vi.mock("@/server/project100-media", () => ({
   loadProject100MediaLibrary: vi.fn(async () => ({
     items: [],
@@ -80,6 +101,9 @@ import {
   PATCH as trainingSessionPatch,
 } from "@/app/api/project100/training/sessions/[id]/route";
 import { POST as trainingTemplatesPost } from "@/app/api/project100/training/templates/route";
+import { GET as bodyGet, POST as bodyPost } from "@/app/api/project100/body/route";
+import { DELETE as bodyDelete } from "@/app/api/project100/body/[date]/route";
+import { PATCH as settingsPatch } from "@/app/api/project100/settings/route";
 import { GET as mediaGet, POST as mediaPost } from "@/app/api/project100/media/route";
 import { DELETE as mediaDelete } from "@/app/api/project100/media/[id]/route";
 import { GET as mediaUrlGet } from "@/app/api/project100/media/[id]/url/route";
@@ -504,5 +528,88 @@ describe("Projekt 100 media is gated like the rest of the workspace", () => {
     expect(childOpen.status).toBe(403);
     expect(await childOpen.json()).toMatchObject({ code: "PROJECT100_ADULT_ONLY" });
     expect(viewerDelete.status).toBe(403);
+  });
+});
+
+describe("Projekt 100 body data is the most private of all", () => {
+  const bodyUrl = "http://localhost/api/project100/body";
+
+  function measurement() {
+    return {
+      measuredOn: "2026-08-26",
+      note: null,
+      measurements: [{ metric: "weight", label: null, unit: "kg", value: 83.4 }],
+    };
+  }
+
+  beforeEach(() => {
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("owner");
+  });
+
+  it("answers 401 before it admits that a weight was ever logged", async () => {
+    harness.state.session = null;
+    harness.state.membership = null;
+
+    expect((await bodyGet(new Request(bodyUrl))).status).toBe(401);
+    expect((await bodyPost(jsonPost(bodyUrl, measurement()))).status).toBe(401);
+  });
+
+  it("keeps a child out of weight, measurements and the goal", async () => {
+    harness.state.membership = membership("viewer", "child");
+
+    const read = await bodyGet(new Request(bodyUrl));
+    const goal = await settingsPatch(
+      jsonPatch("http://localhost/api/project100/settings", {
+        weightGoalKg: 100,
+        startWeightKg: 80,
+        heightCm: null,
+      }),
+    );
+
+    expect(read.status).toBe(403);
+    expect(await read.json()).toMatchObject({ code: "PROJECT100_ADULT_ONLY" });
+    expect(goal.status).toBe(403);
+  });
+
+  it("keeps a read-only adult from writing a measurement", async () => {
+    harness.state.membership = membership("viewer");
+
+    expect((await bodyGet(new Request(bodyUrl))).status).toBe(200);
+    const write = await bodyPost(jsonPost(bodyUrl, measurement()));
+    expect(write.status).toBe(403);
+    expect(await write.json()).toMatchObject({ code: "READ_ONLY_MEMBER" });
+  });
+
+  it("refuses a filter it does not understand", async () => {
+    const response = await bodyGet(new Request(`${bodyUrl}?userId=someone-else`));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "PROJECT100_UNKNOWN_QUERY" });
+  });
+
+  it("refuses a day that is not a real date", async () => {
+    const response = await bodyDelete(
+      new Request(`${bodyUrl}/2026-02-30`, {
+        method: "DELETE",
+        headers: { origin: "http://localhost" },
+      }),
+      { params: Promise.resolve({ date: "2026-02-30" }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it("refuses a measurement posted from another site", async () => {
+    const response = await bodyPost(
+      new Request(bodyUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://elak.example" },
+        body: JSON.stringify(measurement()),
+      }),
+    );
+
+    expect(response.status).toBe(403);
   });
 });
