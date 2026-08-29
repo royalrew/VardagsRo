@@ -49,6 +49,21 @@ vi.mock("@/server/project100-training", () => ({
   updateProject100TrainingSession: vi.fn(async () => ({ id: "session-1" })),
   archiveProject100TrainingTemplate: vi.fn(async () => true),
 }));
+vi.mock("@/server/project100-media", () => ({
+  loadProject100MediaLibrary: vi.fn(async () => ({
+    items: [],
+    counts: { body: 0, food: 0, training: 0, content: 0 },
+    urlExpiresInSeconds: 300,
+    storageConfigured: true,
+  })),
+  loadProject100SessionOptions: vi.fn(async () => []),
+  createProject100Media: vi.fn(async () => ({ id: "media-1" })),
+  deleteProject100Media: vi.fn(async () => true),
+  signedProject100MediaOriginalUrl: vi.fn(async () => ({
+    url: "https://signed.test/original",
+    expiresInSeconds: 300,
+  })),
+}));
 
 import { PATCH as householdPatch } from "@/app/api/household/route";
 import { GET as loginsGet } from "@/app/api/logins/route";
@@ -65,6 +80,9 @@ import {
   PATCH as trainingSessionPatch,
 } from "@/app/api/project100/training/sessions/[id]/route";
 import { POST as trainingTemplatesPost } from "@/app/api/project100/training/templates/route";
+import { GET as mediaGet, POST as mediaPost } from "@/app/api/project100/media/route";
+import { DELETE as mediaDelete } from "@/app/api/project100/media/[id]/route";
+import { GET as mediaUrlGet } from "@/app/api/project100/media/[id]/url/route";
 
 function membership(
   role: "owner" | "adult" | "viewer",
@@ -389,3 +407,102 @@ describe("Projekt 100 is a private adult workspace", () => {
   });
 });
 
+describe("Projekt 100 media is gated like the rest of the workspace", () => {
+  const mediaUrl = "http://localhost/api/project100/media";
+
+  function imageForm(): FormData {
+    const form = new FormData();
+    form.set("category", "body");
+    form.set("capturedOn", "2026-08-26");
+    form.set(
+      "file",
+      new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], "bild.jpg", {
+        type: "image/jpeg",
+      }),
+    );
+    return form;
+  }
+
+  function upload(origin = "http://localhost"): Request {
+    return new Request(mediaUrl, {
+      method: "POST",
+      headers: { origin },
+      body: imageForm(),
+    });
+  }
+
+  beforeEach(() => {
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("owner");
+  });
+
+  it("answers 401 before it admits that a picture library exists", async () => {
+    harness.state.session = null;
+    harness.state.membership = null;
+
+    expect((await mediaGet(new Request(mediaUrl))).status).toBe(401);
+    expect((await mediaPost(upload())).status).toBe(401);
+  });
+
+  it("keeps a child out of the picture library", async () => {
+    harness.state.membership = membership("viewer", "child");
+
+    const read = await mediaGet(new Request(mediaUrl));
+
+    expect(read.status).toBe(403);
+    expect(await read.json()).toMatchObject({ code: "PROJECT100_ADULT_ONLY" });
+  });
+
+  it("keeps a read-only adult from adding pictures", async () => {
+    harness.state.membership = membership("viewer");
+
+    expect((await mediaGet(new Request(mediaUrl))).status).toBe(200);
+    const write = await mediaPost(upload());
+    expect(write.status).toBe(403);
+    expect(await write.json()).toMatchObject({ code: "READ_ONLY_MEMBER" });
+  });
+
+  it("refuses an upload posted from another site", async () => {
+    expect((await mediaPost(upload("https://elak.example"))).status).toBe(403);
+  });
+
+  it("refuses a filter it does not understand", async () => {
+    const response = await mediaGet(new Request(`${mediaUrl}?userId=someone-else`));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "PROJECT100_UNKNOWN_QUERY" });
+  });
+
+  it("requires a real image, not just a form that says so", async () => {
+    const response = await mediaPost(
+      new Request(mediaUrl, {
+        method: "POST",
+        headers: { origin: "http://localhost", "content-type": "application/json" },
+        body: JSON.stringify({ category: "body", capturedOn: "2026-08-26" }),
+      }),
+    );
+
+    expect(response.status).toBe(415);
+    expect(await response.json()).toMatchObject({ code: "PROJECT100_MULTIPART_REQUIRED" });
+  });
+
+  it("gates the signed full-size address and the deletion the same way", async () => {
+    harness.state.membership = membership("viewer", "child");
+    const childOpen = await mediaUrlGet(new Request(`${mediaUrl}/media-1/url`), {
+      params: Promise.resolve({ id: "media-1" }),
+    });
+
+    harness.state.membership = membership("viewer");
+    const viewerDelete = await mediaDelete(
+      new Request(`${mediaUrl}/media-1`, {
+        method: "DELETE",
+        headers: { origin: "http://localhost" },
+      }),
+      { params: Promise.resolve({ id: "media-1" }) },
+    );
+
+    expect(childOpen.status).toBe(403);
+    expect(await childOpen.json()).toMatchObject({ code: "PROJECT100_ADULT_ONLY" });
+    expect(viewerDelete.status).toBe(403);
+  });
+});

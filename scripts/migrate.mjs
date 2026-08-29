@@ -654,6 +654,48 @@ const migrations = [
       )`,
     ],
   },
+  {
+    version: "016_project100_media",
+    name: "Private image library with its own object keys",
+    statements: [
+      // A body photo is the most private row in this system. It is keyed by
+      // user like the rest of Projekt 100, and the object key repeats the user
+      // id so a stored key can be checked against the reader before it is ever
+      // signed. Nothing here is reachable from a household join.
+      `create table if not exists project100_media (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        category text not null check (category in ('body', 'food', 'training', 'content')),
+        captured_on date not null,
+        caption text check (caption is null or char_length(caption) <= 500),
+        original_key text not null unique,
+        original_mime text not null check (original_mime in ('image/jpeg', 'image/png', 'image/webp')),
+        original_bytes integer not null check (original_bytes > 0 and original_bytes <= 12582912),
+        preview_key text unique,
+        preview_bytes integer check (preview_bytes is null or (preview_bytes > 0 and preview_bytes <= 1048576)),
+        width integer check (width is null or (width > 0 and width <= 20000)),
+        height integer check (height is null or (height > 0 and height <= 20000)),
+        sha256 text not null check (char_length(sha256) = 64),
+        session_id text,
+        created_at timestamptz not null default now(),
+        unique (id, user_id),
+        check ((preview_key is null) = (preview_bytes is null)),
+        constraint project100_media_session_fk
+          foreign key (session_id, user_id)
+          references project100_training_sessions(id, user_id)
+          on delete set null
+      )`,
+      // The timeline reads by day, the gallery by category. Both stay inside
+      // one user by having the user id first in every index.
+      `create index if not exists project100_media_timeline_idx
+        on project100_media (user_id, captured_on desc, created_at desc, id)`,
+      `create index if not exists project100_media_category_idx
+        on project100_media (user_id, category, captured_on desc, id)`,
+      `create index if not exists project100_media_session_idx
+        on project100_media (user_id, session_id)
+        where session_id is not null`,
+    ],
+  },
 ];
 
 function checksum(migration) {

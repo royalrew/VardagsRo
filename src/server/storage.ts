@@ -249,3 +249,197 @@ export async function deleteSource(key: string): Promise<boolean> {
     return false;
   }
 }
+
+/* Projekt 100 media. Family documents live under a household prefix; a body
+   photo must not. These objects carry the owner's user id in the key itself,
+   which lets every read check the key against the reader before signing it. */
+
+export const PROJECT100_MEDIA_CATEGORIES = ["body", "food", "training", "content"] as const;
+export type Project100MediaCategory = (typeof PROJECT100_MEDIA_CATEGORIES)[number];
+
+export const PROJECT100_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+export type Project100ImageMimeType = (typeof PROJECT100_IMAGE_TYPES)[number];
+
+export const MAX_PROJECT100_PREVIEW_BYTES = 1024 * 1024;
+
+export interface Project100MediaKeys {
+  originalKey: string;
+  previewKey: string | null;
+}
+
+function isImageMimeType(value: AcceptedMimeType): value is Project100ImageMimeType {
+  return value !== "application/pdf";
+}
+
+/** A document may be a PDF; a memory of a body or a meal is a picture. */
+export function validateProject100Image(
+  bytes: Uint8Array,
+  declaredMimeType: string,
+): Project100ImageMimeType {
+  const mimeType = validateUpload(bytes, declaredMimeType);
+  if (!isImageMimeType(mimeType)) {
+    throw new AppError(
+      415,
+      "PROJECT100_IMAGE_REQUIRED",
+      "Välj en bild i JPG-, PNG- eller WebP-format.",
+    );
+  }
+  return mimeType;
+}
+
+function project100MediaKey(
+  userId: string,
+  category: Project100MediaCategory,
+  mimeType: Project100ImageMimeType,
+  id: string,
+  variant: "original" | "preview",
+): string {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const extension = ACCEPTED_FILE_TYPES[mimeType].extension;
+  const suffix = variant === "preview" ? "-preview" : "";
+  return `p100/${userId}/${category}/${year}/${month}/${id}${suffix}.${extension}`;
+}
+
+/**
+ * True only when the key names this exact owner. A key that reaches the server
+ * from a row, an export or a hand-written request is still checked against the
+ * account asking for it, so a leaked key cannot be turned into a signed URL.
+ */
+const PROJECT100_MEDIA_KEY =
+  /^p100\/([A-Za-z0-9][A-Za-z0-9_-]{0,63})\/(?:body|food|training|content)\/\d{4}\/\d{2}\/[0-9a-f-]{36}(?:-preview)?\.(?:jpg|png|webp)$/;
+
+export function project100MediaKeyBelongsTo(userId: string, key: string): boolean {
+  const owner = PROJECT100_MEDIA_KEY.exec(key)?.[1];
+  return owner !== undefined && owner === userId;
+}
+
+function requireStorage(): { client: S3Client; bucket: string } {
+  const storage = storageClient();
+  if (!storage) {
+    throw new AppError(
+      503,
+      "STORAGE_NOT_CONFIGURED",
+      "Bildlagringen är inte konfigurerad, så bilden kan inte sparas privat.",
+    );
+  }
+  return storage;
+}
+
+async function putProject100Object(
+  key: string,
+  bytes: Uint8Array,
+  mimeType: Project100ImageMimeType,
+  sha256: string,
+): Promise<void> {
+  const storage = requireStorage();
+  try {
+    await storage.client.send(
+      new PutObjectCommand({
+        Bucket: storage.bucket,
+        Key: key,
+        Body: bytes,
+        ContentType: mimeType,
+        Metadata: { sha256 },
+      }),
+      { abortSignal: AbortSignal.timeout(20_000) },
+    );
+  } catch (cause) {
+    throw new AppError(
+      503,
+      "STORAGE_UNAVAILABLE",
+      "Bilden kunde inte lagras just nu.",
+      { cause },
+    );
+  }
+}
+
+/**
+ * Writes the original and, when the client produced one, a small preview. The
+ * preview is only ever an optimisation: losing it costs speed, never a memory.
+ */
+export async function uploadProject100Media(input: {
+  userId: string;
+  mediaId: string;
+  category: Project100MediaCategory;
+  sha256: string;
+  original: { bytes: Uint8Array; mimeType: Project100ImageMimeType };
+  preview: { bytes: Uint8Array; mimeType: Project100ImageMimeType } | null;
+}): Promise<Project100MediaKeys> {
+  requireStorage();
+  const originalKey = project100MediaKey(
+    input.userId,
+    input.category,
+    input.original.mimeType,
+    input.mediaId,
+    "original",
+  );
+  await putProject100Object(
+    originalKey,
+    input.original.bytes,
+    input.original.mimeType,
+    input.sha256,
+  );
+
+  if (!input.preview) return { originalKey, previewKey: null };
+
+  const previewKey = project100MediaKey(
+    input.userId,
+    input.category,
+    input.preview.mimeType,
+    input.mediaId,
+    "preview",
+  );
+  try {
+    await putProject100Object(
+      previewKey,
+      input.preview.bytes,
+      input.preview.mimeType,
+      input.sha256,
+    );
+  } catch {
+    // The original is already safe. A missing preview must not lose the upload.
+    return { originalKey, previewKey: null };
+  }
+  return { originalKey, previewKey };
+}
+
+export async function signedProject100MediaUrl(
+  userId: string,
+  key: string,
+  expiresInSeconds = 300,
+): Promise<string> {
+  if (!project100MediaKeyBelongsTo(userId, key)) {
+    throw new AppError(403, "PROJECT100_MEDIA_FORBIDDEN", "Bilden tillhör inte ditt konto.");
+  }
+  const storage = requireStorage();
+  try {
+    return await getSignedUrl(
+      storage.client,
+      new GetObjectCommand({ Bucket: storage.bucket, Key: key }),
+      { expiresIn: expiresInSeconds },
+    );
+  } catch (cause) {
+    throw new AppError(502, "SIGNED_URL_FAILED", "Bilden kunde inte öppnas.", { cause });
+  }
+}
+
+/** Returns false when the object survived, so a caller can report an honest partial delete. */
+export async function deleteProject100MediaObject(
+  userId: string,
+  key: string,
+): Promise<boolean> {
+  if (!project100MediaKeyBelongsTo(userId, key)) return false;
+  const storage = storageClient();
+  if (!storage) return false;
+  try {
+    await storage.client.send(
+      new DeleteObjectCommand({ Bucket: storage.bucket, Key: key }),
+      { abortSignal: AbortSignal.timeout(10_000) },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
