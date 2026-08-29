@@ -30,6 +30,11 @@ export type AuditAction =
   | "solo.action.create"
   | "solo.action.delete"
   | "solo.health.save"
+  | "project100.training.session.create"
+  | "project100.training.session.update"
+  | "project100.training.session.delete"
+  | "project100.training.template.create"
+  | "project100.training.template.delete"
   | "login.create";
 
 /**

@@ -478,6 +478,182 @@ const migrations = [
       ))`,
     ],
   },
+  {
+    version: "015_project100_training",
+    name: "Private normalized training sessions and templates",
+    statements: [
+      // Projekt 100 belongs to an account, never to the household. The user id
+      // is repeated on child rows and included in every foreign key so even a
+      // faulty future query cannot attach one adult's set to another adult's
+      // session.
+      `create table if not exists project100_exercises (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        name text not null check (char_length(btrim(name)) between 1 and 120),
+        normalized_name text not null check (char_length(btrim(normalized_name)) between 1 and 120),
+        archived_at timestamptz,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (id, user_id),
+        unique (user_id, normalized_name)
+      )`,
+      `create table if not exists project100_training_templates (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        name text not null check (char_length(btrim(name)) between 1 and 100),
+        activity_type text not null check (activity_type in (
+          'strength_home', 'forest', 'outdoor_gym', 'running',
+          'cycling', 'spinning', 'mobility', 'other'
+        )),
+        description text check (description is null or char_length(description) <= 1000),
+        archived_at timestamptz,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (id, user_id)
+      )`,
+      `create unique index if not exists project100_training_templates_user_name_idx
+        on project100_training_templates (user_id, lower(btrim(name)))
+        where archived_at is null`,
+      `create table if not exists project100_training_template_exercises (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        template_id text not null,
+        exercise_id text not null,
+        position integer not null check (position >= 0 and position < 100),
+        notes text check (notes is null or char_length(notes) <= 500),
+        unique (id, user_id),
+        unique (user_id, template_id, position),
+        constraint project100_template_exercises_template_fk
+          foreign key (template_id, user_id)
+          references project100_training_templates(id, user_id)
+          on delete cascade,
+        constraint project100_template_exercises_exercise_fk
+          foreign key (exercise_id, user_id)
+          references project100_exercises(id, user_id)
+          on delete restrict
+      )`,
+      `create table if not exists project100_training_template_sets (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        template_exercise_id text not null,
+        position integer not null check (position >= 0 and position < 100),
+        target_reps integer check (target_reps is null or (target_reps >= 0 and target_reps <= 10000)),
+        target_weight_kg numeric(7, 2) check (target_weight_kg is null or (target_weight_kg >= 0 and target_weight_kg < 5000)),
+        target_duration_seconds integer check (target_duration_seconds is null or (target_duration_seconds >= 0 and target_duration_seconds <= 604800)),
+        target_distance_meters bigint check (target_distance_meters is null or (target_distance_meters >= 0 and target_distance_meters <= 10000000)),
+        target_rpe numeric(3, 1) check (target_rpe is null or (target_rpe >= 1 and target_rpe <= 10)),
+        unique (id, user_id),
+        unique (user_id, template_exercise_id, position),
+        constraint project100_template_sets_exercise_fk
+          foreign key (template_exercise_id, user_id)
+          references project100_training_template_exercises(id, user_id)
+          on delete cascade,
+        check (
+          target_reps is not null or target_weight_kg is not null or
+          target_duration_seconds is not null or target_distance_meters is not null or
+          target_rpe is not null
+        )
+      )`,
+      `create table if not exists project100_training_sessions (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        source_template_id text,
+        title text not null check (char_length(btrim(title)) between 1 and 160),
+        activity_type text not null check (activity_type in (
+          'strength_home', 'forest', 'outdoor_gym', 'running',
+          'cycling', 'spinning', 'mobility', 'other'
+        )),
+        status text not null check (status in ('planned', 'in_progress', 'completed', 'skipped')),
+        session_date date not null,
+        planned_start_at timestamptz,
+        planned_end_at timestamptz,
+        started_at timestamptz,
+        ended_at timestamptz,
+        duration_seconds integer check (duration_seconds is null or (duration_seconds >= 0 and duration_seconds <= 604800)),
+        location text check (location is null or char_length(location) <= 200),
+        effort integer check (effort is null or (effort >= 1 and effort <= 10)),
+        body_before text check (body_before is null or char_length(body_before) <= 1000),
+        body_after text check (body_after is null or char_length(body_after) <= 1000),
+        notes text check (notes is null or char_length(notes) <= 3000),
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (id, user_id),
+        constraint project100_training_sessions_template_fk
+          foreign key (source_template_id, user_id)
+          references project100_training_templates(id, user_id)
+          on delete restrict,
+        check (planned_end_at is null or (planned_start_at is not null and planned_end_at > planned_start_at)),
+        check (ended_at is null or (started_at is not null and ended_at > started_at)),
+        check (status <> 'in_progress' or (started_at is not null and ended_at is null)),
+        check (status <> 'planned' or (started_at is null and ended_at is null)),
+        check (status <> 'skipped' or (started_at is null and ended_at is null))
+      )`,
+      `create unique index if not exists project100_training_sessions_one_active_idx
+        on project100_training_sessions (user_id)
+        where status = 'in_progress'`,
+      `create index if not exists project100_training_sessions_upcoming_idx
+        on project100_training_sessions (user_id, session_date, planned_start_at, id)
+        where status = 'planned'`,
+      `create index if not exists project100_training_sessions_history_idx
+        on project100_training_sessions (user_id, session_date desc, created_at desc, id)
+        where status = 'completed'`,
+      `create index if not exists project100_training_sessions_template_idx
+        on project100_training_sessions (user_id, source_template_id)
+        where source_template_id is not null`,
+      `create table if not exists project100_training_session_exercises (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        session_id text not null,
+        exercise_id text not null,
+        position integer not null check (position >= 0 and position < 100),
+        notes text check (notes is null or char_length(notes) <= 500),
+        unique (id, user_id),
+        unique (user_id, session_id, position),
+        constraint project100_session_exercises_session_fk
+          foreign key (session_id, user_id)
+          references project100_training_sessions(id, user_id)
+          on delete cascade,
+        constraint project100_session_exercises_exercise_fk
+          foreign key (exercise_id, user_id)
+          references project100_exercises(id, user_id)
+          on delete restrict
+      )`,
+      `create index if not exists project100_training_session_exercise_history_idx
+        on project100_training_session_exercises (user_id, exercise_id, session_id)`,
+      `create index if not exists project100_training_template_exercise_history_idx
+        on project100_training_template_exercises (user_id, exercise_id)`,
+      `create table if not exists project100_training_session_sets (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        session_exercise_id text not null,
+        position integer not null check (position >= 0 and position < 100),
+        target_reps integer check (target_reps is null or (target_reps >= 0 and target_reps <= 10000)),
+        target_weight_kg numeric(7, 2) check (target_weight_kg is null or (target_weight_kg >= 0 and target_weight_kg < 5000)),
+        target_duration_seconds integer check (target_duration_seconds is null or (target_duration_seconds >= 0 and target_duration_seconds <= 604800)),
+        target_distance_meters bigint check (target_distance_meters is null or (target_distance_meters >= 0 and target_distance_meters <= 10000000)),
+        target_rpe numeric(3, 1) check (target_rpe is null or (target_rpe >= 1 and target_rpe <= 10)),
+        actual_reps integer check (actual_reps is null or (actual_reps >= 0 and actual_reps <= 10000)),
+        actual_weight_kg numeric(7, 2) check (actual_weight_kg is null or (actual_weight_kg >= 0 and actual_weight_kg < 5000)),
+        actual_duration_seconds integer check (actual_duration_seconds is null or (actual_duration_seconds >= 0 and actual_duration_seconds <= 604800)),
+        actual_distance_meters bigint check (actual_distance_meters is null or (actual_distance_meters >= 0 and actual_distance_meters <= 10000000)),
+        actual_rpe numeric(3, 1) check (actual_rpe is null or (actual_rpe >= 1 and actual_rpe <= 10)),
+        completed boolean not null default false,
+        unique (id, user_id),
+        unique (user_id, session_exercise_id, position),
+        constraint project100_session_sets_exercise_fk
+          foreign key (session_exercise_id, user_id)
+          references project100_training_session_exercises(id, user_id)
+          on delete cascade,
+        check (
+          target_reps is not null or target_weight_kg is not null or
+          target_duration_seconds is not null or target_distance_meters is not null or
+          target_rpe is not null or actual_reps is not null or
+          actual_weight_kg is not null or actual_duration_seconds is not null or
+          actual_distance_meters is not null or actual_rpe is not null
+        )
+      )`,
+    ],
+  },
 ];
 
 function checksum(migration) {

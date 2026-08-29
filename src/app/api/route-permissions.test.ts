@@ -38,6 +38,17 @@ vi.mock("@/server/database", () => ({
   })),
   listHouseholdLogins: vi.fn(async () => []),
 }));
+// Projekt 100 storage is covered in its own scope test; here the routes are
+// only asked who they let through.
+vi.mock("@/server/project100-training", () => ({
+  loadProject100TrainingSessions: vi.fn(async () => []),
+  loadProject100TrainingTemplates: vi.fn(async () => []),
+  createProject100TrainingSession: vi.fn(async () => ({ id: "session-1" })),
+  createProject100TrainingTemplate: vi.fn(async () => ({ id: "template-1" })),
+  deleteProject100TrainingSession: vi.fn(async () => true),
+  updateProject100TrainingSession: vi.fn(async () => ({ id: "session-1" })),
+  archiveProject100TrainingTemplate: vi.fn(async () => true),
+}));
 
 import { PATCH as householdPatch } from "@/app/api/household/route";
 import { GET as loginsGet } from "@/app/api/logins/route";
@@ -45,15 +56,27 @@ import { POST as undoPost } from "@/app/api/undo/route";
 import { POST as createLogin } from "@/app/api/people/[id]/login/route";
 import { POST as peoplePost } from "@/app/api/people/route";
 import { GET as tasksGet, POST as tasksPost } from "@/app/api/tasks/route";
+import {
+  GET as trainingSessionsGet,
+  POST as trainingSessionsPost,
+} from "@/app/api/project100/training/sessions/route";
+import {
+  DELETE as trainingSessionDelete,
+  PATCH as trainingSessionPatch,
+} from "@/app/api/project100/training/sessions/[id]/route";
+import { POST as trainingTemplatesPost } from "@/app/api/project100/training/templates/route";
 
-function membership(role: "owner" | "adult" | "viewer") {
+function membership(
+  role: "owner" | "adult" | "viewer",
+  personType: "adult" | "child" = "adult",
+) {
   return {
     membership_id: "membership-1",
     user_id: "user-1",
     household_id: "household-real",
     person_id: "person-1",
     role,
-    person_type: "adult",
+    person_type: personType,
   };
 }
 
@@ -226,3 +249,143 @@ describe("cross-site writes", () => {
     expect(response.status).toBe(403);
   });
 });
+
+describe("Projekt 100 is a private adult workspace", () => {
+  const sessionsUrl = "http://localhost/api/project100/training/sessions";
+
+  function trainingSession() {
+    return {
+      title: "Helkropp hemma",
+      activityType: "strength_home",
+      status: "completed",
+      sessionDate: "2026-08-26",
+      exercises: [{ name: "Marklyft", sets: [{ reps: 8, weightKg: 60 }] }],
+    };
+  }
+
+  beforeEach(() => {
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("owner");
+  });
+
+  it("answers 401 before it tells anyone that training data exists", async () => {
+    harness.state.session = null;
+    harness.state.membership = null;
+
+    const read = await trainingSessionsGet(new Request(sessionsUrl));
+    const write = await trainingSessionsPost(jsonPost(sessionsUrl, trainingSession()));
+
+    expect(read.status).toBe(401);
+    expect(write.status).toBe(401);
+  });
+
+  it("keeps a child in the household out of the adult workspace", async () => {
+    // A child may read the family calendar. Body, weight and training are not
+    // household data and stay closed even for a signed-in family member.
+    harness.state.membership = membership("viewer", "child");
+
+    const read = await trainingSessionsGet(new Request(sessionsUrl));
+
+    expect(read.status).toBe(403);
+    expect(await read.json()).toMatchObject({ code: "PROJECT100_ADULT_ONLY" });
+  });
+
+  it("lets a read-only adult look without letting them log", async () => {
+    harness.state.membership = membership("viewer");
+
+    const read = await trainingSessionsGet(new Request(sessionsUrl));
+    const write = await trainingSessionsPost(jsonPost(sessionsUrl, trainingSession()));
+
+    expect(read.status).toBe(200);
+    expect(write.status).toBe(403);
+    expect(await write.json()).toMatchObject({ code: "READ_ONLY_MEMBER" });
+  });
+
+  it("refuses a training write that arrives from another site", async () => {
+    const response = await trainingSessionsPost(
+      new Request(sessionsUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://elak.example",
+        },
+        body: JSON.stringify(trainingSession()),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("refuses a filter it does not understand instead of ignoring it", async () => {
+    // An unread `?userId=` must never look like it was honoured.
+    const response = await trainingSessionsGet(
+      new Request(`${sessionsUrl}?userId=someone-else`),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "PROJECT100_UNKNOWN_QUERY" });
+  });
+
+  it("refuses an id that tries to walk out of its own route", async () => {
+    const response = await trainingSessionDelete(
+      new Request(`${sessionsUrl}/x`, { method: "DELETE", headers: { origin: "http://localhost" } }),
+      { params: Promise.resolve({ id: "../templates/template-1" }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it("keeps a read-only adult from closing a planned pass", async () => {
+    const move = {
+      action: "move",
+      sessionDate: "2026-08-28",
+      plannedStartAt: null,
+      plannedEndAt: null,
+    };
+    const patch = (): Request =>
+      new Request("http://localhost/api/project100/training/sessions/session-1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json", origin: "http://localhost" },
+        body: JSON.stringify(move),
+      });
+
+    harness.state.membership = membership("viewer");
+    const viewer = await trainingSessionPatch(patch(), {
+      params: Promise.resolve({ id: "session-1" }),
+    });
+
+    harness.state.membership = membership("adult");
+    const adult = await trainingSessionPatch(patch(), {
+      params: Promise.resolve({ id: "session-1" }),
+    });
+
+    expect(viewer.status).toBe(403);
+    expect(await viewer.json()).toMatchObject({ code: "READ_ONLY_MEMBER" });
+    expect(adult.status).toBe(200);
+  });
+
+  it("holds a template to the same gates as a session", async () => {
+    harness.state.membership = membership("viewer", "child");
+    const child = await trainingTemplatesPost(
+      jsonPost("http://localhost/api/project100/training/templates", {
+        name: "30 min helkropp",
+        activityType: "strength_home",
+        exercises: [{ name: "Marklyft", sets: [{ reps: 12 }] }],
+      }),
+    );
+
+    harness.state.membership = membership("adult");
+    const adult = await trainingTemplatesPost(
+      jsonPost("http://localhost/api/project100/training/templates", {
+        name: "30 min helkropp",
+        activityType: "strength_home",
+        exercises: [{ name: "Marklyft", sets: [{ reps: 12 }] }],
+      }),
+    );
+
+    expect(child.status).toBe(403);
+    expect(adult.status).toBe(201);
+  });
+});
+
