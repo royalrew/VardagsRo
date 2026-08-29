@@ -22,6 +22,9 @@ Gäller: ersättaren till "Mitt spår"
   historiken skrivs om.
 - [x] Privat medielagring: egna objektnycklar per användare, kortlivade
   signerade adresser, förhandsbilder och fullständig radering.
+- [x] Kroppsresan: vikt, kroppsmått och egna mått som normaliserade rader,
+  härledda milstolpar, tillgänglig utvecklingsgraf och kroppsbilder bredvid
+  vikten. Vikterna ur den gamla hälsologgen är migrerade hit.
 - [ ] Gemensam tidslinje som väver samman pass, media, vikt och anteckningar.
 - [ ] Avveckling av de gamla Solo-tabellerna och den inbäddade Solo-vyn.
 - [ ] Måltidslogg, kroppsmått, Jarvis-minne och innehållsflöde.
@@ -383,8 +386,8 @@ arbetsflöden — inte från att visa så mycket information som möjligt samtid
 5. ~~Bygg träningssidorna.~~ Klar 2026-08-29. Detaljsidor per pass
    (`/traning/pass/[id]`, `/historik`, `/mallar`) återstår; arbetsytan bär
    flödet så länge.
-6. ~~Bygg det privata mediebiblioteket.~~ Klar 2026-08-29. Kropp och dagbok
-   byggs ovanpå samma tidslinje härnäst.
+6. ~~Bygg det privata mediebiblioteket och kroppsresan.~~ Klar 2026-08-29.
+   Dagboken och den gemensamma tidslinjen byggs härnäst.
 7. Bygg kostsidorna och måltidsflödet.
 8. Bygg insikter när tillräcklig strukturerad data finns.
 9. Bygg Jarvis som egen arbetsyta.
@@ -453,15 +456,19 @@ och se den i historiken.
 
 Mål: beskriva utvecklingen bättre än med endast vågens tal.
 
-- Vikt, midja, bröst, armar, lår och valfria egna mått.
-- Kroppsbilder framifrån, sidan och bakifrån.
-- Påminnelse om samma ljus, avstånd och vinkel.
-- Före/efter-jämförelse med dragbar skiljelinje.
-- Milstolpar, exempelvis 82,5, 85, 90, 95 och 100 kg.
-- Styrkeutveckling visas bredvid vikt och mått.
-- Målet 100 kg behandlas som riktning, inte bevis på 20 kg ren muskelökning.
+- ~~Vikt, midja, bröst, armar, lår och valfria egna mått.~~ Klar 2026-08-29.
+- ~~Kroppsbilder med datum och vikt bredvid varandra.~~ Klar 2026-08-29.
+- ~~Påminnelse om samma ljus, avstånd och vinkel.~~ Klar 2026-08-29.
+- ~~Milstolpar, exempelvis 82,5, 85, 90, 95 och 100 kg.~~ Klar 2026-08-29,
+  härledda mellan startvikt och mål i stället för inskrivna.
+- ~~Målet 100 kg behandlas som riktning, inte bevis på ren muskelökning.~~
+- Före/efter-jämförelse med dragbar skiljelinje. Återstår.
+- Styrkeutveckling bredvid vikt och mått. Återstår; kräver att träningsvolymen
+  läses över samma period som måtten.
 
-Klart när vikt, mått, bilder och prestation kan jämföras över samma period.
+Grafen ritar ett mått i taget på en axel. Kilo och centimeter delar ingen skala,
+och ett diagram med båda skulle påstå ett samband som inte finns i talen.
+Samma värden står alltid i en tabell under grafen.
 
 ### Fas 4 — Kost och måltider
 
@@ -600,6 +607,7 @@ Fas 0, fas 1 och fas 2 vilar nu på riktig kod:
    mål (`target_*`) och faktiskt utfall (`actual_*`) ligger i skilda kolumner.
 3. Privat mediamodell med objektnycklar på formen `p100/{userId}/{kategori}/…`,
    som kontrolleras mot den inloggade läsaren innan någon adress signeras.
+   Kroppsmodellen ligger bredvid: en rad per mätt sak, per dag, per konto.
 4. Read-only servervy av den inloggade personens jobbschema.
 5. Tester som bevisar användarscope, vuxengräns, mallägarskap, medieläckage och
    att en ändrad plan inte skriver om historiken.
@@ -609,10 +617,10 @@ servern spara en bild i stället för att skapa en rad utan bild.
 
 ## Nästa konkreta leverans
 
-1. Kroppsresan: vikt, mått och milstolpar som egna Projekt 100-rader, med
-   kroppsbilderna från mediebiblioteket bredvid.
-2. Dagboken som egen skrivyta ovanpå samma privata tidslinje.
-3. Den gemensamma tidslinjevyn som väver samman pass, media, vikt och
-   anteckningar per dag.
+1. Dagboken som egen skrivyta, med möjlighet att märka en anteckning som extra
+   privat och utesluta den ur Jarvis-minnet.
+2. Den gemensamma tidslinjevyn som väver samman pass, media, vikt och
+   anteckningar per dag — den sista biten av fas 1.
+3. Styrkeutvecklingen bredvid vikt och mått, över samma period.
 4. Avveckling av `solo_*`-tabellerna och den inbäddade `SoloView` när deras
    data har flyttats.
