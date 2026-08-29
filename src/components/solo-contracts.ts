@@ -21,6 +21,8 @@ export interface SoloProgressView {
   settings: SoloSettings;
   recentActions: SoloAction[];
   healthToday: SoloHealthDay | null;
+  /** Recent private check-ins power the journey graph and journal memory. */
+  recentHealthDays: SoloHealthDay[];
   zeroXpActivities: readonly string[];
 }
 

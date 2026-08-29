@@ -18,6 +18,7 @@ import {
   Swords,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AddDocumentModal } from "@/components/AddDocumentModal";
@@ -33,7 +34,6 @@ import type { PersonDraft } from "@/components/FamilySettingsModal";
 import { HomeView } from "@/components/HomeView";
 import { ManualEventModal } from "@/components/ManualEventModal";
 import { OnboardingModal } from "@/components/OnboardingModal";
-import { SoloView } from "@/components/SoloView";
 import { onboardingStorageKey } from "@/components/onboarding-contracts";
 import { authClient } from "@/lib/auth-client";
 import {
@@ -53,16 +53,23 @@ import type {
   FamilyTask,
 } from "@/lib/types";
 
-type View = "home" | "calendar" | "ask" | "documents" | "solo";
+type View = "home" | "calendar" | "ask" | "documents";
+type NavigationItem = {
+  label: string;
+  icon: typeof Home;
+} & (
+  | { id: View; href?: undefined }
+  | { id: "project100"; href: "/projekt-100" }
+);
 
 const STORAGE_KEY = "vardagsro-v1-family-data";
 
-const navigation: Array<{ id: View; label: string; icon: typeof Home }> = [
+const navigation: NavigationItem[] = [
   { id: "home", label: "Hem", icon: Home },
   { id: "calendar", label: "Kalender", icon: CalendarDays },
   { id: "ask", label: "Fråga", icon: Sparkles },
   { id: "documents", label: "Dokument", icon: FileText },
-  { id: "solo", label: "Mitt spår", icon: Swords },
+  { id: "project100", label: "Projekt 100", icon: Swords, href: "/projekt-100" },
 ];
 
 export function FamilyApp({
@@ -100,7 +107,7 @@ export function FamilyApp({
   // way in; the endpoint behind it is scoped to the account either way, so this
   // is about not offering a door rather than about holding one shut.
   const visibleNavigation = navigation.filter(
-    (item) => item.id !== "solo" || currentPerson?.personType === "adult",
+    (item) => item.id !== "project100" || currentPerson?.personType === "adult",
   );
 
   useEffect(() => {
@@ -110,8 +117,13 @@ export function FamilyApp({
     }
 
     const frame = window.requestAnimationFrame(() => {
-      const requestedView = window.location.hash.slice(1) as View;
-      if (navigation.some((item) => item.id === requestedView)) {
+      const requestedHash = window.location.hash.slice(1);
+      if (requestedHash === "solo") {
+        router.replace("/projekt-100");
+        return;
+      }
+      const requestedView = requestedHash as View;
+      if (navigation.some((item) => item.id === requestedView && !item.href)) {
         setActiveView(requestedView);
       }
       let localData: DashboardData | null = null;
@@ -143,7 +155,7 @@ export function FamilyApp({
       hydrated.current = true;
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [allowLocalDemo]);
+  }, [allowLocalDemo, router]);
 
   useEffect(() => {
     if (!allowLocalDemo || !hydrated.current) return;
@@ -714,8 +726,6 @@ export function FamilyApp({
             onOpenDocument={openDocumentById}
           />
         );
-      case "solo":
-        return <SoloView />;
       case "documents":
         return (
           <DocumentsView
@@ -764,6 +774,14 @@ export function FamilyApp({
           <span className="nav-label">Översikt</span>
           {visibleNavigation.map((item) => {
             const Icon = item.icon;
+            if (item.href) {
+              return (
+                <Link key={item.id} href={item.href}>
+                  <Icon size={19} strokeWidth={2} />
+                  {item.label}
+                </Link>
+              );
+            }
             return (
               <button
                 key={item.id}
@@ -831,12 +849,15 @@ export function FamilyApp({
             <Bell size={20} />
           </button>
         </header>
-        <main className={activeView === "solo" ? "full-bleed" : undefined}>{content}</main>
+        <main>{content}</main>
       </div>
 
       <nav className="mobile-nav" aria-label="Mobilmeny">
         {visibleNavigation.slice(0, 2).map((item) => {
           const Icon = item.icon;
+          if (item.href) {
+            return <Link key={item.id} href={item.href}><Icon size={20} /> <span>{item.label}</span></Link>;
+          }
           return (
             <button key={item.id} className={activeView === item.id ? "active" : ""} onClick={() => navigate(item.id)}>
               <Icon size={20} /> <span>{item.label}</span>
@@ -848,6 +869,9 @@ export function FamilyApp({
         </button>
         {visibleNavigation.slice(2).map((item) => {
           const Icon = item.icon;
+          if (item.href) {
+            return <Link key={item.id} href={item.href}><Icon size={20} /> <span>{item.label}</span></Link>;
+          }
           return (
             <button key={item.id} className={activeView === item.id ? "active" : ""} onClick={() => navigate(item.id)}>
               <Icon size={20} /> <span>{item.label}</span>

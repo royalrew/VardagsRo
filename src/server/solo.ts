@@ -163,6 +163,7 @@ export async function loadSoloProgress(
     quests: buildSoloQuests(talents, summary),
     recentActions: actions.slice(0, RECENT_ACTIONS),
     healthToday: healthDays.find((day) => day.date === today) ?? null,
+    recentHealthDays: healthDays.slice(0, 90),
     zeroXpActivities: SOLO_ZERO_XP_ACTIVITIES,
   };
 }

@@ -36,7 +36,7 @@ type QueryClient = SqlClient | TransactionClient;
 let sqlClient: SqlClient | null = null;
 let sqlUrl = "";
 
-export const LATEST_DATABASE_MIGRATION = "014_solo_inbound";
+export const LATEST_DATABASE_MIGRATION = "015_project100_training";
 
 const DOCUMENT_FOLDER_LOCK_NAMESPACE = 1_947_046_335;
 
