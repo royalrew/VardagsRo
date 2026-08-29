@@ -84,6 +84,84 @@ aktivt väljer "Visa i familjekalendern" får endast ett neutralt kalenderblock,
 exempelvis "Träning" eller "Egentid", skapas. Vikt, kropp, kost, dagbok och
 Jarvis-analys får aldrig kopieras till familjekalendern.
 
+## Kosten ska räkna åt användaren
+
+Kostdelen ska inte vara en dagbok över vad som ätits. Den ska svara på tre
+frågor som återkommer varje dag: hur mycket protein behöver jag idag, vad finns
+det faktiskt att äta, och när hinner jag äta det?
+
+Allt nedan bygger på data som redan finns i Projekt 100. Vikten kommer från
+kroppsloggen, träningsbelastningen från träningsloggen och arbetstiderna från
+familjekalendern. Ingenting av det ska behöva skrivas in en andra gång.
+
+### Proteinmålet räknas fram, det skrivs inte in
+
+- Underlaget är senast loggade vikt och veckans faktiska träningsbelastning.
+- Målet visas som ett intervall, inte som ett exakt tal. Riktmärket är cirka
+  1,6–2,2 gram per kilo kroppsvikt, där en tung träningsvecka ligger högt i
+  intervallet och en vecka med mycket arbete och lite träning lägre.
+- Formeln och de ingående värdena ska alltid vara synliga: vilken vikt, vilken
+  vecka, hur många pass. Ett tal utan sitt underlag är inte till hjälp.
+- Underlaget är en verklig loggad vikt, aldrig målvikten. 100 kg är riktningen,
+  inte räkneunderlaget.
+- Användaren ska kunna skriva över målet. Det framräknade är ett förslag.
+- Saknas vikt eller träningsdata sägs det rakt ut i stället för att ett tal
+  visas som ser säkert ut.
+
+Energi och protein visas som täckning under dagen, aldrig som en skuld som
+växer. En dag under målet är en dag under målet, inte ett underkännande.
+
+### Tillskott hör hemma i modellen, inte i en anteckning
+
+- Användaren lägger in de tillskott som faktiskt finns hemma — proteinpulver,
+  kreatin och vad det nu blir — med dos och syfte.
+- Tidpunkt anges endast där tidpunkten har betydelse. För kreatin är det den
+  dagliga mängden som spelar roll, inte klockslaget, och då ska appen säga det
+  rakt ut i stället för att hitta på ett schema som bara ser genomtänkt ut.
+- Proteinpulver föreslås som utfyllnad när dagens loggade protein ligger under
+  intervallet, med de återstående grammen uträknade — inte som en fast rutin
+  oavsett vad som redan ätits.
+- En påminnelse hängs på något verkligt: ett mellanmål, ett pass, slutet på ett
+  arbetspass. Aldrig på ett godtyckligt klockslag.
+- Projekt 100 ger inga medicinska råd och föreslår inga tillskott användaren
+  inte själv har valt att använda.
+
+### Matförberedelser är en egen modell, inte ett tips
+
+Det här är kärnan i kostdelen, och den viktigaste enskilda mekanismen för att
+äta tillräckligt under en vecka med skiftande arbetstider.
+
+En **sats** är ett objekt med råvaror, mängder, antal portioner och beräknade
+makron per portion. "1 kg kyckling, 800 g ris, 600 g grönsaker" blir sex
+portioner med känt protein och kända kolhydrater i varje.
+
+Det ger tre saker som ett vanligt recept inte ger:
+
+- En loggad måltid kan vara "en portion ur sats X". Makrona är redan kända, så
+  ingen uppskattning behövs och loggningen tar ett tryck.
+- Satsen håller reda på hur många portioner som är kvar. Frysen blir läsbar.
+- Satser kan planeras mot kommande arbetspass, så att en lång arbetsdag möts av
+  mat som redan finns i stället för av ett beslut klockan 22.
+
+### Råvaror hemma
+
+- En lista över det som alltid bör finnas, med mängder som räcker till de satser
+  och måltider användaren faktiskt använder.
+- Listan härleds ur egna favoriter och satser, inte ur en generisk mall. Det som
+  aldrig lagas ska inte stå på inköpslistan.
+- Det som saknas inför veckans planerade satser blir en inköpslista.
+- Ingen automatisk beställning och inga affärslänkar.
+
+### Ett förslag ska kunna säga varför
+
+Generiska måltidsförslag är brus. Ett förslag är värt något först när det vet
+vad som finns hemma, vad som ligger i frysen, hur mycket protein som är kvar på
+dagen och när nästa arbets- eller träningspass börjar.
+
+Varje förslag ska därför kunna visa sitt underlag, ungefär: "tre portioner kvar
+i frysen, 60 g protein kvar idag, du börjar jobbet 14:00." Ett förslag som inte
+kan förklara sig ska inte visas.
+
 ## Produktens fem lager
 
 ### 1. Fånga
@@ -269,9 +347,14 @@ Träningssidan är en riktig arbetsyta, inte ett formulärkort.
 
 - Dagens måltider i kronologisk ordning.
 - Kameraknapp som primär handling på mobil.
-- Protein och energi som översikt, inte som skamindikator.
+- Dagens proteinintervall med sitt underlag synligt, som täckning och inte som
+  skamindikator.
+- Satser och portioner som finns kvar, så att frysen går att läsa.
+- Vad som föreslås härnäst, och varför just det.
 - Veckovy och mat runt kommande arbetspass.
 - Favoriter, recept och återkommande måltider.
+- Skafferi och inköpslista härledd ur det som faktiskt lagas.
+- Tillskott med dos, syfte och tidpunkt endast där tidpunkten betyder något.
 - Möjlighet att komplettera en snabb bildlogg senare.
 - Tydlig märkning av manuella värden respektive AI-uppskattningar.
 
@@ -483,14 +566,24 @@ Mål: göra kostloggning visuell, snabb och korrigerbar.
 - Fotografera måltiden först; detaljer är valfria i stunden.
 - Måltidstyp, innehåll, mängd, protein och uppskattad energi.
 - Hunger före, mättnad efter och hur måltiden kändes.
+- Proteinintervall framräknat ur senast loggade vikt och veckans faktiska
+  träningsbelastning, med underlaget synligt och möjligt att skriva över.
+- Satser: råvaror, portioner och makron per portion, med kvarvarande portioner
+  räknade. En måltid ska kunna loggas som en portion ur en sats.
+- Skafferi med det som alltid bör finnas, härlett ur egna satser och favoriter,
+  och en inköpslista över det som saknas inför veckan.
+- Tillskott med dos och syfte. Tidpunkt anges bara där den har betydelse.
 - Återanvändbara favoriter och recept.
-- Matförberedelser kopplade till kommande arbetsdagar.
+- Satser och måltider planerade mot kommande arbetsdagar.
 - Veckoöversikt över protein och måltidskontinuitet.
+- Måltider vävs in i den privata tidslinjen tillsammans med pass och mätningar.
+- Förslag ska kunna visa sitt underlag och får inte visas utan det.
 - Senare bildanalys får endast ge förslag som användaren kan rätta.
 - AI-uppskattningar märks tydligt och presenteras aldrig som exakta värden.
 
-Klart när en måltid kan loggas med en bild på några sekunder och kompletteras
-senare.
+Klart när en måltid kan loggas med en bild på några sekunder eller som en
+portion ur en sats, och när dagens proteinintervall går att spåra tillbaka till
+den vikt och de pass det räknats fram ur.
 
 ### Fas 5 — Schemasmart planering
 
@@ -599,6 +692,9 @@ tidiga datamodeller utformas så att denna koppling inte kräver en ombyggnad.
 - Familjekalendern är källan till jobbschemat.
 - Ett arbetspass ska inte behöva registreras två gånger.
 - AI-förslag ska vara märkta, korrigerbara och källbundna.
+- Ett kostförslag ska kunna säga varför det föreslås, annars visas det inte.
+- Ett räknat mål visas som intervall med sitt underlag, aldrig som ett exakt
+  tal utan ursprung.
 - Missade dagar är luckor i data, inte moraliska misslyckanden.
 - En ändrad plan får inte skriva om det som faktiskt hände.
 - Vikt är en datapunkt; prestation, mått, bilder och välmående ger helheten.
