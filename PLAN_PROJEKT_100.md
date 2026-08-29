@@ -25,9 +25,12 @@ Gäller: ersättaren till "Mitt spår"
 - [x] Kroppsresan: vikt, kroppsmått och egna mått som normaliserade rader,
   härledda milstolpar, tillgänglig utvecklingsgraf och kroppsbilder bredvid
   vikten. Vikterna ur den gamla hälsologgen är migrerade hit.
-- [ ] Gemensam tidslinje som väver samman pass, media, vikt och anteckningar.
+- [x] Dagbok med dagsform, sökbart arkiv och en per-anteckning-grind som håller
+  assistenten ute — villkoret ligger i frågan, inte i ett filter efteråt.
+- [x] Gemensam privat tidslinje som väver samman pass, mätningar, bilder och
+  anteckningar per dag.
 - [ ] Avveckling av de gamla Solo-tabellerna och den inbäddade Solo-vyn.
-- [ ] Måltidslogg, kroppsmått, Jarvis-minne och innehållsflöde.
+- [ ] Måltidslogg, insikter, Jarvis-minne och innehållsflöde.
 
 ## Vision
 
@@ -284,13 +287,16 @@ Träningssidan är en riktig arbetsyta, inte ett formulärkort.
 
 ### Dagbok
 
-- Ren skrivyta med minimala störningar.
-- Fritext eller valfria reflektionsfrågor.
-- Kalender och kronologisk historik.
-- Kopplingar till dagens jobb, pass, måltider och bilder.
-- Sök i egna anteckningar.
-- Möjlighet att markera en anteckning som extra privat och utesluta den från
-  Jarvis-minnet.
+- ~~Ren skrivyta med minimala störningar.~~ Klar 2026-08-29.
+- ~~Fritext eller valfria reflektionsfrågor.~~ Klar 2026-08-29.
+- ~~Kronologisk historik med dagsform och sömn.~~ Klar 2026-08-29.
+- ~~Kopplingar till dagens pass, mätningar och bilder via tidslinjen.~~
+  Klar 2026-08-29. Jobbpassen och måltiderna vävs in när schemalagret
+  respektive kostmodellen är på plats.
+- ~~Sök i egna anteckningar.~~ Klar 2026-08-29, via textsökning i databasen.
+- ~~Markera en anteckning som extra privat och utesluta den från
+  Jarvis-minnet.~~ Klar 2026-08-29.
+- Månadskalender som överblick. Återstår.
 
 ### Insikter
 
@@ -386,8 +392,8 @@ arbetsflöden — inte från att visa så mycket information som möjligt samtid
 5. ~~Bygg träningssidorna.~~ Klar 2026-08-29. Detaljsidor per pass
    (`/traning/pass/[id]`, `/historik`, `/mallar`) återstår; arbetsytan bär
    flödet så länge.
-6. ~~Bygg det privata mediebiblioteket och kroppsresan.~~ Klar 2026-08-29.
-   Dagboken och den gemensamma tidslinjen byggs härnäst.
+6. ~~Bygg kropp, dagbok och media ovanpå tidslinjen.~~ Klar 2026-08-29.
+   Kostsidorna står härnäst.
 7. Bygg kostsidorna och måltidsflödet.
 8. Bygg insikter när tillräcklig strukturerad data finns.
 9. Bygg Jarvis som egen arbetsyta.
@@ -420,8 +426,8 @@ hälsodata fortfarande är tillgänglig.
 
 Mål: skapa minnet som resten av produkten kan byggas ovanpå.
 
-- Skapa en generell privat tidslinje för check-ins, pass, måltider, mått,
-  bilder, anteckningar och milstolpar.
+- ~~Skapa en generell privat tidslinje för check-ins, pass, mått, bilder och
+  anteckningar.~~ Klar 2026-08-29. Måltider vävs in när kostmodellen finns.
 - Lagra originalbilder privat i befintlig objektlagring.
 - Skapa mindre förhandsbilder för snabb laddning.
 - Använd kortlivade signerade bildadresser.
@@ -608,8 +614,10 @@ Fas 0, fas 1 och fas 2 vilar nu på riktig kod:
 3. Privat mediamodell med objektnycklar på formen `p100/{userId}/{kategori}/…`,
    som kontrolleras mot den inloggade läsaren innan någon adress signeras.
    Kroppsmodellen ligger bredvid: en rad per mätt sak, per dag, per konto.
-4. Read-only servervy av den inloggade personens jobbschema.
-5. Tester som bevisar användarscope, vuxengräns, mallägarskap, medieläckage och
+4. Privat tidslinje som väver samman fyra källor per dag utan att foga ihop dem
+   i en fråga, och en dagbok med en grind assistenten inte kan gå runt.
+5. Read-only servervy av den inloggade personens jobbschema.
+6. Tester som bevisar användarscope, vuxengräns, mallägarskap, medieläckage och
    att en ändrad plan inte skriver om historiken.
 
 Bildlagringen kräver konfigurerad objektlagring (`R2_*`). Utan den vägrar
@@ -617,10 +625,10 @@ servern spara en bild i stället för att skapa en rad utan bild.
 
 ## Nästa konkreta leverans
 
-1. Dagboken som egen skrivyta, med möjlighet att märka en anteckning som extra
-   privat och utesluta den ur Jarvis-minnet.
-2. Den gemensamma tidslinjevyn som väver samman pass, media, vikt och
-   anteckningar per dag — den sista biten av fas 1.
-3. Styrkeutvecklingen bredvid vikt och mått, över samma period.
+1. Kost och måltider: den bildbaserade matloggen, med matbilderna från
+   mediebiblioteket som primär väg in och måltiderna invävda i tidslinjen.
+2. Styrkeutvecklingen bredvid vikt och mått, över samma period.
+3. Insikter när det finns tillräckligt med strukturerad data att jämföra.
 4. Avveckling av `solo_*`-tabellerna och den inbäddade `SoloView` när deras
-   data har flyttats.
+   data har flyttats. Vikt, energi, sömn och dagsanteckning är redan migrerade;
+   kvar står karriärstegen, som Projekt 100 inte ärver.
