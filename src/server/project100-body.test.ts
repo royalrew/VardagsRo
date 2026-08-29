@@ -110,7 +110,12 @@ describe("Projekt 100 body journey", () => {
       code: "PROJECT100_ADULT_ONLY",
     });
     await expect(
-      saveProject100Settings(CHILD, { weightGoalKg: 100, startWeightKg: null, heightCm: null }),
+      saveProject100Settings(CHILD, {
+        weightGoalKg: 100,
+        startWeightKg: null,
+        heightCm: null,
+        proteinTargetG: null,
+      }),
     ).rejects.toMatchObject({ code: "PROJECT100_ADULT_ONLY" });
     expect(database.sql).not.toHaveBeenCalled();
   });

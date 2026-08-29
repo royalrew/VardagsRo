@@ -815,6 +815,138 @@ const migrations = [
        on conflict (user_id, written_on) do nothing`,
     ],
   },
+  {
+    version: "019_project100_nutrition",
+    name: "Foods, batches, meals and supplements",
+    statements: [
+      // A food carries macros per 100 g, which is how a package is labelled and
+      // how a kitchen scale reads. A staple is the same row with a flag: the
+      // things worth keeping at home are the things actually cooked.
+      `create table if not exists project100_foods (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        name text not null check (char_length(btrim(name)) between 1 and 120),
+        normalized_name text not null check (char_length(btrim(normalized_name)) between 1 and 120),
+        protein_per_100g numeric(6, 2) not null check (protein_per_100g >= 0 and protein_per_100g <= 100),
+        carbs_per_100g numeric(6, 2) not null check (carbs_per_100g >= 0 and carbs_per_100g <= 100),
+        fat_per_100g numeric(6, 2) not null check (fat_per_100g >= 0 and fat_per_100g <= 100),
+        kcal_per_100g numeric(7, 2) check (kcal_per_100g is null or (kcal_per_100g >= 0 and kcal_per_100g <= 950)),
+        is_staple boolean not null default false,
+        staple_target_grams integer check (
+          staple_target_grams is null or (staple_target_grams > 0 and staple_target_grams <= 100000)
+        ),
+        archived_at timestamptz,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (id, user_id),
+        unique (user_id, normalized_name)
+      )`,
+      `create index if not exists project100_foods_staple_idx
+        on project100_foods (user_id, name)
+        where is_staple and archived_at is null`,
+      // A batch is the mechanism that makes a long work day survivable: cook
+      // once, know the macros per portion, and know how many are left.
+      `create table if not exists project100_meal_batches (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        name text not null check (char_length(btrim(name)) between 1 and 120),
+        cooked_on date not null,
+        portions_total numeric(5, 2) not null check (portions_total > 0 and portions_total <= 100),
+        portions_left numeric(5, 2) not null check (portions_left >= 0),
+        note text check (note is null or char_length(note) <= 1000),
+        archived_at timestamptz,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (id, user_id),
+        check (portions_left <= portions_total)
+      )`,
+      `create index if not exists project100_meal_batches_open_idx
+        on project100_meal_batches (user_id, cooked_on desc, id)
+        where archived_at is null`,
+      `create table if not exists project100_meal_batch_items (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        batch_id text not null,
+        food_id text not null,
+        grams numeric(8, 2) not null check (grams > 0 and grams <= 100000),
+        position integer not null check (position >= 0 and position < 100),
+        unique (id, user_id),
+        unique (user_id, batch_id, position),
+        constraint project100_batch_items_batch_fk
+          foreign key (batch_id, user_id)
+          references project100_meal_batches(id, user_id)
+          on delete cascade,
+        constraint project100_batch_items_food_fk
+          foreign key (food_id, user_id)
+          references project100_foods(id, user_id)
+          on delete restrict
+      )`,
+      // The macros are written onto the meal, not read back through the batch.
+      // Editing a batch tomorrow must not rewrite what was eaten yesterday.
+      `create table if not exists project100_meals (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        eaten_on date not null,
+        eaten_at_minute integer check (eaten_at_minute is null or (eaten_at_minute >= 0 and eaten_at_minute < 1440)),
+        meal_type text not null check (meal_type in (
+          'breakfast', 'lunch', 'dinner', 'snack', 'shake'
+        )),
+        title text not null check (char_length(btrim(title)) between 1 and 160),
+        source text not null check (source in ('manual', 'batch', 'estimate')),
+        batch_id text,
+        portions numeric(5, 2) check (portions is null or (portions > 0 and portions <= 20)),
+        protein_g numeric(7, 2) check (protein_g is null or (protein_g >= 0 and protein_g <= 1000)),
+        carbs_g numeric(7, 2) check (carbs_g is null or (carbs_g >= 0 and carbs_g <= 2000)),
+        fat_g numeric(7, 2) check (fat_g is null or (fat_g >= 0 and fat_g <= 1000)),
+        kcal numeric(8, 2) check (kcal is null or (kcal >= 0 and kcal <= 20000)),
+        hunger_before integer check (hunger_before is null or (hunger_before >= 1 and hunger_before <= 5)),
+        fullness_after integer check (fullness_after is null or (fullness_after >= 1 and fullness_after <= 5)),
+        note text check (note is null or char_length(note) <= 1000),
+        media_id text,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (id, user_id),
+        check ((source = 'batch') = (batch_id is not null)),
+        constraint project100_meals_batch_fk
+          foreign key (batch_id, user_id)
+          references project100_meal_batches(id, user_id)
+          on delete set null,
+        constraint project100_meals_media_fk
+          foreign key (media_id, user_id)
+          references project100_media(id, user_id)
+          on delete set null
+      )`,
+      `create index if not exists project100_meals_day_idx
+        on project100_meals (user_id, eaten_on desc, eaten_at_minute, id)`,
+      // Dose and purpose always; a time of day only where it changes anything.
+      `create table if not exists project100_supplements (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        name text not null check (char_length(btrim(name)) between 1 and 80),
+        kind text not null check (kind in ('protein', 'creatine', 'vitamin', 'other')),
+        dose_amount numeric(7, 2) check (dose_amount is null or (dose_amount > 0 and dose_amount <= 10000)),
+        dose_unit text check (dose_unit is null or dose_unit in ('g', 'mg', 'ml', 'st')),
+        purpose text check (purpose is null or char_length(purpose) <= 300),
+        timing_matters boolean not null default false,
+        timing_note text check (timing_note is null or char_length(timing_note) <= 300),
+        archived_at timestamptz,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (id, user_id),
+        -- A timing note without timing_matters would be exactly the invented
+        -- schedule the plan refuses to build.
+        check (timing_note is null or timing_matters)
+      )`,
+      `create index if not exists project100_supplements_active_idx
+        on project100_supplements (user_id, kind)
+        where archived_at is null`,
+      // The computed protein range can be overridden; the override is stored,
+      // the range itself never is.
+      `alter table project100_settings
+        add column if not exists protein_target_g numeric(6, 2)
+        check (protein_target_g is null or (protein_target_g > 0 and protein_target_g <= 600))`,
+    ],
+  },
 ];
 
 function checksum(migration) {

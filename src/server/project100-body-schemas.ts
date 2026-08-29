@@ -87,6 +87,8 @@ export const project100SettingsSchema = z
     weightGoalKg: z.number().finite().gt(0).lt(400).nullable().default(null),
     startWeightKg: z.number().finite().gt(0).lt(400).nullable().default(null),
     heightCm: z.number().finite().gt(50).lt(260).nullable().default(null),
+    // The computed protein range is never stored; only the user's own override.
+    proteinTargetG: z.number().finite().gt(0).lt(600).nullable().default(null),
   })
   .strict();
 

@@ -221,13 +221,15 @@ export async function saveProject100Settings(
   const sql = await readyClient();
   const rows = await sql<SettingsRow[]>`
     insert into project100_settings
-      (user_id, weight_goal_kg, start_weight_kg, height_cm)
+      (user_id, weight_goal_kg, start_weight_kg, height_cm, protein_target_g)
     values
-      (${actor.userId}, ${input.weightGoalKg}, ${input.startWeightKg}, ${input.heightCm})
+      (${actor.userId}, ${input.weightGoalKg}, ${input.startWeightKg},
+       ${input.heightCm}, ${input.proteinTargetG})
     on conflict (user_id) do update
       set weight_goal_kg = excluded.weight_goal_kg,
           start_weight_kg = excluded.start_weight_kg,
           height_cm = excluded.height_cm,
+          protein_target_g = excluded.protein_target_g,
           updated_at = now()
     returning weight_goal_kg, start_weight_kg, height_cm
   `;
