@@ -75,8 +75,55 @@ export function JarvisWorkspace({
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Right sidebar tabs: "memories" | "context"
-  const [sidebarTab, setSidebarTab] = useState<"memories" | "context">("memories");
+  // Right sidebar tabs: "memories" | "context" | "gaps"
+  const [sidebarTab, setSidebarTab] = useState<"memories" | "context" | "gaps">("memories");
+
+  // Capability Gaps (Self-improving Wishlist)
+  const [gaps, setGaps] = useState<
+    Array<{
+      id: string;
+      rawQuery: string;
+      detectedIntent: string | null;
+      categoryHint: string | null;
+      channel: "telegram" | "web";
+      status: "pending" | "implemented" | "dismissed";
+      createdAt: string;
+    }>
+  >([]);
+  const [isLoadingGaps, setIsLoadingGaps] = useState(false);
+
+  async function loadGaps() {
+    setIsLoadingGaps(true);
+    try {
+      const res = await fetch("/api/project100/jarvis/gaps");
+      if (res.ok) {
+        const data = await res.json();
+        setGaps(data.gaps || []);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsLoadingGaps(false);
+    }
+  }
+
+  async function handleToggleGapStatus(id: string, currentStatus: string) {
+    const nextStatus = currentStatus === "implemented" ? "pending" : "implemented";
+    try {
+      const res = await fetch(`/api/project100/jarvis/gaps/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (res.ok) {
+        setGaps((prev) =>
+          prev.map((g) => (g.id === id ? { ...g, status: nextStatus } : g))
+        );
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   // New Memory Modal / Form
   const [showAddMemory, setShowAddMemory] = useState(false);
@@ -500,6 +547,16 @@ export function JarvisWorkspace({
           >
             <Zap /> Kontext
           </button>
+          <button
+            type="button"
+            className={sidebarTab === "gaps" ? "active" : ""}
+            onClick={() => {
+              setSidebarTab("gaps");
+              void loadGaps();
+            }}
+          >
+            <Lightbulb /> Önskelista
+          </button>
         </nav>
 
         {sidebarTab === "memories" ? (
@@ -673,7 +730,7 @@ export function JarvisWorkspace({
               )}
             </ul>
           </div>
-        ) : (
+        ) : sidebarTab === "context" ? (
           <div className="p100-context-panel">
             <div className="p100-context-box">
               <header>
@@ -751,7 +808,95 @@ export function JarvisWorkspace({
               )}
             </div>
           </div>
-        )}
+        ) : null}
+
+        {sidebarTab === "gaps" ? (
+          <div className="p100-memories-panel">
+            <div className="p100-memories-header">
+              <div>
+                <strong>Önskelista / Backlogg</strong>
+                <p>
+                  Frågor och kommandon du ställt i Telegram eller webben som
+                  Jarvis saknar funktion för än.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="p100-btn p100-btn-sm"
+                onClick={() => void loadGaps()}
+                disabled={isLoadingGaps}
+              >
+                <RotateCcw /> Uppdatera
+              </button>
+            </div>
+
+            {isLoadingGaps ? (
+              <p className="p100-empty-copy">Laddar önskemål...</p>
+            ) : gaps.length === 0 ? (
+              <div className="p100-memory-empty">
+                <Lightbulb />
+                <h4>Inga olösta önskemål loggade</h4>
+                <p>
+                  När du frågar Jarvis om något som koden inte stödjer än, sparas
+                  det automatiskt här som underlag för nästa utvecklingssession.
+                </p>
+              </div>
+            ) : (
+              <div className="p100-memories-list">
+                {gaps.map((gap) => (
+                  <article
+                    key={gap.id}
+                    className={`p100-memory-card ${
+                      gap.status === "implemented" ? "p100-memory-source" : ""
+                    }`}
+                  >
+                    <header>
+                      <span className="p100-mem-badge">
+                        {gap.channel === "telegram" ? "📱 Telegram" : "🌐 Webb"}
+                      </span>
+                      {gap.categoryHint ? (
+                        <span className="p100-mem-badge p100-mem-cat">
+                          {gap.categoryHint}
+                        </span>
+                      ) : null}
+                      <span
+                        className={`p100-status-pill ${
+                          gap.status === "implemented" ? "active" : ""
+                        }`}
+                      >
+                        {gap.status === "implemented"
+                          ? "✓ Löst i koden"
+                          : "⏳ Väntar"}
+                      </span>
+                    </header>
+                    <p>
+                      <strong>&quot;{gap.rawQuery}&quot;</strong>
+                    </p>
+                    {gap.detectedIntent ? (
+                      <small style={{ color: "var(--p100-accent)" }}>
+                        Önskad funktion: {gap.detectedIntent}
+                      </small>
+                    ) : null}
+                    <footer>
+                      <small>{gap.createdAt.slice(0, 10)}</small>
+                      <button
+                        type="button"
+                        className="p100-btn p100-btn-xs"
+                        onClick={() =>
+                          void handleToggleGapStatus(gap.id, gap.status)
+                        }
+                      >
+                        {gap.status === "implemented"
+                          ? "Markera som väntande"
+                          : "Markera som löst"}
+                      </button>
+                    </footer>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
       </aside>
     </div>
   );

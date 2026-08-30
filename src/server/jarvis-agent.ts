@@ -11,6 +11,7 @@ import { openAIConfig } from "@/server/config";
 import { loadDashboard, saveManualTask } from "@/server/database";
 import { assertProject100Adult } from "@/server/project100";
 import { createProject100ContentProject } from "@/server/project100-content";
+import { logJarvisCapabilityGap } from "@/server/jarvis-gaps";
 import { saveProject100JournalEntry } from "@/server/project100-journal";
 import { handleMemoryTextIntent } from "@/server/project100-memory-assistant";
 import type { ActorContext } from "@/server/authorization-types";
@@ -207,6 +208,27 @@ const JARVIS_TOOLS: OpenAI.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "log_missing_capability",
+      description: "Logga en förfrågan eller funktion som Jarvis inte har stöd för att utföra ännu till utvecklingslistan.",
+      parameters: {
+        type: "object",
+        properties: {
+          missing_feature: {
+            type: "string",
+            description: "Beskrivning av vad användaren efterfrågar som saknas (t.ex. 'Bilbesiktning', 'Elpriser', 'Kylskåpsrecept').",
+          },
+          category_hint: {
+            type: "string",
+            description: "Valfri kategori, t.ex. 'car', 'finance', 'house', 'nutrition', 'kids', 'general'.",
+          },
+        },
+        required: ["missing_feature"],
+      },
+    },
+  },
 ];
 
 function getGreeting(name: string, now: Date): string {
@@ -372,6 +394,21 @@ export async function processJarvisAgentMessage(
       });
     }
 
+    if (name === "log_missing_capability") {
+      const missingFeature = String(args.missing_feature || text);
+      const categoryHint = args.category_hint ? String(args.category_hint) : undefined;
+
+      await logJarvisCapabilityGap(actor, text, options.channel || "web", {
+        detectedIntent: missingFeature,
+        categoryHint,
+      });
+
+      return JSON.stringify({
+        success: true,
+        summary: `Loggat till utvecklingsbackloggen: "${missingFeature}". Svara användaren artigt och förklara att funktionen inte stöds än men är sparad i önskelistan/backloggen.`,
+      });
+    }
+
     return JSON.stringify({ error: `Okänt verktyg: ${name}` });
   }
 
@@ -514,8 +551,22 @@ KOMBINERADE HANDLINGAR: Om användaren både vill veta något (t.ex. kolla om he
     }
   }
 
+  // Pure greeting
+  if (/^(hej|tjena|hallå|god\s*(morgon|dag|kväll|natt)|läget|morsning)(?:\s+jarvis)?[\s!.]*$/i.test(text)) {
+    return {
+      text: `${getGreeting(callerName, now)} Hur kan jag hjälpa dig?`,
+      executedActions: [],
+    };
+  }
+
+  // Fallback for unhandled input: Log capability gap
+  await logJarvisCapabilityGap(actor, text, options.channel || "web", {
+    detectedIntent: "unhandled_query",
+  });
+  executedActions.push("log_missing_capability");
+
   return {
-    text: `${getGreeting(callerName, now)} Jag tog emot: "${text}". Hur vill du att vi går vidare?`,
+    text: `${getGreeting(callerName, now)} Det där har jag inte stöd för att göra ännu, men jag har sparat det till vår utvecklingslista så att vi kan bygga in det!`,
     executedActions,
   };
 }

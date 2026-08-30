@@ -14,3 +14,10 @@ Allt arbete som rör "Mitt spår", träning, kost, kropp, Jarvis-minne eller
 synlighet ska utgå från den styrande planen i `PLAN_PROJEKT_100.md`. Läs planen
 innan sådana ändringar görs. Jobbschemat i den befintliga familjekalendern är
 källan till arbetspass och får inte dupliceras i en separat kalender.
+
+## Jarvis Självlärande & Funktionsbacklogg
+
+Jarvis fångar automatiskt upp ohanterade frågor i Telegram och webben som capability gaps.
+Vid start av sessioner och vidareutveckling av Jarvis ska `JARVIS_WISHES.md` konsulteras
+för att se vilka funktioner användaren efterfrågat i vardagen.
+

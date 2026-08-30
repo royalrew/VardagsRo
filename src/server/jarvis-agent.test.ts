@@ -15,6 +15,7 @@ const dependencies = vi.hoisted(() => ({
   })),
   saveProject100JournalEntry: vi.fn(),
   createProject100ContentProject: vi.fn(async () => ({ id: "proj-101", title: "Test" })),
+  logJarvisCapabilityGap: vi.fn(async () => ({ id: "gap-101" })),
   handleMemoryTextIntent: vi.fn(async () => ({
     handled: true,
     replyText: '✅ Sparat under 🏢 Jobb:\n"Koden till inkontinensförrådet är 2214"',
@@ -33,6 +34,9 @@ vi.mock("@/server/project100-journal", () => ({
 }));
 vi.mock("@/server/project100-content", () => ({
   createProject100ContentProject: dependencies.createProject100ContentProject,
+}));
+vi.mock("@/server/jarvis-gaps", () => ({
+  logJarvisCapabilityGap: dependencies.logJarvisCapabilityGap,
 }));
 vi.mock("@/server/project100-memory-assistant", () => ({
   handleMemoryTextIntent: dependencies.handleMemoryTextIntent,
@@ -97,5 +101,21 @@ describe("jarvis-agent", () => {
     expect(dependencies.handleMemoryTextIntent).toHaveBeenCalled();
     expect(res.executedActions).toContain("save_memory");
     expect(res.text).toContain("Sparat under 🏢 Jobb");
+  });
+
+  it("logs unhandled queries to capability gaps backlog", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "När ska bilen besiktigas?",
+      { channel: "telegram", personName: "Jimmy" },
+    );
+    expect(dependencies.logJarvisCapabilityGap).toHaveBeenCalledWith(
+      TEST_ACTOR,
+      "När ska bilen besiktigas?",
+      "telegram",
+      expect.objectContaining({ detectedIntent: "unhandled_query" }),
+    );
+    expect(res.executedActions).toContain("log_missing_capability");
+    expect(res.text).toContain("utvecklingslista");
   });
 });

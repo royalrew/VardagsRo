@@ -166,6 +166,10 @@ vi.mock("@/server/project100-content", () => ({
   detachProject100ContentMedia: vi.fn(async () => true),
   generateProject100ContentSuggestions: vi.fn(async () => ({ hook: "Här är veckan" })),
 }));
+vi.mock("@/server/jarvis-gaps", () => ({
+  listJarvisCapabilityGaps: vi.fn(async () => []),
+  updateJarvisCapabilityGapStatus: vi.fn(async () => ({ id: "gap-1", status: "implemented" })),
+}));
 
 import { PATCH as householdPatch } from "@/app/api/household/route";
 import { GET as loginsGet } from "@/app/api/logins/route";
@@ -245,6 +249,8 @@ import {
 import { POST as contentMediaPost } from "@/app/api/project100/content/projects/[id]/media/route";
 import { DELETE as contentMediaDelete } from "@/app/api/project100/content/projects/[id]/media/[mediaId]/route";
 import { POST as contentSuggestionsPost } from "@/app/api/project100/content/suggestions/route";
+import { GET as jarvisGapsGet } from "@/app/api/project100/jarvis/gaps/route";
+import { PATCH as jarvisGapsPatch } from "@/app/api/project100/jarvis/gaps/[id]/route";
 
 function membership(
   role: "owner" | "adult" | "viewer",
@@ -1415,5 +1421,30 @@ describe("Projekt 100 Content is held behind the adult gate and requires CSRF on
       jsonPost(suggestionsUrl, {}),
     );
     expect(adult.status).toBe(200);
+  });
+
+  it("guards jarvis capability gaps list and status update", async () => {
+    const gapsUrl = "http://localhost/api/project100/jarvis/gaps";
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("viewer", "child");
+
+    const childGet = await jarvisGapsGet(new Request(gapsUrl));
+    expect(childGet.status).toBe(403);
+
+    const childPatch = await jarvisGapsPatch(
+      jsonPatch(`${gapsUrl}/gap-1`, { status: "implemented" }),
+      { params: Promise.resolve({ id: "gap-1" }) },
+    );
+    expect(childPatch.status).toBe(403);
+
+    harness.state.membership = membership("adult");
+    const adultGet = await jarvisGapsGet(new Request(gapsUrl));
+    expect(adultGet.status).toBe(200);
+
+    const adultPatch = await jarvisGapsPatch(
+      jsonPatch(`${gapsUrl}/gap-1`, { status: "implemented" }),
+      { params: Promise.resolve({ id: "gap-1" }) },
+    );
+    expect(adultPatch.status).toBe(200);
   });
 });

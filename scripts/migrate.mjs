@@ -1148,6 +1148,26 @@ const migrations = [
         ))`,
     ],
   },
+  {
+    version: "025",
+    name: "jarvis_capability_gaps",
+    statements: [
+      `create table if not exists jarvis_capability_gaps (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        raw_query text not null check (char_length(raw_query) >= 1 and char_length(raw_query) <= 2000),
+        detected_intent text check (detected_intent is null or char_length(detected_intent) <= 120),
+        category_hint text check (category_hint is null or char_length(category_hint) <= 60),
+        channel text not null check (channel in ('telegram', 'web')),
+        status text not null default 'pending' check (status in ('pending', 'implemented', 'dismissed')),
+        notes text check (notes is null or char_length(notes) <= 2000),
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      )`,
+      `create index if not exists jarvis_capability_gaps_user_idx
+        on jarvis_capability_gaps (user_id, status, created_at desc)`,
+    ],
+  },
 ];
 
 function checksum(migration) {
