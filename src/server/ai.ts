@@ -10,6 +10,7 @@ import type {
 } from "@/lib/types";
 import { openAIConfig } from "@/server/config";
 import { AppError } from "@/server/errors";
+import { sanitizePII } from "@/server/pii-sanitizer";
 import type { AcceptedMimeType } from "@/server/storage";
 
 const extractionEventSchema = z.object({
@@ -525,7 +526,7 @@ export async function planQuestionWithAI(input: {
         {
           role: "user",
           content: JSON.stringify({
-            question: input.question,
+            question: sanitizePII(input.question).sanitizedText,
             now: now.toISOString(),
             localNow: localDateLabel(input.timezone),
             timezone: input.timezone,

@@ -27,6 +27,7 @@ import {
   loadProject100TrainingSessions,
   updateProject100TrainingSession,
 } from "@/server/project100-training";
+import { sanitizePII } from "@/server/pii-sanitizer";
 import type { ActorContext } from "@/server/authorization-types";
 
 let agentClient: OpenAI | null = null;
@@ -978,9 +979,10 @@ NOLL HALLUCINATION: Gissa aldrig kalenderhändelser, koder, vikt eller fakta. An
 KOMBINERADE HANDLINGAR: Om användaren nämner flera saker (t.ex. körde benpass OCH sprang 5 km, eller vägde sig OCH drack en shake), anropa ALLA relevanta verktyg och ge ett komplett, strukturerat svar som bekräftar alla delar.
 MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pass, ge konkreta siffror (t.ex. hur mycket protein som återstår till dagens 160g-mål, eller hur mycket som återstår till 100 kg-målet). Undvik tomma klyschor.`;
 
+      const { sanitizedText } = sanitizePII(text);
       const messages: OpenAI.ChatCompletionMessageParam[] = [
         { role: "system", content: systemPrompt },
-        { role: "user", content: text },
+        { role: "user", content: sanitizedText },
       ];
 
       // First LLM call
