@@ -111,6 +111,12 @@ describe("Projekt 100 protein target", () => {
     expect(trainingLoadFromSessions(6)).toBe("tung");
   });
 
+  it("uses logged duration as part of the load instead of only counting taps", () => {
+    expect(trainingLoadFromSessions(1, 45)).toBe("lätt");
+    expect(trainingLoadFromSessions(1, 150)).toBe("normal");
+    expect(trainingLoadFromSessions(2, 320)).toBe("tung");
+  });
+
   it("gives a range, never a single confident number", () => {
     const computed = target();
 

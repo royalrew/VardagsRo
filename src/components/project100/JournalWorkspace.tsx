@@ -12,6 +12,7 @@ import {
   Search,
   Sparkles,
   Trash2,
+  Utensils,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -51,9 +52,16 @@ const longFormatter = new Intl.DateTimeFormat("sv-SE", {
 });
 const clockFormatter = new Intl.DateTimeFormat("sv-SE", { hour: "2-digit", minute: "2-digit" });
 
+function minuteOfDay(value: number): string {
+  const hours = Math.floor(value / 60).toString().padStart(2, "0");
+  const minutes = (value % 60).toString().padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
 const TIMELINE_ICONS: Record<Project100TimelineKind, typeof BookOpen> = {
   journal: PenLine,
   training: Dumbbell,
+  meal: Utensils,
   body: Ruler,
   media: Camera,
 };
@@ -407,8 +415,8 @@ export function JournalWorkspace({
               <PenLine />
               <strong>Ingenting loggat i perioden</strong>
               <p>
-                Tidslinjen väver ihop pass, mätningar, bilder och anteckningar. Så fort du
-                loggar något dyker dagen upp här.
+                Tidslinjen väver ihop pass, måltider, mätningar, bilder och anteckningar.
+                Så fort du loggar något dyker dagen upp här.
               </p>
             </div>
           ) : (
@@ -426,7 +434,10 @@ export function JournalWorkspace({
                             <Icon />
                           </span>
                           <div>
-                            <small>{PROJECT100_TIMELINE_LABELS[item.kind]}</small>
+                            <small>
+                              {PROJECT100_TIMELINE_LABELS[item.kind]}
+                              {item.atMinute !== null ? ` · ${minuteOfDay(item.atMinute)}` : ""}
+                            </small>
                             {item.href ? (
                               <Link href={item.href}>{covered ? "Kroppsbild" : item.title}</Link>
                             ) : (

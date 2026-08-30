@@ -26,6 +26,30 @@ const database = vi.hoisted(() => {
         },
       ]);
     }
+    if (text.includes("from project100_meals")) {
+      return Promise.resolve([
+        {
+          id: "meal-1",
+          eaten_on: "2026-08-26",
+          eaten_at_minute: 750,
+          meal_type: "lunch",
+          title: "Kyckling och ris",
+          source: "batch",
+          protein_g: "42.50",
+          kcal: "710.00",
+        },
+        {
+          id: "meal-2",
+          eaten_on: "2026-08-26",
+          eaten_at_minute: 480,
+          meal_type: "breakfast",
+          title: "Ägg och gröt",
+          source: "estimate",
+          protein_g: "25.00",
+          kcal: null,
+        },
+      ]);
+    }
     if (text.includes("from project100_body_measurements")) {
       return Promise.resolve([
         { measured_on: "2026-08-26", metric: "weight", label: null, unit: "kg", value: "83.40" },
@@ -63,10 +87,10 @@ describe("Projekt 100 private timeline", () => {
     database.sql.mockClear();
   });
 
-  it("asks each of the four sources separately, each scoped to one account", async () => {
+  it("asks each of the five sources separately, each scoped to one account", async () => {
     await loadProject100Timeline(TEST_ACTOR, { from: "2026-08-01", to: "2026-08-26" });
 
-    expect(database.calls).toHaveLength(4);
+    expect(database.calls).toHaveLength(5);
     for (const call of database.calls) {
       expect(call.text).toMatch(/user_id = \?/);
       expect(call.values[0]).toBe(TEST_ACTOR.userId);
@@ -81,7 +105,7 @@ describe("Projekt 100 private timeline", () => {
     expect(database.sql).not.toHaveBeenCalled();
   });
 
-  it("weaves the four sources into one day", async () => {
+  it("weaves the five sources into one day", async () => {
     const timeline = await loadProject100Timeline(TEST_ACTOR, {
       from: "2026-08-01",
       to: "2026-08-26",
@@ -92,9 +116,28 @@ describe("Projekt 100 private timeline", () => {
     expect(day.items.map((item) => item.kind)).toEqual([
       "journal",
       "training",
+      "meal",
+      "meal",
       "body",
       "media",
     ]);
+  });
+
+  it("keeps meal time, source and available macros visible", async () => {
+    const timeline = await loadProject100Timeline(TEST_ACTOR);
+    const meals = timeline.days[0].items.filter((item) => item.kind === "meal");
+
+    expect(meals.map((item) => item.title)).toEqual(["Ägg och gröt", "Kyckling och ris"]);
+    expect(meals[0]).toMatchObject({
+      atMinute: 480,
+      detail: "Frukost · AI-uppskattning · 25 g protein",
+      href: "/projekt-100/kost?dag=2026-08-26",
+      sensitive: false,
+    });
+    expect(meals[1]).toMatchObject({
+      atMinute: 750,
+      detail: "Lunch · Från sats · 42,5 g protein · 710 kcal",
+    });
   });
 
   it("marks a body picture sensitive so the timeline covers it too", async () => {

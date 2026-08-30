@@ -38,7 +38,10 @@ vi.mock("@/server/auth", () => ({ getAuth: () => ({ api: { getSession: vi.fn() }
 
 import {
   assertProject100Adult,
+  loadProject100WorkHorizon,
   loadProject100WorkSchedule,
+  minutesUntilProject100WorkStart,
+  nextProject100WorkStart,
 } from "@/server/project100";
 
 describe("Projekt 100 work schedule", () => {
@@ -101,5 +104,44 @@ describe("Projekt 100 work schedule", () => {
     expect(() =>
       assertProject100Adult({ ...TEST_ACTOR, personType: "child" }),
     ).toThrowError(/privat vuxenyta/);
+  });
+
+  it("uses the next not-yet-started shift for meal planning", () => {
+    const now = new Date("2026-08-30T10:00:00.000Z");
+    const next = nextProject100WorkStart(
+      [
+        {
+          id: "active",
+          title: "Pågående pass",
+          startsAt: "2026-08-30T08:00:00.000Z",
+          endsAt: "2026-08-30T12:00:00.000Z",
+          allDay: false,
+          location: null,
+        },
+        {
+          id: "next",
+          title: "Nästa pass",
+          startsAt: "2026-08-30T14:30:00.000Z",
+          endsAt: "2026-08-30T22:00:00.000Z",
+          allDay: false,
+          location: null,
+        },
+      ],
+      now,
+    );
+
+    expect(next?.id).toBe("next");
+    expect(minutesUntilProject100WorkStart(next, now)).toBe(270);
+  });
+
+  it("reads the following week without duplicating a calendar event", async () => {
+    const horizon = await loadProject100WorkHorizon(TEST_ACTOR);
+    const eventQueries = database.calls.filter((call) => call.text.includes("from family_events"));
+
+    expect(eventQueries).toHaveLength(2);
+    expect(eventQueries.every((call) => call.values[0] === TEST_ACTOR.householdId)).toBe(true);
+    expect(eventQueries.every((call) => call.values[1] === TEST_ACTOR.personId)).toBe(true);
+    expect(horizon.timeZone).toBe("Europe/Stockholm");
+    expect(horizon.workEvents.map((event) => event.id)).toEqual(["work-1"]);
   });
 });

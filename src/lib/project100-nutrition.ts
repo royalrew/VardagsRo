@@ -130,6 +130,9 @@ export interface Project100ProteinTarget {
   weightMeasuredOn: string | null;
   sessionsLast7: number;
   minutesLast7: number;
+  /** Inclusive calendar dates in the household's timezone. */
+  trainingFrom: string | null;
+  trainingThrough: string | null;
   overrideGrams: number | null;
   /** What is missing, so the page can say it instead of showing a confident number. */
   missing: "weight" | null;
@@ -149,11 +152,16 @@ export const PROJECT100_LOAD_LABELS: Record<Project100TrainingLoad, string> = {
   tung: "Tung vecka",
 };
 
-export function trainingLoadFromSessions(sessions: number): Project100TrainingLoad {
-  if (sessions <= 0) return "vila";
-  if (sessions <= 2) return "lätt";
-  if (sessions <= 4) return "normal";
-  return "tung";
+export function trainingLoadFromSessions(
+  sessions: number,
+  minutes: number = 0,
+): Project100TrainingLoad {
+  if (sessions <= 0 && minutes <= 0) return "vila";
+  // Duration keeps one or two genuinely long sessions from being called a
+  // light week, while session count still works when older logs lack duration.
+  if (sessions >= 5 || minutes >= 300) return "tung";
+  if (sessions >= 3 || minutes >= 120) return "normal";
+  return "lätt";
 }
 
 /**
@@ -169,9 +177,11 @@ export function buildProject100ProteinTarget(input: {
   weightMeasuredOn: string | null;
   sessionsLast7: number;
   minutesLast7: number;
+  trainingFrom?: string | null;
+  trainingThrough?: string | null;
   overrideGrams: number | null;
 }): Project100ProteinTarget {
-  const load = trainingLoadFromSessions(input.sessionsLast7);
+  const load = trainingLoadFromSessions(input.sessionsLast7, input.minutesLast7);
   const band = LOAD_BANDS[load];
   const weightKg = input.weightKg;
   return {
@@ -184,6 +194,8 @@ export function buildProject100ProteinTarget(input: {
     weightMeasuredOn: input.weightMeasuredOn,
     sessionsLast7: input.sessionsLast7,
     minutesLast7: input.minutesLast7,
+    trainingFrom: input.trainingFrom ?? null,
+    trainingThrough: input.trainingThrough ?? null,
     overrideGrams: input.overrideGrams,
     missing: weightKg === null ? "weight" : null,
   };
@@ -262,6 +274,34 @@ export interface Project100MealSuggestion {
   proteinG: number | null;
   /** Never empty. A suggestion that cannot explain itself is not returned. */
   reasons: string[];
+}
+
+export interface Project100NutritionDay {
+  today: string;
+  day: string;
+  meals: Project100Meal[];
+  eaten: Project100Macros;
+  target: Project100ProteinTarget;
+  batches: Project100MealBatch[];
+  supplements: Project100Supplement[];
+  staples: Project100Food[];
+  foods: Project100Food[];
+  suggestions: Project100MealSuggestion[];
+  nextWorkInMinutes: number | null;
+}
+
+export interface Project100NutritionWorkEvent {
+  id: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  allDay: boolean;
+  location: string | null;
+}
+
+export interface Project100NutritionView extends Project100NutritionDay {
+  timeZone: string;
+  nextWorkEvent: Project100NutritionWorkEvent | null;
 }
 
 function hoursUntil(minutes: number): string {

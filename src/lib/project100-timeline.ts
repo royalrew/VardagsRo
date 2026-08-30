@@ -1,4 +1,10 @@
-export const PROJECT100_TIMELINE_KINDS = ["journal", "training", "body", "media"] as const;
+export const PROJECT100_TIMELINE_KINDS = [
+  "journal",
+  "training",
+  "meal",
+  "body",
+  "media",
+] as const;
 
 export type Project100TimelineKind = (typeof PROJECT100_TIMELINE_KINDS)[number];
 
@@ -6,6 +12,8 @@ export interface Project100TimelineItem {
   kind: Project100TimelineKind;
   id: string;
   on: string;
+  /** Minutes after midnight when the source carries a real clock time. */
+  atMinute: number | null;
   title: string;
   detail: string | null;
   href: string | null;
@@ -21,6 +29,7 @@ export interface Project100TimelineDay {
 export const PROJECT100_TIMELINE_LABELS: Record<Project100TimelineKind, string> = {
   journal: "Dagbok",
   training: "Träning",
+  meal: "Måltid",
   body: "Kropp",
   media: "Bild",
 };
@@ -28,14 +37,31 @@ export const PROJECT100_TIMELINE_LABELS: Record<Project100TimelineKind, string> 
 /**
  * The order things are shown inside one day. It is not chronological — most of
  * these carry a date but no clock — so the day reads in the order the user
- * thinks about it: what I wrote, what I did, what I measured, what I saw.
+ * thinks about it: what I wrote, what I did, what I ate, what I measured,
+ * what I saw. Multiple meals do carry a clock time and are ordered by it.
  */
 const KIND_ORDER: Record<Project100TimelineKind, number> = {
   journal: 0,
   training: 1,
-  body: 2,
-  media: 3,
+  meal: 2,
+  body: 3,
+  media: 4,
 };
+
+function compareWithinKind(
+  left: Project100TimelineItem,
+  right: Project100TimelineItem,
+): number {
+  if (left.atMinute !== null && right.atMinute !== null) {
+    const byTime = left.atMinute - right.atMinute;
+    if (byTime !== 0) return byTime;
+  } else if (left.atMinute !== null) {
+    return -1;
+  } else if (right.atMinute !== null) {
+    return 1;
+  }
+  return left.title.localeCompare(right.title, "sv-SE");
+}
 
 export function groupProject100Timeline(
   items: Project100TimelineItem[],
@@ -53,7 +79,7 @@ export function groupProject100Timeline(
       items: dayItems.sort(
         (left, right) =>
           KIND_ORDER[left.kind] - KIND_ORDER[right.kind] ||
-          left.title.localeCompare(right.title, "sv-SE"),
+          compareWithinKind(left, right),
       ),
     }));
 }
@@ -64,6 +90,7 @@ export function countProject100TimelineKinds(
   const counts: Record<Project100TimelineKind, number> = {
     journal: 0,
     training: 0,
+    meal: 0,
     body: 0,
     media: 0,
   };

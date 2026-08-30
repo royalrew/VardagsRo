@@ -132,7 +132,15 @@ export const project100NutritionDaySchema = z
   .object({ day: project100CalendarDateSchema.nullable().default(null) })
   .strict();
 
+export const project100ProteinTargetSchema = z
+  .object({
+    // Null returns control to the range computed from weight and training.
+    proteinTargetG: z.number().finite().gt(0).lt(600).nullable(),
+  })
+  .strict();
+
 export type Project100FoodInput = z.infer<typeof project100FoodSchema>;
 export type Project100BatchInput = z.infer<typeof project100BatchSchema>;
 export type Project100MealInput = z.infer<typeof project100MealSchema>;
 export type Project100SupplementInput = z.infer<typeof project100SupplementSchema>;
+export type Project100ProteinTargetInput = z.infer<typeof project100ProteinTargetSchema>;

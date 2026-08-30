@@ -1,7 +1,7 @@
 # Projekt 100 — styrande produktplan
 
 Status: Beslutad riktning  
-Senast uppdaterad: 2026-08-29  
+Senast uppdaterad: 2026-08-30
 Ägare: användaren  
 Gäller: ersättaren till "Mitt spår"
 
@@ -27,10 +27,12 @@ Gäller: ersättaren till "Mitt spår"
   vikten. Vikterna ur den gamla hälsologgen är migrerade hit.
 - [x] Dagbok med dagsform, sökbart arkiv och en per-anteckning-grind som håller
   assistenten ute — villkoret ligger i frågan, inte i ett filter efteråt.
-- [x] Gemensam privat tidslinje som väver samman pass, mätningar, bilder och
-  anteckningar per dag.
+- [x] Gemensam privat tidslinje som väver samman pass, måltider, mätningar,
+  bilder och anteckningar per dag.
 - [ ] Avveckling av de gamla Solo-tabellerna och den inbäddade Solo-vyn.
-- [ ] Måltidslogg, insikter, Jarvis-minne och innehållsflöde.
+- [x] Måltidsloggens kärnflöde: bild eller manuella värden, portion ur sats,
+  spårbart proteinintervall, förslag med skäl och måltider i tidslinjen.
+- [ ] Kostens planeringslager, insikter, Jarvis-minne och innehållsflöde.
 
 ## Vision
 
@@ -373,9 +375,9 @@ Träningssidan är en riktig arbetsyta, inte ett formulärkort.
 - ~~Ren skrivyta med minimala störningar.~~ Klar 2026-08-29.
 - ~~Fritext eller valfria reflektionsfrågor.~~ Klar 2026-08-29.
 - ~~Kronologisk historik med dagsform och sömn.~~ Klar 2026-08-29.
-- ~~Kopplingar till dagens pass, mätningar och bilder via tidslinjen.~~
-  Klar 2026-08-29. Jobbpassen och måltiderna vävs in när schemalagret
-  respektive kostmodellen är på plats.
+- ~~Kopplingar till dagens pass, måltider, mätningar och bilder via
+  tidslinjen.~~ Klar 2026-08-30. Jobbpassen vävs in när det gemensamma
+  schemalagret omfattar tidslinjen.
 - ~~Sök i egna anteckningar.~~ Klar 2026-08-29, via textsökning i databasen.
 - ~~Markera en anteckning som extra privat och utesluta den från
   Jarvis-minnet.~~ Klar 2026-08-29.
@@ -477,7 +479,9 @@ arbetsflöden — inte från att visa så mycket information som möjligt samtid
    flödet så länge.
 6. ~~Bygg kropp, dagbok och media ovanpå tidslinjen.~~ Klar 2026-08-29.
    Kostsidorna står härnäst.
-7. Bygg kostsidorna och måltidsflödet.
+7. ~~Bygg kostsidorna och måltidsflödet.~~ Kärnflödet klart 2026-08-30 på
+   `/projekt-100/kost`; favoriter, recept, härledd inköpslista och veckoplanering
+   återstår som fördjupning.
 8. Bygg insikter när tillräcklig strukturerad data finns.
 9. Bygg Jarvis som egen arbetsyta.
 10. Bygg innehåll och YouTube-flöde.
@@ -509,8 +513,8 @@ hälsodata fortfarande är tillgänglig.
 
 Mål: skapa minnet som resten av produkten kan byggas ovanpå.
 
-- ~~Skapa en generell privat tidslinje för check-ins, pass, mått, bilder och
-  anteckningar.~~ Klar 2026-08-29. Måltider vävs in när kostmodellen finns.
+- ~~Skapa en generell privat tidslinje för check-ins, pass, måltider, mått,
+  bilder och anteckningar.~~ Klar 2026-08-30.
 - Lagra originalbilder privat i befintlig objektlagring.
 - Skapa mindre förhandsbilder för snabb laddning.
 - Använd kortlivade signerade bildadresser.
@@ -563,21 +567,27 @@ Samma värden står alltid i en tabell under grafen.
 
 Mål: göra kostloggning visuell, snabb och korrigerbar.
 
-- Fotografera måltiden först; detaljer är valfria i stunden.
-- Måltidstyp, innehåll, mängd, protein och uppskattad energi.
-- Hunger före, mättnad efter och hur måltiden kändes.
-- Proteinintervall framräknat ur senast loggade vikt och veckans faktiska
-  träningsbelastning, med underlaget synligt och möjligt att skriva över.
-- Satser: råvaror, portioner och makron per portion, med kvarvarande portioner
-  räknade. En måltid ska kunna loggas som en portion ur en sats.
+- ~~Fotografera måltiden först; detaljer är valfria i stunden.~~ Klar 2026-08-30.
+- ~~Måltidstyp, innehåll, mängd, protein och uppskattad energi.~~ Klar
+  2026-08-30, med manuella värden tydligt märkta.
+- ~~Hunger före, mättnad efter och hur måltiden kändes.~~ Klar 2026-08-30.
+- ~~Proteinintervall framräknat ur senast loggade vikt och veckans faktiska
+  träningsbelastning, med underlaget synligt och möjligt att skriva över.~~
+  Klar 2026-08-30; vikt, datumfönster, pass, minuter och formel visas.
+- ~~Satser: råvaror, portioner och makron per portion, med kvarvarande portioner
+  räknade. En måltid ska kunna loggas som en portion ur en sats.~~ Klar
+  2026-08-30, inklusive atomär nedräkning och återställning vid radering.
 - Skafferi med det som alltid bör finnas, härlett ur egna satser och favoriter,
   och en inköpslista över det som saknas inför veckan.
-- Tillskott med dos och syfte. Tidpunkt anges bara där den har betydelse.
+- ~~Tillskott med dos och syfte. Tidpunkt anges bara där den har betydelse.~~
+  Klar 2026-08-30.
 - Återanvändbara favoriter och recept.
 - Satser och måltider planerade mot kommande arbetsdagar.
 - Veckoöversikt över protein och måltidskontinuitet.
-- Måltider vävs in i den privata tidslinjen tillsammans med pass och mätningar.
-- Förslag ska kunna visa sitt underlag och får inte visas utan det.
+- ~~Måltider vävs in i den privata tidslinjen tillsammans med pass och
+  mätningar.~~ Klar 2026-08-30.
+- ~~Förslag ska kunna visa sitt underlag och får inte visas utan det.~~ Klar
+  2026-08-30.
 - Senare bildanalys får endast ge förslag som användaren kan rätta.
 - AI-uppskattningar märks tydligt och presenteras aldrig som exakta värden.
 
@@ -674,7 +684,7 @@ offentligt material blandas ihop.
 3. Bygg träningslogg och passmallar.
 4. Koppla in jobbschemat för schemasmart planering.
 5. Lägg till kroppsmått och utvecklingsgrafer.
-6. Bygg den bildbaserade matloggen.
+6. ~~Bygg den bildbaserade matloggen.~~ Kärnflödet klart 2026-08-30.
 7. Bygg veckosummeringar och analys.
 8. Lägg Jarvis-minne ovanpå pålitlig data.
 9. Bygg YouTube- och synlighetsflödet.
@@ -710,19 +720,22 @@ Fas 0, fas 1 och fas 2 vilar nu på riktig kod:
 3. Privat mediamodell med objektnycklar på formen `p100/{userId}/{kategori}/…`,
    som kontrolleras mot den inloggade läsaren innan någon adress signeras.
    Kroppsmodellen ligger bredvid: en rad per mätt sak, per dag, per konto.
-4. Privat tidslinje som väver samman fyra källor per dag utan att foga ihop dem
+4. Privat tidslinje som väver samman fem källor per dag utan att foga ihop dem
    i en fråga, och en dagbok med en grind assistenten inte kan gå runt.
 5. Read-only servervy av den inloggade personens jobbschema.
 6. Tester som bevisar användarscope, vuxengräns, mallägarskap, medieläckage och
    att en ändrad plan inte skriver om historiken.
+7. Kostens kärnflöde med privata råvaror, satser, måltider och tillskott,
+   proteinmatematik med synligt underlag, jobbschema i hushållets tidszon och
+   måltider som femte användarscopead tidslinjekälla.
 
 Bildlagringen kräver konfigurerad objektlagring (`R2_*`). Utan den vägrar
 servern spara en bild i stället för att skapa en rad utan bild.
 
 ## Nästa konkreta leverans
 
-1. Kost och måltider: den bildbaserade matloggen, med matbilderna från
-   mediebiblioteket som primär väg in och måltiderna invävda i tidslinjen.
+1. Kostens nästa lager: favoriter och recept, skafferi härlett ur det som
+   faktiskt lagas, inköpslista samt vecko- och arbetsdagsplanering.
 2. Styrkeutvecklingen bredvid vikt och mått, över samma period.
 3. Insikter när det finns tillräckligt med strukturerad data att jämföra.
 4. Avveckling av `solo_*`-tabellerna och den inbäddade `SoloView` när deras

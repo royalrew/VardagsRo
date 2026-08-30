@@ -38,6 +38,7 @@ export type AuditAction =
   | "project100.nutrition.batch.create"
   | "project100.nutrition.meal.log"
   | "project100.nutrition.meal.delete"
+  | "project100.nutrition.target.update"
   | "project100.journal.save"
   | "project100.journal.delete"
   | "project100.body.save"

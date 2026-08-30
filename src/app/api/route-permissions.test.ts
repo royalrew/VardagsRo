@@ -106,6 +106,21 @@ vi.mock("@/server/project100-media", () => ({
     expiresInSeconds: 300,
   })),
 }));
+vi.mock("@/server/project100-nutrition", () => ({
+  loadProject100NutritionView: vi.fn(async () => ({
+    day: "2026-08-26",
+    meals: [],
+    batches: [],
+    supplements: [],
+  })),
+  saveProject100Food: vi.fn(async () => ({ id: "food-1" })),
+  saveProject100Batch: vi.fn(async () => ({ id: "batch-1" })),
+  logProject100Meal: vi.fn(async () => ({ id: "meal-1" })),
+  deleteProject100Meal: vi.fn(async () => true),
+  saveProject100Supplement: vi.fn(async () => ({ id: "supplement-1" })),
+  archiveProject100Supplement: vi.fn(async () => true),
+  saveProject100ProteinTarget: vi.fn(async () => 190),
+}));
 
 import { PATCH as householdPatch } from "@/app/api/household/route";
 import { GET as loginsGet } from "@/app/api/logins/route";
@@ -130,6 +145,16 @@ import { PATCH as settingsPatch } from "@/app/api/project100/settings/route";
 import { GET as mediaGet, POST as mediaPost } from "@/app/api/project100/media/route";
 import { DELETE as mediaDelete } from "@/app/api/project100/media/[id]/route";
 import { GET as mediaUrlGet } from "@/app/api/project100/media/[id]/url/route";
+import { POST as nutritionBatchesPost } from "@/app/api/project100/nutrition/batches/route";
+import { POST as nutritionFoodsPost } from "@/app/api/project100/nutrition/foods/route";
+import {
+  GET as nutritionMealsGet,
+  POST as nutritionMealsPost,
+} from "@/app/api/project100/nutrition/meals/route";
+import { DELETE as nutritionMealDelete } from "@/app/api/project100/nutrition/meals/[id]/route";
+import { POST as nutritionSupplementsPost } from "@/app/api/project100/nutrition/supplements/route";
+import { DELETE as nutritionSupplementDelete } from "@/app/api/project100/nutrition/supplements/[id]/route";
+import { PATCH as nutritionTargetPatch } from "@/app/api/project100/nutrition/target/route";
 
 function membership(
   role: "owner" | "adult" | "viewer",
@@ -634,6 +659,227 @@ describe("Projekt 100 body data is the most private of all", () => {
     );
 
     expect(response.status).toBe(403);
+  });
+});
+
+describe("Projekt 100 nutrition stays inside the private adult workspace", () => {
+  const nutritionUrl = "http://localhost/api/project100/nutrition";
+  const mealsUrl = `${nutritionUrl}/meals`;
+  const targetUrl = `${nutritionUrl}/target`;
+
+  function food() {
+    return {
+      name: "Kyckling",
+      proteinPer100g: 23,
+      carbsPer100g: 0,
+      fatPer100g: 2,
+      kcalPer100g: 110,
+      isStaple: false,
+      stapleTargetGrams: null,
+    };
+  }
+
+  function batch() {
+    return {
+      name: "Veckolada",
+      cookedOn: "2026-08-26",
+      portionsTotal: 6,
+      note: null,
+      items: [{ foodId: "food-1", grams: 1_000 }],
+    };
+  }
+
+  function meal() {
+    return {
+      source: "manual",
+      title: "Lunch",
+      eatenOn: "2026-08-26",
+      eatenAtMinute: 720,
+      mealType: "lunch",
+      proteinG: 42,
+      carbsG: 65,
+      fatG: 14,
+      kcal: 560,
+      hungerBefore: 3,
+      fullnessAfter: 4,
+      note: null,
+      mediaId: null,
+    };
+  }
+
+  function supplement() {
+    return {
+      name: "Kreatin",
+      kind: "creatine",
+      doseAmount: 5,
+      doseUnit: "g",
+      purpose: "Daglig mangd",
+      timingMatters: false,
+      timingNote: null,
+    };
+  }
+
+  beforeEach(() => {
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("owner");
+  });
+
+  it("answers 401 across every nutrition route before exposing private food data", async () => {
+    harness.state.session = null;
+    harness.state.membership = null;
+
+    const responses = await Promise.all([
+      nutritionMealsGet(new Request(mealsUrl)),
+      nutritionMealsPost(jsonPost(mealsUrl, meal())),
+      nutritionFoodsPost(jsonPost(`${nutritionUrl}/foods`, food())),
+      nutritionBatchesPost(jsonPost(`${nutritionUrl}/batches`, batch())),
+      nutritionSupplementsPost(jsonPost(`${nutritionUrl}/supplements`, supplement())),
+      nutritionTargetPatch(jsonPatch(targetUrl, { proteinTargetG: 190 })),
+      nutritionMealDelete(
+        new Request(`${mealsUrl}/meal-1`, {
+          method: "DELETE",
+          headers: { origin: "http://localhost" },
+        }),
+        { params: Promise.resolve({ id: "meal-1" }) },
+      ),
+      nutritionSupplementDelete(
+        new Request(`${nutritionUrl}/supplements/supplement-1`, {
+          method: "DELETE",
+          headers: { origin: "http://localhost" },
+        }),
+        { params: Promise.resolve({ id: "supplement-1" }) },
+      ),
+    ]);
+
+    expect(responses.map((response) => response.status)).toEqual([
+      401, 401, 401, 401, 401, 401, 401, 401,
+    ]);
+  });
+
+  it("keeps a child out while letting an adult prepare a batch", async () => {
+    harness.state.membership = membership("viewer", "child");
+
+    const childRead = await nutritionMealsGet(new Request(mealsUrl));
+    const childWrite = await nutritionBatchesPost(
+      jsonPost(`${nutritionUrl}/batches`, batch()),
+    );
+
+    harness.state.membership = membership("adult");
+    const adultWrite = await nutritionBatchesPost(
+      jsonPost(`${nutritionUrl}/batches`, batch()),
+    );
+
+    expect(childRead.status).toBe(403);
+    expect(await childRead.json()).toMatchObject({ code: "PROJECT100_ADULT_ONLY" });
+    expect(childWrite.status).toBe(403);
+    expect(await childWrite.json()).toMatchObject({ code: "PROJECT100_ADULT_ONLY" });
+    expect(adultWrite.status).toBe(201);
+  });
+
+  it("lets a read-only adult see the day without letting them add supplements", async () => {
+    harness.state.membership = membership("viewer");
+
+    const read = await nutritionMealsGet(new Request(mealsUrl));
+    const write = await nutritionSupplementsPost(
+      jsonPost(`${nutritionUrl}/supplements`, supplement()),
+    );
+
+    expect(read.status).toBe(200);
+    expect(write.status).toBe(403);
+    expect(await write.json()).toMatchObject({ code: "READ_ONLY_MEMBER" });
+  });
+
+  it("holds the protein override behind both the adult and mutation gates", async () => {
+    harness.state.membership = membership("viewer", "child");
+    const child = await nutritionTargetPatch(
+      jsonPatch(targetUrl, { proteinTargetG: 190 }),
+    );
+
+    harness.state.membership = membership("viewer");
+    const viewer = await nutritionTargetPatch(
+      jsonPatch(targetUrl, { proteinTargetG: 190 }),
+    );
+
+    harness.state.membership = membership("adult");
+    const adult = await nutritionTargetPatch(
+      jsonPatch(targetUrl, { proteinTargetG: 190 }),
+    );
+
+    expect(child.status).toBe(403);
+    expect(await child.json()).toMatchObject({ code: "PROJECT100_ADULT_ONLY" });
+    expect(viewer.status).toBe(403);
+    expect(await viewer.json()).toMatchObject({ code: "READ_ONLY_MEMBER" });
+    expect(adult.status).toBe(200);
+  });
+
+  it("refuses nutrition writes that arrive from another site", async () => {
+    const response = await nutritionFoodsPost(
+      new Request(`${nutritionUrl}/foods`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://elak.example",
+        },
+        body: JSON.stringify(food()),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("refuses a cross-site protein override", async () => {
+    const response = await nutritionTargetPatch(
+      new Request(targetUrl, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://elak.example",
+        },
+        body: JSON.stringify({ proteinTargetG: 190 }),
+      }),
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("refuses a meal-day filter it does not understand", async () => {
+    const response = await nutritionMealsGet(
+      new Request(`${mealsUrl}?userId=someone-else`),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "PROJECT100_UNKNOWN_QUERY" });
+  });
+
+  it("accepts route-safe ids and rejects path-shaped ids on both delete routes", async () => {
+    const deleteMeal = (id: string) =>
+      nutritionMealDelete(
+        new Request(`${mealsUrl}/${id}`, {
+          method: "DELETE",
+          headers: { origin: "http://localhost" },
+        }),
+        { params: Promise.resolve({ id }) },
+      );
+    const deleteSupplement = (id: string) =>
+      nutritionSupplementDelete(
+        new Request(`${nutritionUrl}/supplements/${id}`, {
+          method: "DELETE",
+          headers: { origin: "http://localhost" },
+        }),
+        { params: Promise.resolve({ id }) },
+      );
+
+    const unsafeMeal = await deleteMeal("../batches/batch-1");
+    const unsafeSupplement = await deleteSupplement("../supplement-1");
+    const safeMeal = await deleteMeal("meal-1");
+    const safeSupplement = await deleteSupplement("supplement_1");
+
+    expect(unsafeMeal.status).toBe(400);
+    expect(await unsafeMeal.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(unsafeSupplement.status).toBe(400);
+    expect(await unsafeSupplement.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(safeMeal.status).toBe(200);
+    expect(safeSupplement.status).toBe(200);
   });
 });
 

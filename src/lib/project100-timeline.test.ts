@@ -18,8 +18,18 @@ function item(
   on: string,
   title: string,
   sensitive = false,
+  atMinute: number | null = null,
 ): Project100TimelineItem {
-  return { kind, id: `${kind}-${on}-${title}`, on, title, detail: null, href: null, sensitive };
+  return {
+    kind,
+    id: `${kind}-${on}-${title}`,
+    on,
+    atMinute,
+    title,
+    detail: null,
+    href: null,
+    sensitive,
+  };
 }
 
 describe("Projekt 100 timeline", () => {
@@ -37,6 +47,7 @@ describe("Projekt 100 timeline", () => {
     const days = groupProject100Timeline([
       item("media", "2026-08-26", "Matbild"),
       item("body", "2026-08-26", "Vikt 83,4 kg"),
+      item("meal", "2026-08-26", "Kyckling och ris", false, 720),
       item("training", "2026-08-26", "Helkropp hemma"),
       item("journal", "2026-08-26", "Kändes starkt"),
     ]);
@@ -44,8 +55,23 @@ describe("Projekt 100 timeline", () => {
     expect(days[0].items.map((entry) => entry.kind)).toEqual([
       "journal",
       "training",
+      "meal",
       "body",
       "media",
+    ]);
+  });
+
+  it("orders meals by their logged clock time and leaves an unknown time last", () => {
+    const days = groupProject100Timeline([
+      item("meal", "2026-08-26", "Middag", false, 1_080),
+      item("meal", "2026-08-26", "Tid saknas"),
+      item("meal", "2026-08-26", "Frukost", false, 450),
+    ]);
+
+    expect(days[0].items.map((entry) => entry.title)).toEqual([
+      "Frukost",
+      "Middag",
+      "Tid saknas",
     ]);
   });
 
@@ -73,8 +99,9 @@ describe("Projekt 100 timeline", () => {
         item("journal", "2026-08-26", "A"),
         item("journal", "2026-08-25", "B"),
         item("media", "2026-08-25", "C"),
+        item("meal", "2026-08-25", "D"),
       ]),
-    ).toEqual({ journal: 2, training: 0, body: 0, media: 1 });
+    ).toEqual({ journal: 2, training: 0, meal: 1, body: 0, media: 1 });
   });
 
   it("returns nothing for a period with nothing in it", () => {

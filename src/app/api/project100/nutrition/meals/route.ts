@@ -3,7 +3,7 @@ import { AppError } from "@/server/errors";
 import { apiError, json } from "@/server/http";
 import { assertProject100Adult } from "@/server/project100";
 import {
-  loadProject100NutritionDay,
+  loadProject100NutritionView,
   logProject100Meal,
 } from "@/server/project100-nutrition";
 import {
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
       }
     }
     const { day } = project100NutritionDaySchema.parse({ day: params.get("dag") });
-    return json(await loadProject100NutritionDay(actor, day));
+    return json(await loadProject100NutritionView(actor, day));
   } catch (error) {
     return apiError(error);
   }

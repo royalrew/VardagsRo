@@ -81,6 +81,8 @@ export function Project100Shell({ children }: { children: React.ReactNode }) {
   const title = titles[pathname] ?? "Projekt 100";
   const quickLogHref = pathname.startsWith("/projekt-100/traning")
     ? "/projekt-100/traning?new=session"
+    : pathname.startsWith("/projekt-100/kost")
+      ? "/projekt-100/kost?new=meal"
     : "/projekt-100?log=check-in";
 
   return (

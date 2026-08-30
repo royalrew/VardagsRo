@@ -10,9 +10,9 @@ import {
   type Project100Macros,
   type Project100Meal,
   type Project100MealBatch,
-  type Project100MealSuggestion,
   type Project100MealType,
-  type Project100ProteinTarget,
+  type Project100NutritionDay,
+  type Project100NutritionView,
   type Project100Supplement,
   type Project100SupplementKind,
 } from "@/lib/project100-nutrition";
@@ -20,11 +20,17 @@ import { recordAudit } from "@/server/audit";
 import type { ActorContext } from "@/server/authorization-types";
 import { readyClient } from "@/server/database";
 import { AppError } from "@/server/errors";
-import { assertProject100Adult } from "@/server/project100";
+import {
+  assertProject100Adult,
+  loadProject100WorkHorizon,
+  minutesUntilProject100WorkStart,
+  nextProject100WorkStart,
+} from "@/server/project100";
 import type {
   Project100BatchInput,
   Project100FoodInput,
   Project100MealInput,
+  Project100ProteinTargetInput,
   Project100SupplementInput,
 } from "@/server/project100-nutrition-schemas";
 import { signedProject100MediaUrl, storageIsConfigured } from "@/server/storage";
@@ -201,20 +207,6 @@ async function mapMeals(userId: string, rows: MealRow[]): Promise<Project100Meal
   );
 }
 
-export interface Project100NutritionDay {
-  today: string;
-  day: string;
-  meals: Project100Meal[];
-  eaten: Project100Macros;
-  target: Project100ProteinTarget;
-  batches: Project100MealBatch[];
-  supplements: Project100Supplement[];
-  staples: Project100Food[];
-  foods: Project100Food[];
-  suggestions: Project100MealSuggestion[];
-  nextWorkInMinutes: number | null;
-}
-
 /**
  * One day of eating, with everything the page needs to explain itself: the
  * protein range and what it was computed from, what is left in the freezer, and
@@ -224,12 +216,16 @@ export async function loadProject100NutritionDay(
   actor: ActorContext,
   selectedDay: string | null = null,
   nextWorkInMinutes: number | null = null,
+  timeZone: string = DEFAULT_TIME_ZONE,
 ): Promise<Project100NutritionDay> {
   assertProject100Adult(actor);
   const sql = await readyClient();
-  const today = calendarDateInTimeZone(new Date(), DEFAULT_TIME_ZONE);
+  const today = calendarDateInTimeZone(new Date(), timeZone);
   const chosen = selectedDay ?? today;
-  const weekStart = addCalendarDateDays(today, -6);
+  // A historical day keeps the weight and training evidence that existed then;
+  // opening last Tuesday must not silently apply this Sunday's body or pass.
+  const trainingThrough = chosen <= today ? chosen : today;
+  const weekStart = addCalendarDateDays(trainingThrough, -6);
 
   const [mealRows, batchRows, batchItemRows, supplementRows, foodRows, weightRows, loadRows, settingsRows] =
     await Promise.all([
@@ -279,7 +275,7 @@ export async function loadProject100NutritionDay(
       sql<{ value: number | string; measured_on: string }[]>`
         select value, to_char(measured_on, 'YYYY-MM-DD') as measured_on
         from project100_body_measurements
-        where user_id = ${actor.userId} and metric = 'weight' and measured_on <= ${today}
+        where user_id = ${actor.userId} and metric = 'weight' and measured_on <= ${trainingThrough}
         order by measured_on desc
         limit 1
       `,
@@ -290,7 +286,7 @@ export async function loadProject100NutritionDay(
         where user_id = ${actor.userId}
           and status = 'completed'
           and session_date >= ${weekStart}
-          and session_date <= ${today}
+          and session_date <= ${trainingThrough}
       `,
       sql<{ protein_target_g: number | string | null }[]>`
         select protein_target_g from project100_settings
@@ -308,6 +304,8 @@ export async function loadProject100NutritionDay(
     weightMeasuredOn: weightRows[0] ? day(weightRows[0].measured_on) : null,
     sessionsLast7: asNumber(loadRows[0]?.sessions ?? null) ?? 0,
     minutesLast7: asNumber(loadRows[0]?.minutes ?? null) ?? 0,
+    trainingFrom: weekStart,
+    trainingThrough,
     overrideGrams: asNumber(settingsRows[0]?.protein_target_g ?? null),
   });
   const eaten = sumMealMacros(meals);
@@ -334,6 +332,30 @@ export async function loadProject100NutritionDay(
           })
         : [],
     nextWorkInMinutes,
+  };
+}
+
+/**
+ * Page/API entry point: enrich the private nutrition day with the actor's
+ * read-only family-calendar context without copying a work event into storage.
+ */
+export async function loadProject100NutritionView(
+  actor: ActorContext,
+  selectedDay: string | null = null,
+): Promise<Project100NutritionView> {
+  const horizon = await loadProject100WorkHorizon(actor);
+  const now = new Date();
+  const nextWorkEvent = nextProject100WorkStart(horizon.workEvents, now);
+  const nutrition = await loadProject100NutritionDay(
+    actor,
+    selectedDay,
+    minutesUntilProject100WorkStart(nextWorkEvent, now),
+    horizon.timeZone,
+  );
+  return {
+    ...nutrition,
+    timeZone: horizon.timeZone,
+    nextWorkEvent,
   };
 }
 
@@ -607,4 +629,29 @@ export async function archiveProject100Supplement(
     returning id
   `;
   return rows.length > 0;
+}
+
+/** Only the user's override is stored; the calculated range remains derived. */
+export async function saveProject100ProteinTarget(
+  actor: ActorContext,
+  input: Project100ProteinTargetInput,
+): Promise<number | null> {
+  assertProject100Adult(actor);
+  const sql = await readyClient();
+  return sql.begin(async (tx) => {
+    const rows = await tx<{ protein_target_g: number | string | null }[]>`
+      insert into project100_settings (user_id, protein_target_g)
+      values (${actor.userId}, ${input.proteinTargetG})
+      on conflict (user_id) do update
+        set protein_target_g = excluded.protein_target_g,
+            updated_at = now()
+      returning protein_target_g
+    `;
+    await recordAudit(tx, actor, {
+      action: "project100.nutrition.target.update",
+      targetType: "project100_settings",
+      targetId: actor.userId,
+    });
+    return asNumber(rows[0]?.protein_target_g ?? null);
+  });
 }

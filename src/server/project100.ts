@@ -44,6 +44,12 @@ export interface Project100WorkSchedule {
   workEvents: Project100WorkEvent[];
 }
 
+export interface Project100WorkHorizon {
+  timeZone: string;
+  today: string;
+  workEvents: Project100WorkEvent[];
+}
+
 interface TimeZoneRow {
   timezone: string;
 }
@@ -84,6 +90,25 @@ export function nextProject100WorkEvent(
   return (
     schedule.workEvents.find((event) => new Date(event.endsAt).getTime() >= from) ?? null
   );
+}
+
+/** The next shift that has not started yet; current shifts are not described as upcoming. */
+export function nextProject100WorkStart(
+  workEvents: Project100WorkEvent[],
+  at: Date = new Date(),
+): Project100WorkEvent | null {
+  const from = at.getTime();
+  return (
+    workEvents.find((event) => new Date(event.startsAt).getTime() >= from) ?? null
+  );
+}
+
+export function minutesUntilProject100WorkStart(
+  event: Project100WorkEvent | null,
+  at: Date = new Date(),
+): number | null {
+  if (!event) return null;
+  return Math.max(0, Math.ceil((new Date(event.startsAt).getTime() - at.getTime()) / 60_000));
 }
 
 /**
@@ -174,5 +199,26 @@ export async function loadProject100WorkSchedule(
     weekStart,
     weekEndExclusive,
     workEvents: rows.map(workEvent),
+  };
+}
+
+/**
+ * Nutrition needs enough look-ahead to see a shift after the current week's
+ * Sunday. The two read-only schedule windows still point at the family calendar
+ * and are only combined in memory; no work row is copied into Projekt 100.
+ */
+export async function loadProject100WorkHorizon(
+  actor: ActorContext,
+): Promise<Project100WorkHorizon> {
+  const current = await loadProject100WorkSchedule(actor);
+  const following = await loadProject100WorkSchedule(actor, current.weekEndExclusive);
+  const byId = new Map<string, Project100WorkEvent>();
+  for (const event of [...current.workEvents, ...following.workEvents]) {
+    byId.set(event.id, event);
+  }
+  return {
+    timeZone: current.timeZone,
+    today: current.today,
+    workEvents: [...byId.values()].sort((left, right) => left.startsAt.localeCompare(right.startsAt)),
   };
 }

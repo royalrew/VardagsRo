@@ -3,6 +3,10 @@ import "server-only";
 import { addCalendarDateDays, calendarDateInTimeZone, DEFAULT_TIME_ZONE } from "@/lib/dates";
 import { formatMeasurement, project100MetricLabel } from "@/lib/project100-body";
 import { journalExcerpt } from "@/lib/project100-journal";
+import {
+  PROJECT100_MEAL_TYPE_LABELS,
+  type Project100MealType,
+} from "@/lib/project100-nutrition";
 import { PROJECT100_ACTIVITY_LABELS, type Project100ActivityType } from "@/lib/project100-training";
 import {
   groupProject100Timeline,
@@ -39,6 +43,17 @@ interface BodyRow {
   value: number | string;
 }
 
+interface MealRow {
+  id: string;
+  eaten_on: string;
+  eaten_at_minute: number | null;
+  meal_type: Project100MealType;
+  title: string;
+  source: "manual" | "batch" | "estimate";
+  protein_g: number | string | null;
+  kcal: number | string | null;
+}
+
 interface MediaRow {
   id: string;
   captured_on: string;
@@ -60,6 +75,20 @@ const CATEGORY_WORDS: Record<string, string> = {
   content: "Innehållsbild",
 };
 
+const MEAL_SOURCE_WORDS: Record<MealRow["source"], string> = {
+  manual: "Manuellt",
+  batch: "Från sats",
+  estimate: "AI-uppskattning",
+};
+
+const numberFormatter = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 1 });
+
+function nutritionNumber(value: number | string | null): number | null {
+  if (value === null) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function minutes(seconds: number | null): string | null {
   if (seconds === null) return null;
   const total = Math.round(seconds / 60);
@@ -72,7 +101,7 @@ function minutes(seconds: number | null): string | null {
 /**
  * The private timeline.
  *
- * Four sources, each already keyed by user, read separately and woven together
+ * Five sources, each already keyed by user, read separately and woven together
  * per day rather than joined in SQL: a join across them would need an outer key
  * they deliberately do not share, and one wrong condition would be the kind of
  * mistake that shows one person's day to another. Merging in memory keeps every
@@ -88,7 +117,7 @@ export async function loadProject100Timeline(
   const from = period.from ?? addCalendarDateDays(to, -DEFAULT_PERIOD_DAYS);
 
   const sql = await readyClient();
-  const [journal, sessions, body, media] = await Promise.all([
+  const [journal, sessions, meals, body, media] = await Promise.all([
     sql<JournalRow[]>`
       select to_char(written_on, 'YYYY-MM-DD') as written_on, body, mood
       from project100_journal_entries
@@ -105,6 +134,15 @@ export async function loadProject100Timeline(
         and session_date >= ${from} and session_date <= ${to}
       order by session_date desc
       limit ${PER_SOURCE_LIMIT}
+    `,
+    sql<MealRow[]>`
+      select id, to_char(eaten_on, 'YYYY-MM-DD') as eaten_on, eaten_at_minute,
+             meal_type, title, source, protein_g, kcal
+      from project100_meals
+      where user_id = ${actor.userId}
+        and eaten_on >= ${from} and eaten_on <= ${to}
+      order by eaten_on desc, eaten_at_minute nulls last, id
+      limit ${PER_SOURCE_LIMIT * 4}
     `,
     sql<BodyRow[]>`
       select to_char(measured_on, 'YYYY-MM-DD') as measured_on, metric, label, unit, value
@@ -131,6 +169,7 @@ export async function loadProject100Timeline(
       kind: "journal",
       id: `journal-${row.written_on}`,
       on: row.written_on.slice(0, 10),
+      atMinute: null,
       title: journalExcerpt(row.body, 90) || "Dagsform utan text",
       detail: null,
       href: `/projekt-100/dagbok?dag=${row.written_on.slice(0, 10)}`,
@@ -143,6 +182,7 @@ export async function loadProject100Timeline(
       kind: "training",
       id: `training-${row.id}`,
       on: row.session_date.slice(0, 10),
+      atMinute: null,
       title: row.title,
       detail: [
         STATUS_WORDS[row.status] ?? row.status,
@@ -152,6 +192,29 @@ export async function loadProject100Timeline(
         .filter(Boolean)
         .join(" · "),
       href: "/projekt-100/traning",
+      sensitive: false,
+    });
+  }
+
+  for (const row of meals) {
+    const day = row.eaten_on.slice(0, 10);
+    const protein = nutritionNumber(row.protein_g);
+    const kcal = nutritionNumber(row.kcal);
+    items.push({
+      kind: "meal",
+      id: `meal-${row.id}`,
+      on: day,
+      atMinute: row.eaten_at_minute,
+      title: row.title,
+      detail: [
+        PROJECT100_MEAL_TYPE_LABELS[row.meal_type],
+        MEAL_SOURCE_WORDS[row.source],
+        protein === null ? null : `${numberFormatter.format(protein)} g protein`,
+        kcal === null ? null : `${numberFormatter.format(kcal)} kcal`,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      href: `/projekt-100/kost?dag=${day}`,
       sensitive: false,
     });
   }
@@ -174,6 +237,7 @@ export async function loadProject100Timeline(
       kind: "body",
       id: `body-${day}`,
       on: day,
+      atMinute: null,
       title: parts[0],
       detail: parts.length > 1 ? parts.slice(1).join(" · ") : null,
       href: `/projekt-100/kropp?period=90&fran=${addCalendarDateDays(day, -45)}&till=${day}`,
@@ -186,6 +250,7 @@ export async function loadProject100Timeline(
       kind: "media",
       id: `media-${row.id}`,
       on: row.captured_on.slice(0, 10),
+      atMinute: null,
       title: row.caption ?? (CATEGORY_WORDS[row.category] ?? "Bild"),
       detail: row.caption ? (CATEGORY_WORDS[row.category] ?? null) : null,
       href: `/projekt-100/media?kategori=${row.category}`,
