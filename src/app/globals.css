@@ -8167,10 +8167,45 @@ button.event-row:hover {
 .p100-content-empty-state h3 { margin: 0; color: #fff; font-size: .95rem; }
 .p100-content-empty-state p { max-width: 380px; font-size: .65rem; color: #77837b; margin: 0 0 10px; }
 
-@media (max-width: 900px) {
-  .p100-content-workspace { grid-template-columns: 1fr; height: auto; }
-  .p100-fields-grid { grid-template-columns: 1fr; }
-}
+/* Quick Workout Modal (Passavslutaren) */
+.p100-button-quick { background: rgba(200,244,93,.15); color: var(--p100-accent); border: 1px solid rgba(200,244,93,.35); }
+.p100-button-quick:hover { background: rgba(200,244,93,.25); border-color: var(--p100-accent); }
+
+.p100-quick-workout-modal { max-width: 540px; width: 92%; background: #121814; border: 1px solid var(--p100-line); border-radius: 12px; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,.8); display: flex; flex-direction: column; }
+.p100-quick-workout-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--p100-line); background: rgba(0,0,0,.25); }
+.p100-quick-workout-title { display: flex; flex-direction: column; gap: 2px; }
+.p100-quick-badge { display: inline-flex; align-items: center; gap: 4px; font-size: .52rem; font-weight: 800; text-transform: uppercase; color: var(--p100-accent); }
+.p100-quick-badge svg { width: 11px; height: 11px; }
+.p100-quick-workout-title h2 { margin: 0; font-size: .95rem; color: #fff; }
+.p100-quick-close { background: transparent; border: 0; color: #77837b; cursor: pointer; display: grid; place-items: center; }
+.p100-quick-close:hover { color: #fff; }
+
+.p100-quick-workout-form { padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; max-height: calc(85vh - 70px); overflow-y: auto; }
+.p100-quick-section { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 8px; background: rgba(0,0,0,.2); border: 1px solid var(--p100-line); }
+.p100-quick-section-title { display: flex; align-items: center; gap: 6px; font-size: .62rem; font-weight: 800; text-transform: uppercase; color: #8a968f; margin-bottom: 2px; }
+.p100-quick-section-title svg { width: 13px; height: 13px; color: var(--p100-accent); }
+
+.p100-quick-templates-grid { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+.p100-quick-template-chip { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-start; padding: 6px 10px; border-radius: 6px; background: rgba(0,0,0,.3); border: 1px solid var(--p100-line); cursor: pointer; text-align: left; }
+.p100-quick-template-chip strong { font-size: .65rem; color: #cbd3cd; }
+.p100-quick-template-chip small { font-size: .52rem; color: #68736c; }
+.p100-quick-template-chip.active { background: rgba(200,244,93,.12); border-color: var(--p100-accent); }
+.p100-quick-template-chip.active strong { color: var(--p100-accent); }
+
+.p100-quick-fields-row { display: grid; grid-template-columns: 1fr 90px; gap: 8px; }
+.p100-quick-ratings-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.p100-rating-group { display: flex; align-items: center; gap: 8px; font-size: .62rem; color: #cbd3cd; }
+.p100-rating-buttons { display: flex; gap: 4px; }
+.p100-rating-buttons button { width: 26px; height: 26px; border-radius: 5px; border: 1px solid var(--p100-line); background: rgba(0,0,0,.3); color: #77837b; font-weight: 700; font-size: .62rem; cursor: pointer; display: grid; place-items: center; }
+.p100-rating-buttons button.active { background: var(--p100-accent); color: #121814; font-weight: 800; border-color: var(--p100-accent); }
+
+.p100-quick-protein-toggle { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.p100-checkbox-label { display: inline-flex; align-items: center; gap: 6px; font-size: .62rem; color: #cbd3cd; cursor: pointer; }
+.p100-protein-input-wrap { display: inline-flex; align-items: center; gap: 6px; font-size: .6rem; color: #8a968f; }
+.p100-protein-input-wrap input { width: 60px; padding: 4px 8px; font-size: .65rem; background: rgba(0,0,0,.4); border: 1px solid var(--p100-line); border-radius: 5px; color: #fff; text-align: center; }
+
+.p100-quick-workout-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
 
 
 

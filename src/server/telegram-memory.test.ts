@@ -12,7 +12,8 @@ const dependencies = vi.hoisted(() => ({
   releaseTelegramUpdate: vi.fn(async () => undefined),
   loadDashboard: vi.fn(),
   answerFamilyQuestion: vi.fn(async () => ({ text: "Du jobbar söndag 07:00-16:00" })),
-  handleMemoryTextIntent: vi.fn(),
+  processJarvisAgentMessage: vi.fn(),
+  transcribeTelegramVoice: vi.fn(),
 }));
 
 vi.stubGlobal("fetch", vi.fn());
@@ -27,8 +28,11 @@ vi.mock("@/server/database", () => ({
 vi.mock("@/server/questions", () => ({
   answerFamilyQuestion: dependencies.answerFamilyQuestion,
 }));
-vi.mock("@/server/project100-memory-assistant", () => ({
-  handleMemoryTextIntent: dependencies.handleMemoryTextIntent,
+vi.mock("@/server/jarvis-agent", () => ({
+  processJarvisAgentMessage: dependencies.processJarvisAgentMessage,
+}));
+vi.mock("@/server/audio-transcription", () => ({
+  transcribeTelegramVoice: dependencies.transcribeTelegramVoice,
 }));
 vi.mock("@/server/actor", () => ({
   requireTelegramActor: vi.fn(async () => ({
@@ -44,40 +48,75 @@ vi.mock("@/server/actor", () => ({
 
 import { processTelegramUpdate } from "@/server/telegram";
 
-describe("Telegram Memory & Schedule Engine", () => {
+describe("Telegram Jarvis Voice & Schedule Engine", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
     dependencies.getTelegramAccount.mockResolvedValue({
       id: "tel-1",
       personId: "person-1",
-      personName: "Mikael",
+      personName: "Jimmy",
       userId: "12345",
       chatId: "chat-999",
-      username: "mikael",
+      username: "jimmy",
     });
   });
 
-  it("handles memory storage commands from Telegram", async () => {
-    dependencies.handleMemoryTextIntent.mockResolvedValueOnce({
-      handled: true,
-      replyText: '✅ Sparat under 🏢 Jobb:\n"Koden till inkontinensförrådet är 2214"',
-      isStore: true,
+  it("handles voice messages by transcribing and passing to Jarvis Agent", async () => {
+    dependencies.transcribeTelegramVoice.mockResolvedValueOnce(
+      "Kolla om jag jobbar den 25e september och lägg in att boka bord",
+    );
+    dependencies.processJarvisAgentMessage.mockResolvedValueOnce({
+      text: "God kväll Jimmy! Den 25 september är du ledig. Jag har lagt in en påminnelse om att boka bord.",
+      executedActions: ["check_schedule", "create_task"],
+    });
+
+    await processTelegramUpdate({
+      update_id: 201,
+      message: {
+        chat: { id: 999, type: "private" },
+        from: { id: 12345, first_name: "Jimmy", is_bot: false },
+        voice: { file_id: "voice_file_abc123", duration: 6 },
+      },
+    });
+
+    expect(dependencies.transcribeTelegramVoice).toHaveBeenCalledWith("voice_file_abc123");
+    expect(dependencies.processJarvisAgentMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "user-1", personType: "adult" }),
+      "Kolla om jag jobbar den 25e september och lägg in att boka bord",
+      expect.objectContaining({ channel: "telegram", personName: "Jimmy" }),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottest-token/sendMessage",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          chat_id: "999",
+          text: "God kväll Jimmy! Den 25 september är du ledig. Jag har lagt in en påminnelse om att boka bord.",
+        }),
+      }),
+    );
+  });
+
+  it("handles memory storage commands from Telegram text", async () => {
+    dependencies.processJarvisAgentMessage.mockResolvedValueOnce({
+      text: '✅ Sparat under 🏢 Jobb:\n"Koden till inkontinensförrådet är 2214"',
+      executedActions: ["save_memory"],
     });
 
     await processTelegramUpdate({
       update_id: 101,
       message: {
         chat: { id: 999, type: "private" },
-        from: { id: 12345, first_name: "Mikael", is_bot: false },
+        from: { id: 12345, first_name: "Jimmy", is_bot: false },
         text: "Jobb - Koden till inkontinensförrådet är 2214",
       },
     });
 
-    expect(dependencies.handleMemoryTextIntent).toHaveBeenCalledWith(
+    expect(dependencies.processJarvisAgentMessage).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "user-1", personType: "adult" }),
       "Jobb - Koden till inkontinensförrådet är 2214",
-      "telegram",
+      expect.objectContaining({ channel: "telegram", personName: "Jimmy" }),
     );
     expect(fetch).toHaveBeenCalledWith(
       "https://api.telegram.org/bottest-token/sendMessage",
@@ -89,21 +128,20 @@ describe("Telegram Memory & Schedule Engine", () => {
         }),
       }),
     );
-    expect(dependencies.answerFamilyQuestion).not.toHaveBeenCalled();
   });
 
-  it("handles memory queries from Telegram", async () => {
-    dependencies.handleMemoryTextIntent.mockResolvedValueOnce({
-      handled: true,
-      replyText: "🔑 Sparad uppgift:\n• 🏢 [Jobb] Koden till inkontinensförrådet är 2214",
+  it("handles conversational greetings", async () => {
+    dependencies.processJarvisAgentMessage.mockResolvedValueOnce({
+      text: "God kväll Jimmy! Hur kan jag hjälpa dig?",
+      executedActions: [],
     });
 
     await processTelegramUpdate({
       update_id: 102,
       message: {
         chat: { id: 999, type: "private" },
-        from: { id: 12345, first_name: "Mikael", is_bot: false },
-        text: "Vad är koden till förrådet på jobbet?",
+        from: { id: 12345, first_name: "Jimmy", is_bot: false },
+        text: "Hej Jarvis!",
       },
     });
 
@@ -113,37 +151,7 @@ describe("Telegram Memory & Schedule Engine", () => {
         method: "POST",
         body: JSON.stringify({
           chat_id: "999",
-          text: "🔑 Sparad uppgift:\n• 🏢 [Jobb] Koden till inkontinensförrådet är 2214",
-        }),
-      }),
-    );
-    expect(dependencies.answerFamilyQuestion).not.toHaveBeenCalled();
-  });
-
-  it("falls back to family schedule questions when not a memory intent", async () => {
-    dependencies.handleMemoryTextIntent.mockResolvedValueOnce({
-      handled: false,
-      replyText: "",
-    });
-
-    await processTelegramUpdate({
-      update_id: 103,
-      message: {
-        chat: { id: 999, type: "private" },
-        from: { id: 12345, first_name: "Mikael", is_bot: false },
-        text: "Jobbar jag på söndag?",
-      },
-    });
-
-    expect(dependencies.handleMemoryTextIntent).toHaveBeenCalled();
-    expect(dependencies.answerFamilyQuestion).toHaveBeenCalled();
-    expect(fetch).toHaveBeenCalledWith(
-      "https://api.telegram.org/bottest-token/sendMessage",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          chat_id: "999",
-          text: "Du jobbar söndag 07:00-16:00",
+          text: "God kväll Jimmy! Hur kan jag hjälpa dig?",
         }),
       }),
     );

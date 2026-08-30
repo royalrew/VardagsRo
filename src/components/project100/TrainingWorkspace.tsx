@@ -19,10 +19,12 @@ import {
   Sparkles,
   Trash2,
   X,
+  Zap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { WorkoutQuickModal } from "./WorkoutQuickModal";
 import {
   PROJECT100_ACTIVITY_LABELS,
   PROJECT100_ACTIVITY_TYPES,
@@ -751,6 +753,7 @@ export function TrainingWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<SessionFilter>("all");
+  const [showQuickModal, setShowQuickModal] = useState(false);
   const [plan, setPlan] = useState<{
     session: Project100TrainingSession;
     mode: PlanMode;
@@ -997,7 +1000,29 @@ export function TrainingWorkspace({
     <div className="p100-training-workspace">
       <header className="p100-page-head p100-training-head">
         <div><span>Bygg · mät · förstå</span><h1>Träning</h1><p>Planera runt verkligheten, logga vad som faktiskt hände och bygg ett minne som går att lära av.</p></div>
-        <div className="p100-head-actions"><button type="button" className="p100-button-secondary" onClick={() => { setTemplate(templateDraft()); setError(null); setComposer("template"); }}><Sparkles /> Ny mall</button><button type="button" className="p100-button" onClick={openSession}><Plus /> Nytt pass</button></div>
+        <div className="p100-head-actions">
+          <button
+            type="button"
+            className="p100-button p100-button-quick"
+            onClick={() => setShowQuickModal(true)}
+          >
+            <Zap /> Snabbavsluta pass
+          </button>
+          <button
+            type="button"
+            className="p100-button-secondary"
+            onClick={() => {
+              setTemplate(templateDraft());
+              setError(null);
+              setComposer("template");
+            }}
+          >
+            <Sparkles /> Ny mall
+          </button>
+          <button type="button" className="p100-button" onClick={openSession}>
+            <Plus /> Nytt pass
+          </button>
+        </div>
       </header>
 
       <section className="p100-training-context">
@@ -1093,6 +1118,17 @@ export function TrainingWorkspace({
 
       {composer === "session" ? <SessionComposer draft={session} setDraft={setSession} busy={busy} error={error} onClose={closeComposer} onSubmit={submitSession} /> : null}
       {composer === "template" ? <TemplateComposer draft={template} setDraft={setTemplate} busy={busy} error={error} onClose={closeComposer} onSubmit={submitTemplate} /> : null}
+      <WorkoutQuickModal
+        isOpen={showQuickModal}
+        onClose={() => setShowQuickModal(false)}
+        templates={templates}
+        plannedSessions={sessions.filter((s) => s.status === "planned")}
+        todayDate={initialView.today}
+        onSaved={() => {
+          setShowQuickModal(false);
+          router.refresh();
+        }}
+      />
       {plan ? (
         <PlanActionSheet
           session={plan.session}

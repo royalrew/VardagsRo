@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { requireTelegramActor } from "@/server/actor";
+import { transcribeTelegramVoice } from "@/server/audio-transcription";
 import { telegramConfig } from "@/server/config";
 import {
   claimTelegramUpdate,
@@ -9,7 +10,7 @@ import {
   loadDashboard,
   releaseTelegramUpdate,
 } from "@/server/database";
-import { handleMemoryTextIntent } from "@/server/project100-memory-assistant";
+import { processJarvisAgentMessage } from "@/server/jarvis-agent";
 import { answerFamilyQuestion } from "@/server/questions";
 import { generateTelegramLinkCode, hashTelegramLinkCode } from "@/server/telegram-security";
 
@@ -18,6 +19,8 @@ const telegramUpdateSchema = z.object({
   message: z
     .object({
       text: z.string().max(4_096).optional(),
+      voice: z.object({ file_id: z.string(), duration: z.number().optional() }).optional(),
+      audio: z.object({ file_id: z.string(), duration: z.number().optional() }).optional(),
       chat: z.object({ id: z.number().int(), type: z.string() }),
       from: z
         .object({
@@ -107,7 +110,7 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
     if (requestedCommand === "help") {
       await sendTelegramMessage(
         chatId,
-        "Fråga om familjens schema eller spara och hämta fakta direkt i minnet:\n\n• Spara minne: ”Jobb - Koden till inkontinensförrådet är 2214” eller ”Bilen - Däckdimension 205/55 R16”\n• Fråga om minne: ”Vad är koden till förrådet?” eller ”Bilen däck”\n• Fråga om schema: ”Jobbar jag på söndag?” eller ”När jobbar Mikael nästa gång?”\n\n/help – visa hjälp\n/whoami – visa din koppling\n/start – kontrollera kopplingen",
+        "Jag är Jarvis, din personliga digitala kollega.\n\nDu kan skriva eller tala in vad som helst:\n• Frågor & Schema: ”Kolla om jag jobbar den 25e september och lägg in att boka restaurang”\n• Spara minne: ”Jobb - Koden till inkontinensförrådet är 2214” eller ”Bilen - Däck 205/55 R16”\n• Sök i minnet: ”Vad är koden till förrådet?”\n• Dagbok & Mående: ”Kändes bra idag, energi 4 av 5, sov 7 timmar”\n\n/help – visa hjälp\n/whoami – visa din koppling\n/start – kontrollera kopplingen",
       );
       return;
     }
@@ -115,35 +118,58 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
       await sendTelegramMessage(chatId, `Du är kopplad som ${account.personName} i Vardagsro.`);
       return;
     }
-    if (!message.text) {
-      await sendTelegramMessage(chatId, "Jag kan läsa textfrågor. Skicka din fråga som ett vanligt meddelande.");
+
+    let messageText = message.text?.trim() || "";
+
+    // If voice or audio message, transcribe with Whisper
+    if (!messageText && (message.voice || message.audio)) {
+      const fileId = message.voice?.file_id || message.audio?.file_id;
+      if (fileId) {
+        try {
+          messageText = await transcribeTelegramVoice(fileId);
+        } catch {
+          await sendTelegramMessage(
+            chatId,
+            "Kunde inte transkribera röstmeddelandet. Försök igen eller skriv som text.",
+          );
+          return;
+        }
+      }
+    }
+
+    if (!messageText) {
+      await sendTelegramMessage(
+        chatId,
+        "Jag kan ta emot text- och röstmeddelanden. Skicka en fråga eller håll in mikrofonen för att tala.",
+      );
       return;
     }
 
-    const question = message.text.trim();
-    if (question.length < 2 || question.length > 1_000) {
-      await sendTelegramMessage(chatId, "Frågan behöver vara mellan 2 och 1 000 tecken.");
+    if (messageText.length < 2 || messageText.length > 2_000) {
+      await sendTelegramMessage(chatId, "Meddelandet behöver vara mellan 2 och 2 000 tecken.");
       return;
     }
+
     // The bot reads the household its chat is linked to, through the same
     // permission layer as the browser. It never reaches a household by default.
     const actor = await requireTelegramActor(userId);
 
-    // If adult, check for memory intents (store / query) first
+    // If adult, run through Jarvis Agentic Brain
     if (actor.personType === "adult") {
       try {
-        const memoryRes = await handleMemoryTextIntent(actor, question, "telegram");
-        if (memoryRes.handled) {
-          await sendTelegramMessage(chatId, memoryRes.replyText);
-          return;
-        }
+        const agentResult = await processJarvisAgentMessage(actor, messageText, {
+          channel: "telegram",
+          personName: account.personName,
+        });
+        await sendTelegramMessage(chatId, agentResult.text);
+        return;
       } catch {
-        // Fall back to general question answering if memory check encounters an error
+        // Fall back to general question answering if agent execution encounters an error
       }
     }
 
     const data = await loadDashboard(actor);
-    const answer = await answerFamilyQuestion(question, data, actor.personId);
+    const answer = await answerFamilyQuestion(messageText, data, actor.personId);
     await sendTelegramMessage(chatId, answer.text);
   } catch (error) {
     await releaseTelegramUpdate(update.update_id).catch(() => undefined);
