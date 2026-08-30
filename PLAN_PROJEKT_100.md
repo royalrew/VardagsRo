@@ -564,7 +564,9 @@ Mål: beskriva utvecklingen bättre än med endast vågens tal.
 - ~~Milstolpar, exempelvis 82,5, 85, 90, 95 och 100 kg.~~ Klar 2026-08-29,
   härledda mellan startvikt och mål i stället för inskrivna.
 - ~~Målet 100 kg behandlas som riktning, inte bevis på ren muskelökning.~~
-- Före/efter-jämförelse med dragbar skiljelinje. Återstår.
+- ~~Före/efter-jämförelse med dragbar skiljelinje.~~ Klar 2026-08-30, med
+  bildväljare, växlingsknapp, tids- och viktdeltan, tangentbords- och touchstöd,
+  samt alternativa visningslägen (sida vid sida, övertoning).
 - ~~Styrkeutveckling bredvid vikt och mått.~~ Klar 2026-08-30, med samma
   datumaxel, faktisk volym, personbästan som går att spåra till pass och ett
   radardiagram över positiva genomförda arbetsset per användarvald muskelgrupp.
@@ -741,14 +743,15 @@ Fas 0, fas 1 och fas 2 vilar nu på riktig kod:
     dagsform och spårbar datatabell.
 11. Jarvis som egen arbetsyta med tre minnestyper (fakta, händelser, lärdomar),
     källbunden chatt, jobbschemakontext och strukturerade utkast.
+12. Före/efter-jämförelse av kroppsbilder med dragbar skiljelinje, tids- och
+    viktdeltan, bildväljare och alternativa visningslägen i kroppsresan.
 
 Bildlagringen kräver konfigurerad objektlagring (`R2_*`). Utan den vägrar
 servern spara en bild i stället för att skapa en rad utan bild.
 
 ## Nästa konkreta leverans
 
-1. Före/efter-jämförelse av kroppsbilder med dragbar skiljelinje.
-2. Innehålls- och YouTube-flöde (`/projekt-100/innehall`).
-3. Avveckling av `solo_*`-tabellerna och den inbäddade `SoloView` när deras
+1. Innehålls- och YouTube-flöde (`/projekt-100/innehall`).
+2. Avveckling av `solo_*`-tabellerna och den inbäddade `SoloView` när deras
    data har flyttats. Vikt, energi, sömn och dagsanteckning är redan migrerade;
    kvar står karriärstegen, som Projekt 100 inte ärver.

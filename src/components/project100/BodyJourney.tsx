@@ -32,6 +32,7 @@ import type { Project100MediaItem } from "@/lib/project100-media";
 import type { Project100StrengthDevelopment } from "@/lib/project100-strength";
 import { MetricChart } from "@/components/project100/MetricChart";
 import { StrengthDevelopment as StrengthDevelopmentView } from "@/components/project100/StrengthDevelopment";
+import { BodyComparisonSlider } from "@/components/project100/BodyComparisonSlider";
 
 interface CustomDraft {
   id: string;
@@ -586,34 +587,43 @@ export function BodyJourney({
             och på samma avstånd — då blir jämförelsen värd något.
           </p>
         ) : (
-          <div className="p100-body-photo-strip">
-            {photos.map((photo) => {
-              const weight = weightByDay.get(photo.capturedOn);
-              return (
-                <Link
-                  key={photo.id}
-                  href="/projekt-100/media?kategori=body"
-                  className="p100-body-photo"
-                >
-                  <span className={revealPhotos ? undefined : "hidden"}>
-                    {photo.previewUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={photo.previewUrl} alt="" loading="lazy" />
-                    ) : (
-                      <ImageIcon />
-                    )}
-                    {revealPhotos ? null : (
-                      <b>
-                        <Lock />
-                      </b>
-                    )}
-                  </span>
-                  <small>{formatDate(photo.capturedOn)}</small>
-                  <b>{weight === undefined ? "Vikt saknas" : formatMeasurement(weight, "kg")}</b>
-                </Link>
-              );
-            })}
-          </div>
+          <>
+            <div className="p100-body-photo-strip">
+              {photos.map((photo) => {
+                const weight = weightByDay.get(photo.capturedOn);
+                return (
+                  <Link
+                    key={photo.id}
+                    href="/projekt-100/media?kategori=body"
+                    className="p100-body-photo"
+                  >
+                    <span className={revealPhotos ? undefined : "hidden"}>
+                      {photo.previewUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={photo.previewUrl} alt="" loading="lazy" />
+                      ) : (
+                        <ImageIcon />
+                      )}
+                      {revealPhotos ? null : (
+                        <b>
+                          <Lock />
+                        </b>
+                      )}
+                    </span>
+                    <small>{formatDate(photo.capturedOn)}</small>
+                    <b>{weight === undefined ? "Vikt saknas" : formatMeasurement(weight, "kg")}</b>
+                  </Link>
+                );
+              })}
+            </div>
+
+            <BodyComparisonSlider
+              photos={photos}
+              weightsByDay={weightByDay}
+              revealPhotos={revealPhotos}
+              onToggleReveal={() => setRevealPhotos((current) => !current)}
+            />
+          </>
         )}
       </section>
 
