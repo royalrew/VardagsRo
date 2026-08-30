@@ -4,18 +4,22 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   CircleAlert,
   FileImage,
   FileText,
   Folder,
   FolderInput,
   FolderOpen,
+  FolderPlus,
   Home,
   ListChecks,
   MoreHorizontal,
   Pencil,
   Plus,
   Search,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -35,6 +39,14 @@ import type {
   FamilyDocument,
   FamilyDocumentFolder,
 } from "@/lib/types";
+
+export const RECOMMENDED_DOCUMENT_CATEGORIES = [
+  { name: "🧠 Jarvis Levande Dokument", description: "Sammanfattningar, rutiner och hushållsinstruktioner" },
+  { name: "🏥 Kallelser & Vård", description: "Tandläkare, vårdcentral, bvc och läkarbesök" },
+  { name: "👶 Skola & Barnens schema", description: "Veckobrev, aktiviteter, förskola och idrott" },
+  { name: "🏠 Hushåll, Avtal & Ekonomi", description: "Hyra, fordon/bil, försäkringar och kvitton" },
+  { name: "📁 Övrigt & Inkorg", description: "Osorterade dokument och underlag" },
+] as const;
 
 type Filter = "all" | "confirmed" | "needs_review";
 type DraggedItem = { kind: "document" | "folder"; id: string };
@@ -139,6 +151,7 @@ export function DocumentsView({
   onUpdateDocument,
 }: DocumentsViewProps) {
   const [filter, setFilter] = useState<Filter>("all");
+  const [selectedCategory, setSelectedCategory] = useState<string | "all">("all");
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(data.folders.map((folder) => folder.id)));
   const [openMenu, setOpenMenu] = useState<string | null>(null);
@@ -148,6 +161,28 @@ export function DocumentsView({
   const [editorError, setEditorError] = useState<string | null>(null);
   const [folderEditor, setFolderEditor] = useState<FolderEditorState | null>(null);
   const [documentEditor, setDocumentEditor] = useState<DocumentEditorState | null>(null);
+
+  const expandAllFolders = () => {
+    setExpanded(new Set(data.folders.map((folder) => folder.id)));
+  };
+
+  const collapseAllFolders = () => {
+    setExpanded(new Set());
+  };
+
+  const handleCreateRecommendedCategories = async () => {
+    setBusy("folders:seed");
+    try {
+      for (const cat of RECOMMENDED_DOCUMENT_CATEGORIES) {
+        if (!data.folders.some((f) => f.name.toLowerCase() === cat.name.toLowerCase())) {
+          await onCreateFolder({ name: cat.name, parentId: null });
+        }
+      }
+      setExpanded(new Set(data.folders.map((f) => f.id)));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const folderById = useMemo(
     () => new Map(data.folders.map((folder) => [folder.id, folder])),
@@ -442,6 +477,15 @@ export function DocumentsView({
     data.folders.filter((folder) => folder.parentId === null || !folderIds.has(folder.parentId)),
   );
   const rootDocuments = documentsForFolder(null);
+
+  const displayedFolders = selectedCategory === "all"
+    ? rootFolders
+    : rootFolders.filter((f) => f.id === selectedCategory);
+
+  const displayedRootDocuments = selectedCategory === "all" || selectedCategory === "root"
+    ? rootDocuments
+    : [];
+
   const hasResults = visible.length > 0 || (!search.trim() && data.folders.length > 0);
 
   return (
@@ -451,10 +495,30 @@ export function DocumentsView({
       <section className="page-heading">
         <div>
           <p className="eyebrow">Familjens samlade underlag</p>
-          <h1>Dokument</h1>
-          <p>Scheman, kallelser och brev &mdash; ordnade s&aring; att hela familjen hittar.</p>
+          <h1>Dokument & Filträd</h1>
+          <p>Kallelser, barnens scheman och levande Jarvis-dokument &mdash; ordnade i kategorier så att hela familjen hittar.</p>
         </div>
         <div className="document-heading-actions">
+          {data.folders.length > 0 ? (
+            <>
+              <button
+                type="button"
+                className="button button-ghost"
+                onClick={expandAllFolders}
+                title="Expandera alla mappar"
+              >
+                <ChevronsUpDown size={16} /> Expandera alla
+              </button>
+              <button
+                type="button"
+                className="button button-ghost"
+                onClick={collapseAllFolders}
+                title="Fäll ihop alla mappar"
+              >
+                <ChevronsDownUp size={16} /> Fäll ihop
+              </button>
+            </>
+          ) : null}
           <button className="button button-soft" onClick={() => openCreateFolder(null)}>
             <Folder size={17} /> Ny mapp
           </button>
@@ -463,6 +527,31 @@ export function DocumentsView({
           </button>
         </div>
       </section>
+
+      {/* 1-Click Standard Categories Seed Banner if no folders exist */}
+      {data.folders.length === 0 ? (
+        <section className="card recommended-folders-banner">
+          <div className="banner-content">
+            <div className="banner-icon-wrap">
+              <Sparkles size={22} />
+            </div>
+            <div>
+              <strong>Skapa rekommenderade kategorier</strong>
+              <p>
+                Organisera familjens dokument direkt med standardmappar för <b>🧠 Jarvis Levande Dokument</b>, <b>🏥 Kallelser & Vård</b>, <b>👶 Skola & Barnens schema</b> och <b>🏠 Hushåll & Avtal</b>.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="button button-primary"
+            onClick={() => void handleCreateRecommendedCategories()}
+            disabled={Boolean(busy)}
+          >
+            <FolderPlus size={16} /> {busy ? "Skapar mappar..." : "Skapa 5 standardkategorier"}
+          </button>
+        </section>
+      ) : null}
 
       <section className="documents-toolbar card">
         <div className="filter-tabs" role="tablist" aria-label="Dokumentstatus">
@@ -483,6 +572,44 @@ export function DocumentsView({
         </label>
       </section>
 
+      {/* Category Pills Quick Bar when folders exist */}
+      {data.folders.length > 0 ? (
+        <nav className="document-category-pills" aria-label="Kategorier">
+          <button
+            type="button"
+            className={`category-pill ${selectedCategory === "all" ? "active" : ""}`}
+            onClick={() => setSelectedCategory("all")}
+          >
+            <Home size={14} />
+            <span>Alla kategorier</span>
+            <small>{data.documents.length}</small>
+          </button>
+          {rootFolders.map((folder) => {
+            const docCount = data.documents.filter((d) => {
+              if (d.folderId === folder.id) return true;
+              const descendants = descendantFolderIds(data.folders, folder.id);
+              return d.folderId !== null && descendants.has(d.folderId);
+            }).length;
+
+            return (
+              <button
+                key={folder.id}
+                type="button"
+                className={`category-pill ${selectedCategory === folder.id ? "active" : ""}`}
+                onClick={() => {
+                  setSelectedCategory((curr) => (curr === folder.id ? "all" : folder.id));
+                  setExpanded((curr) => new Set(curr).add(folder.id));
+                }}
+              >
+                <Folder size={14} />
+                <span>{folder.name}</span>
+                <small>{docCount}</small>
+              </button>
+            );
+          })}
+        </nav>
+      ) : null}
+
       {hasResults ? (
         <section className="document-tree card" aria-busy={Boolean(busy)}>
           <div
@@ -492,11 +619,11 @@ export function DocumentsView({
             <Home size={18} />
             <strong>Alla dokument</strong>
             <span>{visible.length}</span>
-            <small>Dra hit f&ouml;r att flytta till roten</small>
+            <small>Dra och släpp dokument här för att flytta till roten</small>
           </div>
           <div className="document-tree-content">
-            {rootFolders.map((folder) => renderFolder(folder, 0, new Set()))}
-            {rootDocuments.map(renderDocument)}
+            {displayedFolders.map((folder) => renderFolder(folder, 0, new Set()))}
+            {displayedRootDocuments.map(renderDocument)}
           </div>
         </section>
       ) : (
