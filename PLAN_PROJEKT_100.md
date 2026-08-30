@@ -41,7 +41,10 @@ Gäller: ersättaren till "Mitt spår"
   datatabell.
 - [x] Jarvis-minne och kontrollerad assistent: tre minnestyper (fakta, händelser,
   lärdomar), källbunden chatt, jobbschemakontext och strukturerade utkast.
-- [ ] Innehållsflöde (YouTube och synlighetsprojekt).
+- [x] Innehållsflöde (YouTube och synlighetsprojekt): produktionsstatusar, manus,
+  shotlist, titel/thumbnail-idéer och aktiv koppling av privat tidslinjemedia.
+- [ ] Vardags- & hushållsminne (kunskapsbank och Telegram-inmatning).
+- [ ] Avveckling av gamla Solo-tabeller och PWA/export.
 
 ## Vision
 
@@ -661,13 +664,12 @@ Klart när svar är källbundna, korrigerbara och respekterar privatgränserna.
 
 Mål: göra resan berättningsbar utan att innehåll tar över träningen.
 
-- Idé, hook, manus, inspelningslista och status.
-- Aktivt valda bilder och klipp från den privata tidslinjen.
-- Titel- och thumbnail-idéer.
-- Utkast, inspelad, redigerad och publicerad.
-- Länk och publiceringsdatum.
-- Jarvis kan föreslå berättelser ur veckan men aldrig välja privat material åt
-  användaren eller publicera automatiskt.
+- ~~Idé, hook, manus, inspelningslista och status.~~ Klar 2026-08-30.
+- ~~Aktivt valda bilder och klipp från den privata tidslinjen.~~ Klar 2026-08-30.
+- ~~Titel- och thumbnail-idéer.~~ Klar 2026-08-30.
+- ~~Utkast, inspelad, redigerad och publicerad.~~ Klar 2026-08-30.
+- ~~Länk och publiceringsdatum.~~ Klar 2026-08-30.
+- ~~Jarvis redaktörsförslag ur veckan utan automatisk publicering.~~ Klar 2026-08-30.
 
 Klart när en privat vecka kan bli ett godkänt videoutkast utan att privat och
 offentligt material blandas ihop.
@@ -682,6 +684,18 @@ offentligt material blandas ihop.
 - Prestanda för flera års loggar och många bilder.
 - Tester för användarscope, hushållsscope och medialäckage.
 
+### Fas 10 — Vardags- & Hushållsminnet (Hushållets Kunskapsbank)
+
+Mål: Jarvis som personlig digital kollega och extern hjärna för hela livet.
+
+- **Kategorier:** Jobb (koder, rutiner), Bilen (däck, olja, service), Huset (färgkoder, mått, säkringar), Barnen (storlekar, allergier, tider), Träning & Hälsa, Ekonomi & Avtal.
+- **Snabb-prefix:** `Jobb - Koden till inkontinensförrådet är 2214` sparar deterministiskt direkt i rätt kategori.
+- **Naturligt språk & Telegram:** `Kom ihåg att oljefiltret heter W712` tolkas automatiskt och sparas under *Bilen*.
+- **Blixtsnabb hämtning med källhänvisning:** *"Vad är koden till förrådet på jobbet?"* eller *"Bilen däck"* ger exakt svar direkt.
+- **Visuell kunskapsöversikt:** Sökbar minnesvy i webbgränssnittet där fakta kan redigeras, pausas eller raderas.
+
+Klart när mikrofakta och koder kan sparas och hämtas på sekunder via både webb och Telegram.
+
 ## Rekommenderad byggordning från nu
 
 1. Rensa domänen och definiera nya datakontrakt.
@@ -693,7 +707,8 @@ offentligt material blandas ihop.
 7. Bygg veckosummeringar och analys.
 8. Lägg Jarvis-minne ovanpå pålitlig data.
 9. Bygg YouTube- och synlighetsflödet.
-10. Förstärk offline, export, backup och flerårig prestanda.
+10. Bygg ut Vardags- & hushållsminnet med Telegram-inmatning och kategorier.
+11. Förstärk offline, export, backup och flerårig prestanda.
 
 Jobbschemat specificeras från början men byggs in fullt efter träningsloggen;
 annars har schemat inget riktigt träningsobjekt att planera. Däremot ska alla
@@ -745,13 +760,16 @@ Fas 0, fas 1 och fas 2 vilar nu på riktig kod:
     källbunden chatt, jobbschemakontext och strukturerade utkast.
 12. Före/efter-jämförelse av kroppsbilder med dragbar skiljelinje, tids- och
     viktdeltan, bildväljare och alternativa visningslägen i kroppsresan.
+13. Innehålls- och YouTube-arbetsyta (`/projekt-100/innehall`) med produktionsflöde,
+    manus, shotlist, titelidéer och aktiv koppling av privat tidslinjemedia.
 
 Bildlagringen kräver konfigurerad objektlagring (`R2_*`). Utan den vägrar
 servern spara en bild i stället för att skapa en rad utan bild.
 
 ## Nästa konkreta leverans
 
-1. Innehålls- och YouTube-flöde (`/projekt-100/innehall`).
+1. Vardags- & hushållsminnet (koder, rutiner, Telegram-inmatning och smarta kategorier).
 2. Avveckling av `solo_*`-tabellerna och den inbäddade `SoloView` när deras
    data har flyttats. Vikt, energi, sömn och dagsanteckning är redan migrerade;
    kvar står karriärstegen, som Projekt 100 inte ärver.
+3. Offline/PWA-förstärkning och fullständig export/backup.

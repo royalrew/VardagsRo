@@ -58,6 +58,11 @@ export type AuditAction =
   | "project100.jarvis.memory.create"
   | "project100.jarvis.memory.update"
   | "project100.jarvis.memory.delete"
+  | "project100.content.project.create"
+  | "project100.content.project.update"
+  | "project100.content.project.delete"
+  | "project100.content.media.attach"
+  | "project100.content.media.detach"
   | "login.create";
 
 /**

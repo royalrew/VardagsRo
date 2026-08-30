@@ -1090,6 +1090,50 @@ const migrations = [
         on project100_memories (user_id, is_active, kind, category)`,
     ],
   },
+  {
+    version: "023",
+    name: "project100_content",
+    statements: [
+      `create table if not exists project100_content_projects (
+        id text not null,
+        user_id text not null references auth_users(id) on delete cascade,
+        title text not null check (char_length(btrim(title)) between 1 and 200),
+        hook text check (hook is null or char_length(hook) <= 1000),
+        concept text check (concept is null or char_length(concept) <= 2000),
+        script text check (script is null or char_length(script) <= 50000),
+        status text not null default 'idea' check (status in ('idea', 'draft', 'filmed', 'edited', 'published')),
+        target_publish_date text check (target_publish_date is null or target_publish_date ~ '^\\d{4}-\\d{2}-\\d{2}$'),
+        published_url text check (published_url is null or char_length(published_url) <= 500),
+        published_at timestamptz,
+        thumbnail_ideas jsonb not null default '[]'::jsonb,
+        shotlist jsonb not null default '[]'::jsonb,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        primary key (id, user_id)
+      )`,
+      `create index if not exists project100_content_projects_user_idx
+        on project100_content_projects (user_id, status, updated_at desc)`,
+      `create table if not exists project100_content_media (
+        project_id text not null,
+        media_id text not null,
+        user_id text not null references auth_users(id) on delete cascade,
+        caption text check (caption is null or char_length(caption) <= 500),
+        position integer not null default 0 check (position >= 0 and position < 1000),
+        created_at timestamptz not null default now(),
+        primary key (project_id, media_id, user_id),
+        constraint project100_content_media_project_fk
+          foreign key (project_id, user_id)
+          references project100_content_projects(id, user_id)
+          on delete cascade,
+        constraint project100_content_media_media_fk
+          foreign key (media_id, user_id)
+          references project100_media(id, user_id)
+          on delete cascade
+      )`,
+      `create index if not exists project100_content_media_project_idx
+        on project100_content_media (user_id, project_id, position)`,
+    ],
+  },
 ];
 
 function checksum(migration) {

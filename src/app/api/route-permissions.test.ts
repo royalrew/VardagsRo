@@ -157,6 +157,15 @@ vi.mock("@/server/project100-jarvis", () => ({
   updateProject100Memory: vi.fn(async () => ({ id: "mem-1" })),
   deleteProject100Memory: vi.fn(async () => true),
 }));
+vi.mock("@/server/project100-content", () => ({
+  loadProject100ContentWorkspace: vi.fn(async () => ({ projects: [], activeProject: null, availableMedia: [] })),
+  createProject100ContentProject: vi.fn(async () => ({ id: "proj-1", title: "Test" })),
+  updateProject100ContentProject: vi.fn(async () => ({ id: "proj-1", title: "Test" })),
+  deleteProject100ContentProject: vi.fn(async () => true),
+  attachProject100ContentMedia: vi.fn(async () => ({ mediaId: "med-1" })),
+  detachProject100ContentMedia: vi.fn(async () => true),
+  generateProject100ContentSuggestions: vi.fn(async () => ({ hook: "Här är veckan" })),
+}));
 
 import { PATCH as householdPatch } from "@/app/api/household/route";
 import { GET as loginsGet } from "@/app/api/logins/route";
@@ -224,6 +233,18 @@ import {
   DELETE as jarvisMemoryDelete,
   PATCH as jarvisMemoryPatch,
 } from "@/app/api/project100/jarvis/memories/[id]/route";
+import {
+  GET as contentProjectsGet,
+  POST as contentProjectsPost,
+} from "@/app/api/project100/content/projects/route";
+import {
+  DELETE as contentProjectDelete,
+  GET as contentProjectGet,
+  PATCH as contentProjectPatch,
+} from "@/app/api/project100/content/projects/[id]/route";
+import { POST as contentMediaPost } from "@/app/api/project100/content/projects/[id]/media/route";
+import { DELETE as contentMediaDelete } from "@/app/api/project100/content/projects/[id]/media/[mediaId]/route";
+import { POST as contentSuggestionsPost } from "@/app/api/project100/content/suggestions/route";
 
 function membership(
   role: "owner" | "adult" | "viewer",
@@ -1327,5 +1348,72 @@ describe("Projekt 100 Jarvis is held behind the adult gate and requires CSRF on 
       }),
     );
     expect(created.status).toBe(201);
+  });
+});
+
+describe("Projekt 100 Content is held behind the adult gate and requires CSRF on writes", () => {
+  const projectsUrl = "http://localhost/api/project100/content/projects";
+  const itemUrl = "http://localhost/api/project100/content/projects/proj-1";
+  const mediaUrl = "http://localhost/api/project100/content/projects/proj-1/media";
+  const suggestionsUrl = "http://localhost/api/project100/content/suggestions";
+
+  it("guards project listings", async () => {
+    harness.state.session = null;
+    harness.state.membership = null;
+    expect((await contentProjectsGet(new Request(projectsUrl))).status).toBe(401);
+
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("viewer", "child");
+    expect((await contentProjectsGet(new Request(projectsUrl))).status).toBe(403);
+
+    harness.state.membership = membership("adult");
+    expect((await contentProjectsGet(new Request(projectsUrl))).status).toBe(200);
+  });
+
+  it("guards project creation", async () => {
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("viewer", "child");
+    const child = await contentProjectsPost(
+      jsonPost(projectsUrl, { title: "Vlogg #1" }),
+    );
+    expect(child.status).toBe(403);
+
+    harness.state.membership = membership("adult");
+    const adult = await contentProjectsPost(
+      jsonPost(projectsUrl, { title: "Vlogg #1" }),
+    );
+    expect(adult.status).toBe(201);
+  });
+
+  it("guards project media attachment", async () => {
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("viewer", "child");
+    const child = await contentMediaPost(
+      jsonPost(mediaUrl, { mediaId: "med-1" }),
+      { params: Promise.resolve({ id: "proj-1" }) },
+    );
+    expect(child.status).toBe(403);
+
+    harness.state.membership = membership("adult");
+    const adult = await contentMediaPost(
+      jsonPost(mediaUrl, { mediaId: "med-1" }),
+      { params: Promise.resolve({ id: "proj-1" }) },
+    );
+    expect(adult.status).toBe(201);
+  });
+
+  it("guards content suggestions", async () => {
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("viewer", "child");
+    const child = await contentSuggestionsPost(
+      jsonPost(suggestionsUrl, {}),
+    );
+    expect(child.status).toBe(403);
+
+    harness.state.membership = membership("adult");
+    const adult = await contentSuggestionsPost(
+      jsonPost(suggestionsUrl, {}),
+    );
+    expect(adult.status).toBe(200);
   });
 });
