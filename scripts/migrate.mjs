@@ -1043,6 +1043,53 @@ const migrations = [
       $$`,
     ],
   },
+  {
+    version: "022_project100_jarvis",
+    name: "Conversations, messages, and controlled memories for Jarvis",
+    statements: [
+      `create table if not exists project100_conversations (
+        id text not null,
+        user_id text not null,
+        title text not null check (char_length(btrim(title)) between 1 and 160),
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        primary key (id, user_id)
+      )`,
+      `create index if not exists project100_conversations_user_updated_idx
+        on project100_conversations (user_id, updated_at desc)`,
+      `create table if not exists project100_conversation_messages (
+        id text not null,
+        conversation_id text not null,
+        user_id text not null,
+        role text not null check (role in ('user', 'assistant', 'system')),
+        content text not null check (char_length(btrim(content)) >= 1),
+        sources jsonb not null default '[]'::jsonb,
+        proposals jsonb not null default '[]'::jsonb,
+        created_at timestamptz not null default now(),
+        primary key (id, user_id),
+        constraint project100_messages_conversation_fk
+          foreign key (conversation_id, user_id)
+          references project100_conversations(id, user_id)
+          on delete cascade
+      )`,
+      `create index if not exists project100_messages_conv_created_idx
+        on project100_conversation_messages (user_id, conversation_id, created_at asc)`,
+      `create table if not exists project100_memories (
+        id text not null,
+        user_id text not null,
+        kind text not null check (kind in ('fact', 'event', 'learning')),
+        category text not null check (category in ('goal', 'equipment', 'preference', 'routine', 'injury', 'recovery', 'general')),
+        content text not null check (char_length(btrim(content)) between 1 and 1000),
+        source_ref text check (source_ref is null or char_length(source_ref) <= 200),
+        is_active boolean not null default true,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        primary key (id, user_id)
+      )`,
+      `create index if not exists project100_memories_user_idx
+        on project100_memories (user_id, is_active, kind, category)`,
+    ],
+  },
 ];
 
 function checksum(migration) {

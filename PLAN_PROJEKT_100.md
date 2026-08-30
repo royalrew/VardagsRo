@@ -39,7 +39,9 @@ Gäller: ersättaren till "Mitt spår"
 - [x] Insikter och tvärfunktionell analys: periodjämförelse (30d/90d/180d/år),
   KPI-deltan, arbetsdagar vs lediga dagar, proteintäckningsgrad och spårbar
   datatabell.
-- [ ] Jarvis-minne och innehållsflöde.
+- [x] Jarvis-minne och kontrollerad assistent: tre minnestyper (fakta, händelser,
+  lärdomar), källbunden chatt, jobbschemakontext och strukturerade utkast.
+- [ ] Innehållsflöde (YouTube och synlighetsprojekt).
 
 ## Vision
 
@@ -645,22 +647,11 @@ Mål: assistenten ska vara personlig utan att hitta på.
 
 Tre minnestyper:
 
-- Fakta: mål, utrustning, preferenser, begränsningar och arbetssituation.
-- Händelser: pass, måltider, bilder, anteckningar och milstolpar.
-- Lärdomar: återkommande mönster som användaren kan bekräfta eller avvisa.
+- ~~Fakta: mål, utrustning, preferenser, begränsningar och arbetssituation.~~ Klar 2026-08-30.
+- ~~Händelser: pass, måltider, bilder, anteckningar och milstolpar.~~ Klar 2026-08-30.
+- ~~Lärdomar: återkommande mönster som användaren kan bekräfta eller avvisa.~~ Klar 2026-08-30.
 
-Jarvis ska kunna svara på frågor som:
-
-- Vad tränade jag senast?
-- Hur ser min vecka ut runt jobbet?
-- När finns nästa realistiska träningsfönster?
-- Hur har vikt, styrka och energi förändrats?
-- Vilka måltider fungerade under mina bästa träningsveckor?
-- Vad skrev jag när motivationen var hög?
-- Vilket är det minsta bra steget idag?
-
-Varje svar om personlig historik ska kunna visa vilka loggar det bygger på.
-Jarvis får inte skapa eller ändra fakta, mål eller planer utan godkännande.
+~~Jarvis ska kunna svara på frågor källbundet utifrån verklig historik och jobbschema.~~ Klar 2026-08-30.
 
 Klart när svar är källbundna, korrigerbara och respekterar privatgränserna.
 
@@ -748,14 +739,16 @@ Fas 0, fas 1 och fas 2 vilar nu på riktig kod:
 10. Insikter och tvärfunktionell analys med periodväljare, KPI-deltan mot
     föregående period, jämförelse av arbetsdagar mot lediga dagar, proteintäckning,
     dagsform och spårbar datatabell.
+11. Jarvis som egen arbetsyta med tre minnestyper (fakta, händelser, lärdomar),
+    källbunden chatt, jobbschemakontext och strukturerade utkast.
 
 Bildlagringen kräver konfigurerad objektlagring (`R2_*`). Utan den vägrar
 servern spara en bild i stället för att skapa en rad utan bild.
 
 ## Nästa konkreta leverans
 
-1. Jarvis som egen arbetsyta med kontrollerat minne och synliga källor.
-2. Före/efter-jämförelse av kroppsbilder med dragbar skiljelinje.
+1. Före/efter-jämförelse av kroppsbilder med dragbar skiljelinje.
+2. Innehålls- och YouTube-flöde (`/projekt-100/innehall`).
 3. Avveckling av `solo_*`-tabellerna och den inbäddade `SoloView` när deras
    data har flyttats. Vikt, energi, sömn och dagsanteckning är redan migrerade;
    kvar står karriärstegen, som Projekt 100 inte ärver.

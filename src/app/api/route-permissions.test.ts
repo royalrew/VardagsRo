@@ -148,6 +148,15 @@ vi.mock("@/server/project100-strength", () => ({
 vi.mock("@/server/project100-insights", () => ({
   loadProject100Insights: vi.fn(async () => ({})),
 }));
+vi.mock("@/server/project100-jarvis", () => ({
+  loadProject100JarvisWorkspace: vi.fn(async () => ({ conversations: [], memories: [] })),
+  createProject100Conversation: vi.fn(async () => ({ id: "conv-1", title: "Test" })),
+  deleteProject100Conversation: vi.fn(async () => true),
+  sendProject100JarvisMessage: vi.fn(async () => ({ conversationId: "conv-1", userMessage: {}, assistantMessage: {} })),
+  createProject100Memory: vi.fn(async () => ({ id: "mem-1" })),
+  updateProject100Memory: vi.fn(async () => ({ id: "mem-1" })),
+  deleteProject100Memory: vi.fn(async () => true),
+}));
 
 import { PATCH as householdPatch } from "@/app/api/household/route";
 import { GET as loginsGet } from "@/app/api/logins/route";
@@ -201,6 +210,20 @@ import {
   POST as nutritionPlanPost,
 } from "@/app/api/project100/nutrition/plan/route";
 import { DELETE as nutritionPlanDelete } from "@/app/api/project100/nutrition/plan/[id]/route";
+import {
+  GET as jarvisConversationsGet,
+  POST as jarvisConversationsPost,
+} from "@/app/api/project100/jarvis/conversations/route";
+import { DELETE as jarvisConversationDelete } from "@/app/api/project100/jarvis/conversations/[id]/route";
+import { POST as jarvisMessagePost } from "@/app/api/project100/jarvis/messages/route";
+import {
+  GET as jarvisMemoriesGet,
+  POST as jarvisMemoriesPost,
+} from "@/app/api/project100/jarvis/memories/route";
+import {
+  DELETE as jarvisMemoryDelete,
+  PATCH as jarvisMemoryPatch,
+} from "@/app/api/project100/jarvis/memories/[id]/route";
 
 function membership(
   role: "owner" | "adult" | "viewer",
@@ -1251,5 +1274,58 @@ describe("Projekt 100 insights is held behind the adult gate", () => {
 
     harness.state.membership = membership("adult");
     expect((await insightsGet(new Request(insightsUrl))).status).toBe(200);
+  });
+});
+
+describe("Projekt 100 Jarvis is held behind the adult gate and requires CSRF on writes", () => {
+  const convUrl = "http://localhost/api/project100/jarvis/conversations";
+  const msgUrl = "http://localhost/api/project100/jarvis/messages";
+  const memUrl = "http://localhost/api/project100/jarvis/memories";
+
+  it("guards conversations", async () => {
+    harness.state.session = null;
+    harness.state.membership = null;
+    expect((await jarvisConversationsGet(new Request(convUrl))).status).toBe(401);
+
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("viewer", "child");
+    expect((await jarvisConversationsGet(new Request(convUrl))).status).toBe(403);
+
+    harness.state.membership = membership("adult");
+    expect((await jarvisConversationsGet(new Request(convUrl))).status).toBe(200);
+  });
+
+  it("guards messages", async () => {
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("viewer", "child");
+    const child = await jarvisMessagePost(
+      jsonPost(msgUrl, { content: "Hur går det?" }),
+    );
+    expect(child.status).toBe(403);
+
+    harness.state.membership = membership("adult");
+    const adult = await jarvisMessagePost(
+      jsonPost(msgUrl, { content: "Hur går det?" }),
+    );
+    expect(adult.status).toBe(200);
+  });
+
+  it("guards memories", async () => {
+    harness.state.session = null;
+    harness.state.membership = null;
+    expect((await jarvisMemoriesGet(new Request(memUrl))).status).toBe(401);
+
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("adult");
+    expect((await jarvisMemoriesGet(new Request(memUrl))).status).toBe(200);
+
+    const created = await jarvisMemoriesPost(
+      jsonPost(memUrl, {
+        kind: "learning",
+        category: "recovery",
+        content: "Träna inte sent",
+      }),
+    );
+    expect(created.status).toBe(201);
   });
 });
