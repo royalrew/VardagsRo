@@ -7961,6 +7961,16 @@ button.event-row:hover {
 .p100-memory-form header { display: flex; justify-content: space-between; align-items: center; font-size: .68rem; color: #cbd3cd; }
 .p100-memory-form-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
 
+.p100-memory-search-bar { display: flex; flex-direction: column; gap: 6px; }
+.p100-mem-search-input-wrap { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 6px; background: rgba(0,0,0,.3); border: 1px solid var(--p100-line); }
+.p100-mem-search-input-wrap svg { width: 12px; height: 12px; color: #68736c; flex: 0 0 auto; }
+.p100-mem-search-input-wrap input { flex: 1; background: transparent; border: 0; color: #cbd3cd; font-size: .6rem; outline: none; font-family: inherit; }
+.p100-mem-search-input-wrap button { background: transparent; border: 0; color: #68736c; cursor: pointer; display: grid; place-items: center; }
+.p100-mem-search-input-wrap button:hover { color: #fff; }
+.p100-memory-cats-scroll { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; }
+.p100-memory-cats-scroll button { flex: 0 0 auto; padding: 2px 7px; border-radius: 5px; background: rgba(0,0,0,.2); border: 1px solid var(--p100-line); font-size: .52rem; font-weight: 700; color: #77837b; cursor: pointer; }
+.p100-memory-cats-scroll button.active { background: rgba(200,244,93,.12); color: var(--p100-accent); border-color: rgba(200,244,93,.3); }
+
 .p100-context-box { padding: 10px 12px; border-radius: 8px; background: rgba(0,0,0,.2); border: 1px solid var(--p100-line); }
 .p100-context-box header { display: flex; align-items: center; gap: 6px; font-size: .62rem; font-weight: 700; color: #68736c; text-transform: uppercase; margin-bottom: 6px; }
 .p100-context-box header svg { width: 12px; color: var(--p100-accent); }

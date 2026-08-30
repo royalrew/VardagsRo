@@ -1,12 +1,41 @@
 export type Project100MemoryKind = "fact" | "event" | "learning";
-export type Project100MemoryCategory =
-  | "goal"
-  | "equipment"
-  | "preference"
-  | "routine"
-  | "injury"
-  | "recovery"
-  | "general";
+
+export const PROJECT100_MEMORY_CATEGORIES = [
+  "job",
+  "car",
+  "house",
+  "kids",
+  "finance",
+  "health",
+  "goal",
+  "equipment",
+  "preference",
+  "routine",
+  "injury",
+  "recovery",
+  "general",
+] as const;
+
+export type Project100MemoryCategory = (typeof PROJECT100_MEMORY_CATEGORIES)[number];
+
+export const MEMORY_CATEGORY_LABELS: Record<
+  Project100MemoryCategory,
+  { label: string; icon: string }
+> = {
+  job: { label: "Jobb", icon: "🏢" },
+  car: { label: "Bilen", icon: "🚗" },
+  house: { label: "Huset", icon: "🏡" },
+  kids: { label: "Barnen", icon: "👶" },
+  finance: { label: "Ekonomi & Avtal", icon: "📄" },
+  health: { label: "Hälsa & Träning", icon: "🏋️" },
+  goal: { label: "Mål", icon: "🎯" },
+  equipment: { label: "Utrustning", icon: "🔧" },
+  preference: { label: "Preferens", icon: "⭐" },
+  routine: { label: "Rutiner", icon: "🔄" },
+  injury: { label: "Skador", icon: "🩹" },
+  recovery: { label: "Återhämtning", icon: "🌙" },
+  general: { label: "Allmänt", icon: "📌" },
+};
 
 export interface Project100Memory {
   id: string;
@@ -102,16 +131,6 @@ export const MEMORY_KIND_LABELS: Record<Project100MemoryKind, string> = {
   learning: "Lärdom",
 };
 
-export const MEMORY_CATEGORY_LABELS: Record<Project100MemoryCategory, string> = {
-  goal: "Mål",
-  equipment: "Utrustning",
-  preference: "Preferens",
-  routine: "Rutin",
-  injury: "Skador/Begränsning",
-  recovery: "Återhämtning",
-  general: "Allmänt",
-};
-
 export const PROPOSAL_KIND_LABELS: Record<Project100ProposalKind, string> = {
   planned_session: "Planerat träningspass",
   batch_meal: "Portion ur fryst sats",
@@ -177,7 +196,7 @@ export function formatPromptContextSummary(context: Project100JarvisContext): st
   if (context.activeMemories.length > 0) {
     parts.push(
       `PERSONLIGA MINNEN & LÄRDOMAR:\n${context.activeMemories
-        .map((m) => `- [${MEMORY_KIND_LABELS[m.kind]}:${MEMORY_CATEGORY_LABELS[m.category]}] ${m.content}`)
+        .map((m) => `- [${MEMORY_KIND_LABELS[m.kind]}:${MEMORY_CATEGORY_LABELS[m.category]?.label ?? m.category}] ${m.content}`)
         .join("\n")}`,
     );
   }

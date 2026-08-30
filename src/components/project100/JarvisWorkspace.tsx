@@ -18,6 +18,7 @@ import {
   Plus,
   RotateCcw,
   Scale,
+  Search,
   Send,
   Sparkles,
   Trash2,
@@ -27,11 +28,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   MEMORY_CATEGORY_LABELS,
   MEMORY_KIND_LABELS,
+  PROJECT100_MEMORY_CATEGORIES,
   PROPOSAL_KIND_LABELS,
   type Project100ChatMessage,
   type Project100Conversation,
@@ -78,10 +80,23 @@ export function JarvisWorkspace({
 
   // New Memory Modal / Form
   const [showAddMemory, setShowAddMemory] = useState(false);
-  const [newMemoryKind, setNewMemoryKind] = useState<Project100MemoryKind>("learning");
-  const [newMemoryCategory, setNewMemoryCategory] = useState<Project100MemoryCategory>("routine");
+  const [newMemoryKind, setNewMemoryKind] = useState<Project100MemoryKind>("fact");
+  const [newMemoryCategory, setNewMemoryCategory] = useState<Project100MemoryCategory>("job");
   const [newMemoryContent, setNewMemoryContent] = useState("");
   const [newMemorySource, setNewMemorySource] = useState("");
+  const [memorySearch, setMemorySearch] = useState("");
+  const [memoryCategoryFilter, setMemoryCategoryFilter] = useState<string>("all");
+
+  const filteredMemories = useMemo(() => {
+    return memories.filter((m) => {
+      if (memoryCategoryFilter !== "all" && m.category !== memoryCategoryFilter) return false;
+      if (memorySearch.trim()) {
+        const term = memorySearch.toLowerCase();
+        return m.content.toLowerCase().includes(term);
+      }
+      return true;
+    });
+  }, [memories, memoryCategoryFilter, memorySearch]);
 
   async function handleSendMessage(promptToSend?: string) {
     const text = (promptToSend ?? inputValue).trim();
@@ -534,12 +549,14 @@ export function JarvisWorkspace({
                     value={newMemoryCategory}
                     onChange={(e) => setNewMemoryCategory(e.target.value as Project100MemoryCategory)}
                   >
-                    <option value="goal">Mål</option>
-                    <option value="equipment">Utrustning</option>
-                    <option value="routine">Rutin</option>
-                    <option value="injury">Skada/Begränsning</option>
-                    <option value="recovery">Återhämtning</option>
-                    <option value="preference">Preferens</option>
+                    {PROJECT100_MEMORY_CATEGORIES.map((cat) => {
+                      const info = MEMORY_CATEGORY_LABELS[cat];
+                      return (
+                        <option key={cat} value={cat}>
+                          {info.icon} {info.label}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
                 <div className="p100-field">
@@ -548,7 +565,7 @@ export function JarvisWorkspace({
                     id="mem-content"
                     value={newMemoryContent}
                     onChange={(e) => setNewMemoryContent(e.target.value)}
-                    placeholder="t.ex. 'Tränar bäst på förmiddagen före jobb'"
+                    placeholder="t.ex. 'Koden till inkontinensförrådet är 2214' eller 'Däckdimension 205/55 R16'"
                     rows={2}
                     required
                   />
@@ -568,18 +585,68 @@ export function JarvisWorkspace({
               </form>
             ) : null}
 
+            <div className="p100-memory-search-bar">
+              <div className="p100-mem-search-input-wrap">
+                <Search />
+                <input
+                  type="text"
+                  value={memorySearch}
+                  onChange={(e) => setMemorySearch(e.target.value)}
+                  placeholder="Sök koder, mått, däck, fakta..."
+                />
+                {memorySearch ? (
+                  <button
+                    type="button"
+                    onClick={() => setMemorySearch("")}
+                    aria-label="Rensa sökning"
+                  >
+                    <X />
+                  </button>
+                ) : null}
+              </div>
+              <div className="p100-memory-cats-scroll">
+                <button
+                  type="button"
+                  className={memoryCategoryFilter === "all" ? "active" : ""}
+                  onClick={() => setMemoryCategoryFilter("all")}
+                >
+                  Alla ({memories.length})
+                </button>
+                {PROJECT100_MEMORY_CATEGORIES.map((cat) => {
+                  const count = memories.filter((m) => m.category === cat).length;
+                  if (count === 0 && memoryCategoryFilter !== cat) return null;
+                  const info = MEMORY_CATEGORY_LABELS[cat];
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      className={memoryCategoryFilter === cat ? "active" : ""}
+                      onClick={() => setMemoryCategoryFilter(cat)}
+                    >
+                      {info.icon} {info.label} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <ul className="p100-memory-list">
-              {memories.length === 0 ? (
-                <li className="p100-empty-copy">Inga sparade minnen ännu.</li>
+              {filteredMemories.length === 0 ? (
+                <li className="p100-empty-copy">
+                  {memories.length === 0
+                    ? "Inga sparade minnen ännu."
+                    : "Inga minnen matchar din sökning."}
+                </li>
               ) : (
-                memories.map((m) => (
+                filteredMemories.map((m) => (
                   <li
                     key={m.id}
                     className={`p100-memory-item ${m.isActive ? "active" : "inactive"}`}
                   >
                     <header>
                       <span className="p100-mem-badge">
-                        {MEMORY_KIND_LABELS[m.kind]}: {MEMORY_CATEGORY_LABELS[m.category]}
+                        {MEMORY_CATEGORY_LABELS[m.category]?.icon ?? "📌"}{" "}
+                        {MEMORY_KIND_LABELS[m.kind]}: {MEMORY_CATEGORY_LABELS[m.category]?.label ?? m.category}
                       </span>
                       <div className="p100-mem-controls">
                         <button

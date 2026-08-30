@@ -43,7 +43,8 @@ Gäller: ersättaren till "Mitt spår"
   lärdomar), källbunden chatt, jobbschemakontext och strukturerade utkast.
 - [x] Innehållsflöde (YouTube och synlighetsprojekt): produktionsstatusar, manus,
   shotlist, titel/thumbnail-idéer och aktiv koppling av privat tidslinjemedia.
-- [ ] Vardags- & hushållsminne (kunskapsbank och Telegram-inmatning).
+- [x] Vardags- & hushållsminne: hushållets kunskapsbank med smarta kategorier,
+  snabb-prefix (`Jobb - Koden är 2214`), blixtsnabb hämtning och Telegram-integration.
 - [ ] Avveckling av gamla Solo-tabeller och PWA/export.
 
 ## Vision
@@ -688,11 +689,11 @@ offentligt material blandas ihop.
 
 Mål: Jarvis som personlig digital kollega och extern hjärna för hela livet.
 
-- **Kategorier:** Jobb (koder, rutiner), Bilen (däck, olja, service), Huset (färgkoder, mått, säkringar), Barnen (storlekar, allergier, tider), Träning & Hälsa, Ekonomi & Avtal.
-- **Snabb-prefix:** `Jobb - Koden till inkontinensförrådet är 2214` sparar deterministiskt direkt i rätt kategori.
-- **Naturligt språk & Telegram:** `Kom ihåg att oljefiltret heter W712` tolkas automatiskt och sparas under *Bilen*.
-- **Blixtsnabb hämtning med källhänvisning:** *"Vad är koden till förrådet på jobbet?"* eller *"Bilen däck"* ger exakt svar direkt.
-- **Visuell kunskapsöversikt:** Sökbar minnesvy i webbgränssnittet där fakta kan redigeras, pausas eller raderas.
+- ~~**Kategorier:** Jobb (koder, rutiner), Bilen (däck, olja, service), Huset (färgkoder, mått, säkringar), Barnen (storlekar, allergier, tider), Träning & Hälsa, Ekonomi & Avtal.~~ Klar 2026-08-30.
+- ~~**Snabb-prefix:** `Jobb - Koden till inkontinensförrådet är 2214` sparar deterministiskt direkt i rätt kategori.~~ Klar 2026-08-30.
+- ~~**Naturligt språk & Telegram:** `Kom ihåg att oljefiltret heter W712` tolkas automatiskt och sparas under *Bilen*.~~ Klar 2026-08-30.
+- ~~**Blixtsnabb hämtning med källhänvisning:** *"Vad är koden till förrådet på jobbet?"* eller *"Bilen däck"* ger exakt svar direkt.~~ Klar 2026-08-30.
+- ~~**Visuell kunskapsöversikt:** Sökbar minnesvy i webbgränssnittet där fakta kan redigeras, pausas eller raderas.~~ Klar 2026-08-30.
 
 Klart när mikrofakta och koder kan sparas och hämtas på sekunder via både webb och Telegram.
 
@@ -762,14 +763,16 @@ Fas 0, fas 1 och fas 2 vilar nu på riktig kod:
     viktdeltan, bildväljare och alternativa visningslägen i kroppsresan.
 13. Innehålls- och YouTube-arbetsyta (`/projekt-100/innehall`) med produktionsflöde,
     manus, shotlist, titelidéer och aktiv koppling av privat tidslinjemedia.
+14. Vardags- & hushållsminnet med smarta livskategorier (Jobb, Bilen, Huset, Barnen,
+    Ekonomi, Hälsa), blixtsnabb prefixlagring (`Jobb - Koden är 2214`), källhänvisad
+    frågehämtning och dubbelriktad Telegram-botintegration.
 
 Bildlagringen kräver konfigurerad objektlagring (`R2_*`). Utan den vägrar
 servern spara en bild i stället för att skapa en rad utan bild.
 
 ## Nästa konkreta leverans
 
-1. Vardags- & hushållsminnet (koder, rutiner, Telegram-inmatning och smarta kategorier).
-2. Avveckling av `solo_*`-tabellerna och den inbäddade `SoloView` när deras
+1. Avveckling av `solo_*`-tabellerna och den inbäddade `SoloView` när deras
    data har flyttats. Vikt, energi, sömn och dagsanteckning är redan migrerade;
    kvar står karriärstegen, som Projekt 100 inte ärver.
-3. Offline/PWA-förstärkning och fullständig export/backup.
+2. Mobil först, PWA-installation, offlinesynk och full export/backup.

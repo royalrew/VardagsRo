@@ -1,17 +1,10 @@
 import { z } from "zod";
 
+import { PROJECT100_MEMORY_CATEGORIES } from "@/lib/project100-jarvis";
 import { project100IdSchema, project100OptionalText } from "@/server/project100-schemas";
 
 export const project100MemoryKindSchema = z.enum(["fact", "event", "learning"]);
-export const project100MemoryCategorySchema = z.enum([
-  "goal",
-  "equipment",
-  "preference",
-  "routine",
-  "injury",
-  "recovery",
-  "general",
-]);
+export const project100MemoryCategorySchema = z.enum(PROJECT100_MEMORY_CATEGORIES);
 
 export const createConversationSchema = z.object({
   title: z.string().trim().min(1).max(160).optional().default("Ny konversation"),

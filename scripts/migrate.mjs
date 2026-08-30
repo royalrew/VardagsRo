@@ -1134,6 +1134,20 @@ const migrations = [
         on project100_content_media (user_id, project_id, position)`,
     ],
   },
+  {
+    version: "024",
+    name: "project100_memory_categories",
+    statements: [
+      `alter table project100_memories
+        drop constraint if exists project100_memories_category_check`,
+      `alter table project100_memories
+        add constraint project100_memories_category_check
+        check (category in (
+          'job', 'car', 'house', 'kids', 'finance', 'health',
+          'goal', 'equipment', 'preference', 'routine', 'injury', 'recovery', 'general'
+        ))`,
+    ],
+  },
 ];
 
 function checksum(migration) {
