@@ -1,8 +1,15 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 
-import type { Project100MeasurementUnit, Project100WeightPoint } from "@/lib/project100-body";
+import type { Project100MeasurementUnit } from "@/lib/project100-body";
+
+export interface MetricChartPoint {
+  measuredOn: string;
+  value: number;
+}
+
+export type MetricChartUnit = Project100MeasurementUnit | "reps";
 
 interface Reference {
   value: number;
@@ -23,7 +30,7 @@ function parseDay(calendarDate: string): number {
   return new Date(`${calendarDate}T12:00:00Z`).getTime();
 }
 
-function formatValue(value: number, unit: Project100MeasurementUnit): string {
+function formatValue(value: number, unit: MetricChartUnit): string {
   return `${(Math.round(value * 10) / 10).toLocaleString("sv-SE", {
     maximumFractionDigits: 1,
   })} ${unit}`;
@@ -57,15 +64,25 @@ export function MetricChart({
   unit,
   points,
   reference,
+  domain,
+  pointNoun = "mätningar",
+  emptyTitle = "Inget mätt ännu",
+  emptyDescription,
 }: {
   label: string;
-  unit: Project100MeasurementUnit;
-  points: Project100WeightPoint[];
+  unit: MetricChartUnit;
+  points: MetricChartPoint[];
   reference: Reference | null;
+  domain?: { from: string; to: string };
+  pointNoun?: string;
+  emptyTitle?: string;
+  emptyDescription?: string;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
+  const instructionsId = useId();
   const [width, setWidth] = useState(720);
   const [active, setActive] = useState<number | null>(null);
+  const [announceKeyboardValue, setAnnounceKeyboardValue] = useState(false);
 
   useLayoutEffect(() => {
     const frame = frameRef.current;
@@ -83,8 +100,8 @@ export function MetricChart({
 
   const times = points.map((point) => parseDay(point.measuredOn));
   const values = points.map((point) => point.value);
-  const minTime = times.length ? Math.min(...times) : 0;
-  const maxTime = times.length ? Math.max(...times) : 1;
+  const minTime = domain ? parseDay(domain.from) : times.length ? Math.min(...times) : 0;
+  const maxTime = domain ? parseDay(domain.to) : times.length ? Math.max(...times) : 1;
   const timeSpan = Math.max(1, maxTime - minTime);
 
   const rawMin = values.length ? Math.min(...values) : 0;
@@ -109,31 +126,31 @@ export function MetricChart({
     [domainMin, plotHeight, valueSpan],
   );
 
-  const nearestIndex = useCallback(
-    (clientX: number): number | null => {
-      const frame = frameRef.current;
-      if (!frame || points.length === 0) return null;
-      const bounds = frame.getBoundingClientRect();
-      const offset = clientX - bounds.left;
-      let best = 0;
-      let bestDistance = Infinity;
-      times.forEach((time, index) => {
-        const distance = Math.abs(x(time) - offset);
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          best = index;
-        }
-      });
-      return best;
-    },
-    [points.length, times, x],
-  );
+  function nearestIndex(clientX: number): number | null {
+    const frame = frameRef.current;
+    if (!frame || points.length === 0) return null;
+    const bounds = frame.getBoundingClientRect();
+    const offset = clientX - bounds.left;
+    let best = 0;
+    let bestDistance = Infinity;
+    times.forEach((time, index) => {
+      const distance = Math.abs(x(time) - offset);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    });
+    return best;
+  }
 
   if (points.length === 0) {
     return (
       <div className="p100-chart-empty" ref={frameRef}>
-        <strong>Inget mätt ännu</strong>
-        <p>Logga {label.toLocaleLowerCase("sv-SE")} minst en gång så ritas linjen här.</p>
+        <strong>{emptyTitle}</strong>
+        <p>
+          {emptyDescription ??
+            `Logga ${label.toLocaleLowerCase("sv-SE")} minst en gång så ritas linjen här.`}
+        </p>
       </div>
     );
   }
@@ -156,10 +173,10 @@ export function MetricChart({
   const shownY = y(shown.value);
   const tooltipRight = shownX > PADDING.left + plotWidth * 0.62;
 
-  const axisDates =
-    points.length > 1
-      ? [points[0], points[Math.floor(lastIndex / 2)], points[lastIndex]]
-      : [points[0]];
+  const axisTimes =
+    maxTime > minTime
+      ? [minTime, minTime + (maxTime - minTime) / 2, maxTime]
+      : [minTime];
 
   return (
     <div className="p100-chart" ref={frameRef}>
@@ -167,15 +184,26 @@ export function MetricChart({
         width={width}
         height={height}
         role="img"
-        aria-label={`${label} över tid, ${points.length} mätningar. Värdena finns i tabellen nedanför.`}
+        aria-label={`${label} över tid, ${points.length} ${pointNoun}. Värdena finns i tabellen nedanför.`}
+        aria-describedby={instructionsId}
         tabIndex={0}
-        onPointerMove={(event) => setActive(nearestIndex(event.clientX))}
-        onPointerLeave={() => setActive(null)}
-        onBlur={() => setActive(null)}
+        onPointerMove={(event) => {
+          setAnnounceKeyboardValue(false);
+          setActive(nearestIndex(event.clientX));
+        }}
+        onPointerLeave={() => {
+          setAnnounceKeyboardValue(false);
+          setActive(null);
+        }}
+        onBlur={() => {
+          setAnnounceKeyboardValue(false);
+          setActive(null);
+        }}
         onKeyDown={(event) => {
           if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
           event.preventDefault();
           const step = event.key === "ArrowLeft" ? -1 : 1;
+          setAnnounceKeyboardValue(true);
           setActive((current) =>
             Math.min(lastIndex, Math.max(0, (current ?? lastIndex) + step)),
           );
@@ -220,15 +248,15 @@ export function MetricChart({
         {area ? <path className="p100-chart-area" d={area} /> : null}
         <path className="p100-chart-line" d={line} />
 
-        {axisDates.map((point, index) => (
+        {axisTimes.map((time, index) => (
           <text
-            key={`${point.measuredOn}-${index}`}
+            key={`${time}-${index}`}
             className="p100-chart-tick"
-            x={x(parseDay(point.measuredOn))}
+            x={x(time)}
             y={height - 9}
-            textAnchor={index === 0 ? "start" : index === axisDates.length - 1 ? "end" : "middle"}
+            textAnchor={index === 0 ? "start" : index === axisTimes.length - 1 ? "end" : "middle"}
           >
-            {dayFormatter.format(new Date(`${point.measuredOn}T12:00:00`))}
+            {dayFormatter.format(new Date(time))}
           </text>
         ))}
 
@@ -255,6 +283,17 @@ export function MetricChart({
         </span>
         <small>{fullDayFormatter.format(new Date(`${shown.measuredOn}T12:00:00`))}</small>
       </div>
+      <p id={instructionsId} className="sr-only">
+        Använd vänster och höger piltangent för att läsa punkterna. Alla värden finns
+        också i tabellen nedanför.
+      </p>
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {announceKeyboardValue
+          ? `${label}: ${formatValue(shown.value, unit)}, ${fullDayFormatter.format(
+              new Date(`${shown.measuredOn}T12:00:00`),
+            )}`
+          : ""}
+      </p>
     </div>
   );
 }

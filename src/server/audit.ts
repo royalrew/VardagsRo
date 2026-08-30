@@ -35,6 +35,7 @@ export type AuditAction =
   | "project100.training.session.delete"
   | "project100.training.template.create"
   | "project100.training.template.delete"
+  | "project100.training.exercise.muscles.update"
   | "project100.nutrition.batch.create"
   | "project100.nutrition.meal.log"
   | "project100.nutrition.meal.delete"

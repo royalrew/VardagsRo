@@ -142,6 +142,10 @@ vi.mock("@/server/project100-nutrition", () => ({
   })),
 }));
 
+vi.mock("@/server/project100-strength", () => ({
+  saveProject100ExerciseMuscleGroups: vi.fn(async () => ["chest"]),
+}));
+
 import { PATCH as householdPatch } from "@/app/api/household/route";
 import { GET as loginsGet } from "@/app/api/logins/route";
 import { POST as undoPost } from "@/app/api/undo/route";
@@ -157,6 +161,7 @@ import {
   PATCH as trainingSessionPatch,
 } from "@/app/api/project100/training/sessions/[id]/route";
 import { POST as trainingTemplatesPost } from "@/app/api/project100/training/templates/route";
+import { PATCH as trainingExerciseMusclesPatch } from "@/app/api/project100/training/exercises/[id]/muscles/route";
 import { GET as journalGet, POST as journalPost } from "@/app/api/project100/journal/route";
 import { DELETE as journalDelete } from "@/app/api/project100/journal/[date]/route";
 import { GET as bodyGet, POST as bodyPost } from "@/app/api/project100/body/route";
@@ -513,6 +518,49 @@ describe("Projekt 100 is a private adult workspace", () => {
 
     expect(child.status).toBe(403);
     expect(adult.status).toBe(201);
+  });
+
+  it("holds exercise muscle groups behind authentication, the adult gate and write access", async () => {
+    const request = () =>
+      jsonPatch(
+        "http://localhost/api/project100/training/exercises/exercise-1/muscles",
+        { muscleGroups: ["chest", "triceps"] },
+      );
+    const call = (origin = "http://localhost") => {
+      const original = request();
+      const routed =
+        origin === "http://localhost"
+          ? original
+          : new Request(original.url, {
+              method: original.method,
+              headers: { "content-type": "application/json", origin },
+              body: JSON.stringify({ muscleGroups: ["chest", "triceps"] }),
+            });
+      return trainingExerciseMusclesPatch(routed, {
+        params: Promise.resolve({ id: "exercise-1" }),
+      });
+    };
+
+    harness.state.session = null;
+    harness.state.membership = null;
+    const anonymous = await call();
+
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("viewer", "child");
+    const child = await call();
+
+    harness.state.membership = membership("viewer");
+    const viewer = await call();
+
+    harness.state.membership = membership("adult");
+    const adult = await call();
+    const crossSite = await call("https://elak.example");
+
+    expect(anonymous.status).toBe(401);
+    expect(child.status).toBe(403);
+    expect(viewer.status).toBe(403);
+    expect(adult.status).toBe(200);
+    expect(crossSite.status).toBe(403);
   });
 });
 

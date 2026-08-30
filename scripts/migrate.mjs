@@ -1019,6 +1019,30 @@ const migrations = [
         on project100_meal_plans (user_id, planned_date asc, meal_type, id)`,
     ],
   },
+  {
+    version: "021_project100_exercise_muscles",
+    name: "User-correctable muscle groups for strength coverage",
+    statements: [
+      `alter table project100_exercises
+        add column if not exists muscle_groups text[] not null default array[]::text[]`,
+      `do $$
+        begin
+          if not exists (
+            select 1 from pg_constraint
+            where conname = 'project100_exercises_muscle_groups_check'
+              and conrelid = 'project100_exercises'::regclass
+          ) then
+            alter table project100_exercises
+              add constraint project100_exercises_muscle_groups_check
+              check (muscle_groups <@ array[
+                'chest', 'back', 'shoulders', 'biceps', 'triceps',
+                'core', 'glutes', 'quadriceps', 'hamstrings', 'calves'
+              ]::text[]);
+          end if;
+        end
+      $$`,
+    ],
+  },
 ];
 
 function checksum(migration) {

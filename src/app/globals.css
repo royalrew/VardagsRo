@@ -7085,12 +7085,14 @@ button.event-row:hover {
 .p100-body-metric-switch button:hover { color: #c4ccc6; }
 .p100-body-metric-switch button.active { background: rgba(122,160,51,.18); color: #b9d97a; }
 
-.p100-body-chart-card, .p100-body-milestones, .p100-body-table-card, .p100-body-photos {
+.p100-body-chart-card, .p100-strength-card, .p100-muscle-card, .p100-body-milestones, .p100-body-table-card, .p100-body-photos {
   border: 1px solid var(--p100-line);
   border-radius: 14px;
   background: var(--p100-panel);
 }
 .p100-body-chart-card > header,
+.p100-strength-card > header,
+.p100-muscle-card > header,
 .p100-body-milestones > header,
 .p100-body-table-card > header,
 .p100-body-photos > header {
@@ -7104,17 +7106,109 @@ button.event-row:hover {
   flex-wrap: wrap;
 }
 .p100-body-chart-card header > div > span,
+.p100-strength-card header > div > span,
+.p100-muscle-card header > div > span,
 .p100-body-milestones header > div > span,
 .p100-body-table-card header > div > span,
 .p100-body-photos header > div > span { color: var(--p100-accent); font-size: .56rem; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
 .p100-body-chart-card header h2,
+.p100-strength-card header h2,
+.p100-muscle-card header h2,
 .p100-body-milestones header h2,
 .p100-body-table-card header h2,
 .p100-body-photos header h2 { margin: 3px 0 0; font-size: .95rem; letter-spacing: -.02em; }
 .p100-body-chart-card header > small,
+.p100-strength-card header > small,
+.p100-muscle-card header > small,
 .p100-body-milestones header > small,
 .p100-body-table-card header > small { color: #68736c; font-size: .6rem; font-weight: 700; }
 .p100-body-coverage { padding: 4px 9px; border: 1px solid rgba(206,151,116,.22); border-radius: 6px; background: rgba(190,122,82,.07); color: #cf9d7f !important; }
+
+.p100-body-development-grid { display: grid; gap: 18px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.p100-strength-card, .p100-muscle-card { min-width: 0; overflow: hidden; }
+.p100-muscle-card { grid-column: 1 / -1; }
+
+.p100-strength-exercise-select { display: flex; min-width: min(220px, 100%); flex-direction: column; gap: 4px; }
+.p100-strength-exercise-select > span { color: #68736c; font-size: .54rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.p100-strength-exercise-select select { min-height: 34px; padding: 0 30px 0 10px; border: 1px solid var(--p100-line); border-radius: 8px; background: rgba(0,0,0,.2); color: var(--p100-text); font-size: .69rem; }
+.p100-strength-exercise-select select:focus { border-color: rgba(200,244,93,.35); outline: none; }
+
+.p100-strength-toolbar { display: flex; padding: 14px 18px; border-bottom: 1px solid var(--p100-line); align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.p100-strength-toolbar > div:first-child { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.p100-strength-toolbar strong { font-size: .79rem; }
+.p100-strength-toolbar span { max-width: 58ch; color: var(--p100-muted); font-size: .61rem; line-height: 1.5; }
+.p100-strength-metric-switch { display: flex; padding: 3px; border: 1px solid var(--p100-line); border-radius: 9px; background: rgba(0,0,0,.15); gap: 2px; flex-wrap: wrap; }
+.p100-strength-metric-switch button { min-height: 28px; padding: 0 9px; border-radius: 6px; background: transparent; color: #77837b; font-size: .61rem; font-weight: 750; }
+.p100-strength-metric-switch button:hover:not(:disabled) { color: #c4ccc6; }
+.p100-strength-metric-switch button.active { background: rgba(122,160,51,.18); color: #b9d97a; }
+.p100-strength-metric-switch button:disabled { cursor: not-allowed; opacity: .35; }
+
+.p100-strength-muscle-summary { display: flex; padding: 11px 18px; border-bottom: 1px solid var(--p100-line); align-items: center; justify-content: space-between; gap: 12px; }
+.p100-strength-muscle-summary > div { display: flex; min-width: 0; color: #77837b; align-items: center; gap: 9px; font-size: .63rem; }
+.p100-strength-muscle-summary svg { width: 15px; flex: 0 0 auto; color: var(--p100-data); }
+.p100-strength-muscle-summary ul { display: flex; margin: 0; padding: 0; gap: 6px; flex-wrap: wrap; list-style: none; }
+.p100-strength-muscle-summary li { padding: 4px 8px; border: 1px solid rgba(122,160,51,.24); border-radius: 999px; background: rgba(122,160,51,.08); color: #b9d97a; font-size: .58rem; font-weight: 700; }
+.p100-strength-muscle-summary > button { flex: 0 0 auto; min-height: 30px; padding: 0 10px; border: 1px solid var(--p100-line); border-radius: 7px; background: transparent; color: #9aa49e; font-size: .61rem; font-weight: 700; }
+.p100-strength-muscle-summary > button:hover { border-color: rgba(200,244,93,.26); color: var(--p100-accent); }
+
+.p100-strength-muscle-editor { padding: 16px 18px; border-bottom: 1px solid var(--p100-line); background: rgba(255,255,255,.012); }
+.p100-strength-muscle-editor fieldset { margin: 0; padding: 0; border: 0; }
+.p100-strength-muscle-editor legend { padding: 0; color: #cbd3cd; font-size: .73rem; font-weight: 700; }
+.p100-strength-muscle-editor fieldset > p { margin: 4px 0 12px; color: var(--p100-muted); font-size: .61rem; line-height: 1.5; }
+.p100-strength-muscle-editor fieldset > div { display: grid; gap: 7px; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
+.p100-strength-muscle-editor label { display: flex; min-height: 34px; padding: 0 9px; border: 1px solid var(--p100-line); border-radius: 8px; background: rgba(0,0,0,.14); color: #aeb8b1; align-items: center; gap: 8px; font-size: .63rem; cursor: pointer; }
+.p100-strength-muscle-editor input { width: 15px; height: 15px; accent-color: var(--p100-data); }
+.p100-strength-muscle-actions { display: flex; margin-top: 13px; justify-content: flex-end; gap: 8px; }
+.p100-strength-muscle-actions button { display: inline-flex; min-height: 34px; padding: 0 12px; align-items: center; justify-content: center; gap: 6px; }
+.p100-strength-muscle-actions svg { width: 14px; }
+
+.p100-strength-stats { display: grid; margin: 0; border-bottom: 1px solid var(--p100-line); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.p100-strength-stats > div { display: flex; min-width: 0; padding: 13px 16px; border-right: 1px solid var(--p100-line); border-bottom: 1px solid var(--p100-line); flex-direction: column; }
+.p100-strength-stats > div:nth-child(2n) { border-right: 0; }
+.p100-strength-stats > div:nth-last-child(-n+2) { border-bottom: 0; }
+.p100-strength-stats dt { color: #68736c; font-size: .53rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.p100-strength-stats dd { margin: 5px 0 2px; color: #d8ded9; font-size: .9rem; font-weight: 700; }
+.p100-strength-stats small { overflow: hidden; color: var(--p100-muted); font-size: .56rem; text-overflow: ellipsis; white-space: nowrap; }
+.p100-strength-chart-head { display: flex; padding: 13px 18px 0; align-items: center; justify-content: space-between; gap: 10px; }
+.p100-strength-chart-head > div { display: flex; flex-direction: column; gap: 2px; }
+.p100-strength-chart-head span { color: #68736c; font-size: .52rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+.p100-strength-chart-head strong { font-size: .74rem; }
+
+.p100-strength-table-scroll, .p100-muscle-table-scroll { overflow-x: auto; border-top: 1px solid var(--p100-line); }
+.p100-strength-table, .p100-muscle-table { width: 100%; border-collapse: collapse; font-size: .65rem; }
+.p100-strength-table caption, .p100-muscle-table caption { padding: 10px 13px; color: #68736c; font-size: .56rem; line-height: 1.45; text-align: left; }
+.p100-strength-table th, .p100-strength-table td, .p100-muscle-table th, .p100-muscle-table td { padding: 8px 10px; border-top: 1px solid var(--p100-line); text-align: right; vertical-align: top; white-space: nowrap; }
+.p100-strength-table thead th, .p100-muscle-table thead th { color: #68736c; font-size: .51rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.p100-strength-table thead th:first-child, .p100-strength-table tbody th, .p100-strength-table td:nth-child(2), .p100-muscle-table thead th:first-child, .p100-muscle-table tbody th { text-align: left; }
+.p100-strength-table tbody th, .p100-muscle-table tbody th { color: #cbd3cd; font-weight: 650; }
+.p100-strength-table td, .p100-muscle-table td { color: #9ba69f; font-variant-numeric: tabular-nums; }
+.p100-strength-table ul { margin: 0; padding: 0; list-style: none; }
+.p100-strength-table li + li { margin-top: 3px; }
+.p100-strength-pr { display: inline-flex; color: #b9d97a; align-items: center; gap: 4px; font-weight: 700; }
+.p100-strength-pr svg { width: 12px; }
+.p100-strength-context, .p100-muscle-context { margin: 0; padding: 12px 18px 15px; color: #68736c; font-size: .58rem; line-height: 1.55; }
+.p100-strength-empty { display: flex; min-height: 250px; padding: 34px 22px; align-items: center; justify-content: center; flex-direction: column; gap: 5px; text-align: center; }
+.p100-strength-empty > svg { width: 24px; margin-bottom: 8px; color: #3f4a44; }
+.p100-strength-empty strong { font-size: .82rem; }
+.p100-strength-empty p { max-width: 44ch; margin: 0; color: var(--p100-muted); font-size: .67rem; line-height: 1.55; }
+
+.p100-muscle-layout { display: grid; grid-template-columns: minmax(300px, .9fr) minmax(0, 1.1fr); align-items: center; }
+.p100-muscle-radar { display: block; width: 100%; height: auto; padding: 10px 8px; }
+.p100-muscle-radar-grid { fill: none; stroke: rgba(224,239,228,.08); stroke-width: 1; }
+.p100-muscle-radar-axis { stroke: rgba(224,239,228,.09); stroke-width: 1; }
+.p100-muscle-radar-label { fill: #8f9a93; font-size: 11px; font-weight: 650; }
+.p100-muscle-radar-area { fill: var(--p100-data); opacity: .16; }
+.p100-muscle-radar-line { fill: none; stroke: var(--p100-data); stroke-width: 2; stroke-linejoin: round; }
+.p100-muscle-radar-dot { fill: #b9d97a; stroke: var(--p100-panel); stroke-width: 2; }
+.p100-muscle-radar-empty { display: flex; min-height: 300px; padding: 30px; align-items: center; justify-content: center; flex-direction: column; gap: 5px; text-align: center; }
+.p100-muscle-radar-empty strong { font-size: .78rem; }
+.p100-muscle-radar-empty p { max-width: 38ch; margin: 0; color: var(--p100-muted); font-size: .65rem; line-height: 1.5; }
+.p100-muscle-details { min-width: 0; border-left: 1px solid var(--p100-line); }
+.p100-muscle-table-scroll { border-top: 0; }
+.p100-muscle-table caption { border-bottom: 1px solid var(--p100-line); }
+.p100-muscle-unclassified { margin: 13px 16px 0; padding: 11px 12px; border: 1px solid rgba(206,151,116,.22); border-radius: 9px; background: rgba(190,122,82,.07); }
+.p100-muscle-unclassified strong { color: #d5a98e; font-size: .66rem; }
+.p100-muscle-unclassified p { margin: 3px 0 0; color: #9e8070; font-size: .59rem; line-height: 1.5; }
 
 /* Chart marks: a 2px line, a wash of the same hue, and hairline solid grid one
    step off the surface. Only the data is allowed to be loud. */
@@ -7213,11 +7307,18 @@ button.event-row:hover {
   .p100-body-measure-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
+@media (max-width: 980px) {
+  .p100-body-development-grid { grid-template-columns: 1fr; }
+  .p100-muscle-card { grid-column: auto; }
+}
+
 @media (max-width: 860px) {
   .p100-body-filters nav, .p100-body-metric-switch { width: 100%; }
   .p100-body-filters nav a { flex: 1; justify-content: center; }
   .p100-body-measure-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .p100-chart-readout { font-size: .9em; }
+  .p100-muscle-layout { grid-template-columns: 1fr; }
+  .p100-muscle-details { border-top: 1px solid var(--p100-line); border-left: 0; }
 }
 
 @media (max-width: 620px) {
@@ -7227,6 +7328,14 @@ button.event-row:hover {
   .p100-body-milestones ol { grid-template-columns: 1fr 1fr; }
   .p100-body-photo-strip { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
   .p100-body-custom-row { grid-template-columns: minmax(0, 1fr) 80px 28px; }
+  .p100-strength-exercise-select { width: 100%; }
+  .p100-strength-muscle-summary { align-items: flex-start; flex-direction: column; }
+  .p100-strength-muscle-summary > button { width: 100%; }
+  .p100-strength-stats { grid-template-columns: 1fr; }
+  .p100-strength-stats > div { border-right: 0; }
+  .p100-strength-stats > div:nth-last-child(-n+2) { border-bottom: 1px solid var(--p100-line); }
+  .p100-strength-stats > div:last-child { border-bottom: 0; }
+  .p100-muscle-radar-label { font-size: 10px; }
 }
 
 /* Projekt 100 · dagboken. Everything else in this workspace is dense on

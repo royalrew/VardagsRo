@@ -125,7 +125,10 @@ function actualMetricTotal(
   return session.exercises.reduce(
     (exerciseTotal, exercise) =>
       exerciseTotal +
-      exercise.sets.reduce((setTotal, set) => setTotal + (set.actual?.[key] ?? 0), 0),
+      exercise.sets.reduce(
+        (setTotal, set) => setTotal + (set.completed ? (set.actual?.[key] ?? 0) : 0),
+        0,
+      ),
     0,
   );
 }
@@ -161,7 +164,10 @@ export function buildProject100TrainingSummary(
           exerciseTotal +
           exercise.sets.reduce(
             (setTotal, set) =>
-              setTotal + (set.actual?.reps ?? 0) * (set.actual?.weightKg ?? 0),
+              setTotal +
+              (set.completed
+                ? (set.actual?.reps ?? 0) * (set.actual?.weightKg ?? 0)
+                : 0),
             0,
           ),
         0,

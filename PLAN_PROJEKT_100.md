@@ -25,6 +25,8 @@ Gäller: ersättaren till "Mitt spår"
 - [x] Kroppsresan: vikt, kroppsmått och egna mått som normaliserade rader,
   härledda milstolpar, tillgänglig utvecklingsgraf och kroppsbilder bredvid
   vikten. Vikterna ur den gamla hälsologgen är migrerade hit.
+- [x] Styrkeutveckling över samma datumperiod som kroppsmåtten, med faktisk
+  volym, spårbara personbästan och användarkorrigerbar muskelbalans.
 - [x] Dagbok med dagsform, sökbart arkiv och en per-anteckning-grind som håller
   assistenten ute — villkoret ligger i frågan, inte i ett filter efteråt.
 - [x] Gemensam privat tidslinje som väver samman pass, måltider, mätningar,
@@ -558,8 +560,10 @@ Mål: beskriva utvecklingen bättre än med endast vågens tal.
   härledda mellan startvikt och mål i stället för inskrivna.
 - ~~Målet 100 kg behandlas som riktning, inte bevis på ren muskelökning.~~
 - Före/efter-jämförelse med dragbar skiljelinje. Återstår.
-- Styrkeutveckling bredvid vikt och mått. Återstår; kräver att träningsvolymen
-  läses över samma period som måtten.
+- ~~Styrkeutveckling bredvid vikt och mått.~~ Klar 2026-08-30, med samma
+  datumaxel, faktisk volym, personbästan som går att spåra till pass och ett
+  radardiagram över positiva genomförda arbetsset per användarvald muskelgrupp.
+  Råa kilon mellan olika övningar jämförs aldrig i muskelbalansen.
 
 Grafen ritar ett mått i taget på en axel. Kilo och centimeter delar ingen skala,
 och ett diagram med båda skulle påstå ett samband som inte finns i talen.
@@ -735,14 +739,17 @@ Fas 0, fas 1 och fas 2 vilar nu på riktig kod:
    måltider som femte användarscopead tidslinjekälla.
 8. Kostens planeringslager med privata favoritrecept, satstillagning, veckoplan,
    skafferisaldo och en deterministiskt härledd inköpslista med synliga skäl.
+9. Styrkeutveckling i kroppsresan med historiskt seedade personbästan,
+   gemensam datumperiod, synlig datatäckning och ett korrigerbart spindeldiagram
+   där set utan muskelklassning redovisas som saknade i stället för att gissas.
 
 Bildlagringen kräver konfigurerad objektlagring (`R2_*`). Utan den vägrar
 servern spara en bild i stället för att skapa en rad utan bild.
 
 ## Nästa konkreta leverans
 
-1. Styrkeutvecklingen bredvid vikt och mått, över samma period.
-2. Insikter när det finns tillräckligt med strukturerad data att jämföra.
+1. Insikter när det finns tillräckligt med strukturerad data att jämföra.
+2. Före/efter-jämförelse av kroppsbilder med dragbar skiljelinje.
 3. Avveckling av `solo_*`-tabellerna och den inbäddade `SoloView` när deras
    data har flyttats. Vikt, energi, sömn och dagsanteckning är redan migrerade;
    kvar står karriärstegen, som Projekt 100 inte ärver.

@@ -29,7 +29,9 @@ import {
   type Project100BodyJourney,
 } from "@/lib/project100-body";
 import type { Project100MediaItem } from "@/lib/project100-media";
+import type { Project100StrengthDevelopment } from "@/lib/project100-strength";
 import { MetricChart } from "@/components/project100/MetricChart";
+import { StrengthDevelopment as StrengthDevelopmentView } from "@/components/project100/StrengthDevelopment";
 
 interface CustomDraft {
   id: string;
@@ -93,11 +95,17 @@ async function failureFrom(response: Response, fallback: string): Promise<Error>
 export function BodyJourney({
   journey,
   photos,
+  strength,
   activePreset,
+  selectedStrengthExerciseId,
+  selectedStrengthMetric,
 }: {
   journey: Project100BodyJourney;
   photos: Project100MediaItem[];
+  strength: Project100StrengthDevelopment;
   activePreset: string;
+  selectedStrengthExerciseId: string | null;
+  selectedStrengthMetric: string | null;
 }) {
   const router = useRouter();
   const [entries, setEntries] = useState(journey.entries);
@@ -115,6 +123,19 @@ export function BodyJourney({
   const [revealPhotos, setRevealPhotos] = useState(false);
 
   const series = useMemo(() => buildProject100MetricSeries(entries), [entries]);
+  const chartDomain = useMemo(() => {
+    if (activePreset !== "allt") return { from: journey.from, to: journey.to };
+    const actualDates = [
+      ...series.flatMap((item) => item.points.map((point) => point.measuredOn)),
+      ...strength.exercises.flatMap((exercise) =>
+        exercise.points.map((point) => point.measuredOn),
+      ),
+    ];
+    return {
+      from: actualDates.sort((left, right) => left.localeCompare(right))[0] ?? journey.to,
+      to: journey.to,
+    };
+  }, [activePreset, journey.from, journey.to, series, strength.exercises]);
   const milestones = useMemo(
     () => buildProject100Milestones(journey.weightHistory, goal),
     [goal, journey.weightHistory],
@@ -150,6 +171,15 @@ export function BodyJourney({
     { key: "90", label: "90 dagar", days: 90 },
     { key: "365", label: "12 månader", days: 365 },
   ];
+
+  function periodHref(key: string, from?: string, to?: string): string {
+    const params = new URLSearchParams({ period: key });
+    if (from) params.set("fran", from);
+    if (to) params.set("till", to);
+    if (selectedStrengthExerciseId) params.set("ovning", selectedStrengthExerciseId);
+    if (selectedStrengthMetric) params.set("styrkematt", selectedStrengthMetric);
+    return `/projekt-100/kropp?${params.toString()}`;
+  }
 
   function openEntry() {
     setDraft(emptyDraft(journey.today));
@@ -332,16 +362,22 @@ export function BodyJourney({
           {presets.map((preset) => (
             <Link
               key={preset.key}
-              href={`/projekt-100/kropp?period=${preset.key}&fran=${addCalendarDateDays(
+              href={periodHref(
+                preset.key,
+                addCalendarDateDays(journey.today, -(preset.days - 1)),
                 journey.today,
-                -preset.days,
-              )}&till=${journey.today}`}
+              )}
               className={activePreset === preset.key ? "active" : ""}
+              aria-current={activePreset === preset.key ? "page" : undefined}
             >
               {preset.label}
             </Link>
           ))}
-          <Link href="/projekt-100/kropp?period=allt" className={activePreset === "allt" ? "active" : ""}>
+          <Link
+            href={periodHref("allt")}
+            className={activePreset === "allt" ? "active" : ""}
+            aria-current={activePreset === "allt" ? "page" : undefined}
+          >
             Hela resan
           </Link>
         </nav>
@@ -352,6 +388,7 @@ export function BodyJourney({
                 type="button"
                 key={item.metric}
                 className={active?.metric === item.metric ? "active" : ""}
+                aria-pressed={active?.metric === item.metric}
                 onClick={() => setMetric(item.metric)}
               >
                 {item.label}
@@ -361,35 +398,45 @@ export function BodyJourney({
         ) : null}
       </div>
 
-      <section className="p100-body-chart-card">
-        <header>
-          <div>
-            <span>Utveckling</span>
-            <h2>{active ? active.label : "Vikt"}</h2>
-          </div>
-          {active && active.points.length < 3 ? (
-            <small className="p100-body-coverage">
-              {active.points.length === 0
-                ? "Ingen mätning i perioden"
-                : `Bara ${active.points.length} mätning${active.points.length === 1 ? "" : "ar"} — för lite för en trend`}
-            </small>
-          ) : null}
-        </header>
-        <MetricChart
-          key={active?.metric ?? "weight"}
-          label={active?.label ?? "Vikt"}
-          unit={active?.unit ?? "kg"}
-          points={active?.points ?? []}
-          reference={
-            active?.metric === "weight" && nextMilestone
-              ? {
-                  value: nextMilestone.weightKg,
-                  label: `Nästa milstolpe ${formatMeasurement(nextMilestone.weightKg, "kg")}`,
-                }
-              : null
-          }
+      <div className="p100-body-development-grid">
+        <section className="p100-body-chart-card">
+          <header>
+            <div>
+              <span>Kropp i samma period</span>
+              <h2>{active ? active.label : "Vikt"}</h2>
+            </div>
+            {active && active.points.length < 3 ? (
+              <small className="p100-body-coverage">
+                {active.points.length === 0
+                  ? "Ingen mätning i perioden"
+                  : `Bara ${active.points.length} mätning${active.points.length === 1 ? "" : "ar"} — för lite för en trend`}
+              </small>
+            ) : null}
+          </header>
+          <MetricChart
+            key={active?.metric ?? "weight"}
+            label={active?.label ?? "Vikt"}
+            unit={active?.unit ?? "kg"}
+            points={active?.points ?? []}
+            domain={chartDomain}
+            reference={
+              active?.metric === "weight" && nextMilestone
+                ? {
+                    value: nextMilestone.weightKg,
+                    label: `Nästa milstolpe ${formatMeasurement(nextMilestone.weightKg, "kg")}`,
+                  }
+                : null
+            }
+          />
+        </section>
+
+        <StrengthDevelopmentView
+          development={strength}
+          domain={chartDomain}
+          selectedExerciseId={selectedStrengthExerciseId}
+          selectedMetric={selectedStrengthMetric}
         />
-      </section>
+      </div>
 
       {milestones.length > 0 ? (
         <section className="p100-body-milestones">

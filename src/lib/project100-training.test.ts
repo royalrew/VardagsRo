@@ -152,6 +152,28 @@ describe("Projekt 100 training summary", () => {
     expect(summary.distanceKmThisWeek).toBe(5.3);
   });
 
+  it("does not count actual values from a set that was left unfinished", () => {
+    const unfinished = exercise("unfinished", [
+      { actual: metrics({ reps: 10, weightKg: 100, distanceMeters: 5_000 }) },
+    ]);
+    unfinished.sets[0].completed = false;
+
+    const summary = buildProject100TrainingSummary(
+      [
+        session({
+          id: "partly-done",
+          sessionDate: "2026-08-26",
+          status: "completed",
+          exercises: [unfinished],
+        }),
+      ],
+      TODAY,
+    );
+
+    expect(summary.volumeKgThisWeek).toBe(0);
+    expect(summary.distanceKmThisWeek).toBe(0);
+  });
+
   it("reports an honest zero week instead of guessing", () => {
     expect(buildProject100TrainingSummary([], TODAY)).toEqual({
       completedThisWeek: 0,
