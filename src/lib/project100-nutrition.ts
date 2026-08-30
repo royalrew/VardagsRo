@@ -63,6 +63,77 @@ export interface Project100Food {
   kcalPer100g: number | null;
   isStaple: boolean;
   stapleTargetGrams: number | null;
+  inStockGrams: number | null;
+}
+
+export interface Project100RecipeItem {
+  id: string;
+  foodId: string;
+  name: string;
+  grams: number;
+  proteinPer100g: number;
+  carbsPer100g: number;
+  fatPer100g: number;
+  kcalPer100g: number | null;
+}
+
+export interface Project100Recipe {
+  id: string;
+  name: string;
+  description: string | null;
+  servingsDefault: number;
+  isFavorite: boolean;
+  instructions: string | null;
+  items: Project100RecipeItem[];
+}
+
+export interface Project100MealPlan {
+  id: string;
+  plannedDate: string;
+  plannedMinute: number | null;
+  mealType: Project100MealType;
+  source: "recipe" | "batch" | "custom";
+  recipeId: string | null;
+  batchId: string | null;
+  title: string;
+  portions: number;
+  isCooked: boolean;
+  note: string | null;
+}
+
+export interface Project100ShoppingItem {
+  foodId: string;
+  name: string;
+  neededGrams: number;
+  inStockGrams: number;
+  stapleTargetGrams: number | null;
+  buyGrams: number;
+  reasons: string[];
+}
+
+export interface Project100ShoppingList {
+  items: Project100ShoppingItem[];
+  totalGramsToBuy: number;
+}
+
+export interface Project100WeeklyMealPlanDay {
+  date: string;
+  isToday: boolean;
+  workEvents: Project100NutritionWorkEvent[];
+  plans: Project100MealPlan[];
+  meals: Project100Meal[];
+  totalMacros: Project100Macros;
+}
+
+export interface Project100WeeklyMealPlanView {
+  weekStart: string;
+  weekEnd: string;
+  timeZone: string;
+  days: Project100WeeklyMealPlanDay[];
+  recipes: Project100Recipe[];
+  batches: Project100MealBatch[];
+  foods: Project100Food[];
+  shoppingList: Project100ShoppingList;
 }
 
 export interface Project100BatchItem {
@@ -390,6 +461,129 @@ export function buildProject100MealSuggestions(input: {
   }
 
   return suggestions.filter((suggestion) => suggestion.reasons.length > 0);
+}
+
+export function recipeTotalMacros(items: Project100RecipeItem[]): Project100Macros {
+  return items.reduce((total, item) => {
+    const factor = item.grams / 100;
+    return {
+      proteinG: total.proteinG + item.proteinPer100g * factor,
+      carbsG: total.carbsG + item.carbsPer100g * factor,
+      fatG: total.fatG + item.fatPer100g * factor,
+      kcal: total.kcal + kcalFor(item, item.grams),
+    };
+  }, emptyMacros());
+}
+
+export function recipePortionMacros(recipe: Project100Recipe, servings?: number): Project100Macros {
+  const total = recipeTotalMacros(recipe.items);
+  const effectiveServings = (servings ?? recipe.servingsDefault) > 0 ? (servings ?? recipe.servingsDefault) : 1;
+  return {
+    proteinG: round1(total.proteinG / effectiveServings),
+    carbsG: round1(total.carbsG / effectiveServings),
+    fatG: round1(total.fatG / effectiveServings),
+    kcal: Math.round(total.kcal / effectiveServings),
+  };
+}
+
+export function scaleRecipeIngredients(
+  recipe: Project100Recipe,
+  targetServings: number,
+): { foodId: string; name: string; grams: number }[] {
+  const baseServings = recipe.servingsDefault > 0 ? recipe.servingsDefault : 1;
+  const factor = targetServings / baseServings;
+  return recipe.items.map((item) => ({
+    foodId: item.foodId,
+    name: item.name,
+    grams: Math.round(item.grams * factor * 10) / 10,
+  }));
+}
+
+export function deriveShoppingList(input: {
+  mealPlans: Project100MealPlan[];
+  recipes: Project100Recipe[];
+  foods: Project100Food[];
+}): Project100ShoppingList {
+  const recipesById = new Map(input.recipes.map((r) => [r.id, r]));
+  const foodsById = new Map(input.foods.map((f) => [f.id, f]));
+
+  const neededMap = new Map<string, { neededGrams: number; reasons: string[] }>();
+
+  // 1. Accumulate ingredients needed for planned, uncooked meals
+  for (const plan of input.mealPlans) {
+    if (plan.isCooked) continue;
+    if (plan.source === "recipe" && plan.recipeId) {
+      const recipe = recipesById.get(plan.recipeId);
+      if (!recipe) continue;
+      const scaled = scaleRecipeIngredients(recipe, plan.portions);
+      for (const item of scaled) {
+        const entry = neededMap.get(item.foodId) ?? { neededGrams: 0, reasons: [] };
+        entry.neededGrams += item.grams;
+        const reasonText = `${plan.portions} port ${recipe.name} (${plan.plannedDate})`;
+        if (!entry.reasons.includes(reasonText)) {
+          entry.reasons.push(reasonText);
+        }
+        neededMap.set(item.foodId, entry);
+      }
+    }
+  }
+
+  const items: Project100ShoppingItem[] = [];
+
+  // Check all foods that are needed or are staples
+  const relevantFoodIds = new Set<string>([
+    ...Array.from(neededMap.keys()),
+    ...input.foods.filter((f) => f.isStaple && (f.stapleTargetGrams ?? 0) > 0).map((f) => f.id),
+  ]);
+
+  for (const foodId of Array.from(relevantFoodIds)) {
+    const food = foodsById.get(foodId);
+    if (!food) continue;
+
+    const neededEntry = neededMap.get(foodId);
+    const neededGrams = Math.round((neededEntry?.neededGrams ?? 0) * 10) / 10;
+    const inStockGrams = food.inStockGrams ?? 0;
+    const stapleTarget = food.isStaple ? food.stapleTargetGrams : null;
+
+    const reasons = [...(neededEntry?.reasons ?? [])];
+
+    let grossDemand = neededGrams;
+    if (stapleTarget !== null && stapleTarget > 0) {
+      if (grossDemand < stapleTarget) {
+        grossDemand = stapleTarget;
+        reasons.push(`Basvara: buffert ${stapleTarget} g`);
+      }
+    }
+
+    const buyGrams = Math.max(0, Math.round((grossDemand - inStockGrams) * 10) / 10);
+    if (buyGrams > 0) {
+      items.push({
+        foodId: food.id,
+        name: food.name,
+        neededGrams,
+        inStockGrams,
+        stapleTargetGrams: stapleTarget,
+        buyGrams,
+        reasons,
+      });
+    }
+  }
+
+  // Sort: staples first, then alphabetical
+  items.sort((a, b) => {
+    const foodA = foodsById.get(a.foodId);
+    const foodB = foodsById.get(b.foodId);
+    if (foodA?.isStaple && !foodB?.isStaple) return -1;
+    if (!foodA?.isStaple && foodB?.isStaple) return 1;
+    return a.name.localeCompare(b.name, "sv-SE");
+  });
+
+  const totalGramsToBuy = Math.round(items.reduce((sum, item) => sum + item.buyGrams, 0) * 10) / 10;
+
+  return {
+    items,
+    totalGramsToBuy,
+  };
 }
 
 export function formatGrams(value: number | null): string {

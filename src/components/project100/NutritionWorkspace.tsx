@@ -2,6 +2,7 @@
 
 import {
   Beef,
+  Bookmark,
   BriefcaseBusiness,
   Camera,
   Check,
@@ -529,6 +530,48 @@ export function NutritionWorkspace({
     }
   }
 
+  async function saveMealAsRecipe(item: Project100Meal) {
+    const name = window.prompt("Namn på receptet:", item.title || "Nytt favoritrecept");
+    if (!name?.trim()) return;
+    try {
+      const response = await fetch("/api/project100/nutrition/recipes/from-meal", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mealId: item.id,
+          name: name.trim(),
+          description: null,
+          isFavorite: true,
+        }),
+      });
+      if (!response.ok) throw await failureFrom(response, "Kunde inte spara recept.");
+      router.push("/projekt-100/kost/favoriter");
+    } catch (caught) {
+      window.alert(caught instanceof Error ? caught.message : "Ett fel uppstod.");
+    }
+  }
+
+  async function saveBatchAsRecipe(item: Project100MealBatch) {
+    const name = window.prompt("Namn på receptet:", item.name);
+    if (!name?.trim()) return;
+    try {
+      const response = await fetch("/api/project100/nutrition/recipes/from-batch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          batchId: item.id,
+          name: name.trim(),
+          description: null,
+          isFavorite: true,
+        }),
+      });
+      if (!response.ok) throw await failureFrom(response, "Kunde inte spara recept.");
+      router.push("/projekt-100/kost/favoriter");
+    } catch (caught) {
+      window.alert(caught instanceof Error ? caught.message : "Ett fel uppstod.");
+    }
+  }
+
   const nextWorkLabel = view.nextWorkEvent
     ? new Intl.DateTimeFormat("sv-SE", {
         weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: view.timeZone,
@@ -544,6 +587,13 @@ export function NutritionWorkspace({
           <button type="button" className="p100-button-secondary" onClick={() => openMeal()}><Plus /> Logga utan bild</button>
         </div>
       </header>
+
+      {/* Sub-nav mellan kostsidorna */}
+      <nav className="p100-tab-nav" aria-label="Kostsektioner">
+        <Link href="/projekt-100/kost" className="active">Idag & Logg</Link>
+        <Link href="/projekt-100/kost/favoriter">Favoriter & Recept</Link>
+        <Link href="/projekt-100/kost/planering">Veckoplanering & Inköp</Link>
+      </nav>
 
       <nav className="p100-nutrition-day-nav" aria-label="Välj dag">
         <Link href={`/projekt-100/kost?dag=${addCalendarDateDays(view.day, -1)}`} aria-label="Föregående dag"><ChevronLeft /></Link>
@@ -591,7 +641,10 @@ export function NutritionWorkspace({
                     <img src={item.previewUrl} alt="" />
                   </> : <Utensils />}</span>
                   <div><small>{PROJECT100_MEAL_TYPE_LABELS[item.mealType]} · {item.source === "batch" ? `${item.portions} portion ur sats` : item.source === "estimate" ? "AI-uppskattning" : "Manuella värden"}</small><strong>{item.title}</strong><p>{item.proteinG !== null ? `${formatGrams(item.proteinG)} protein` : "Protein ej angivet"}{item.kcal !== null ? ` · ${Math.round(item.kcal)} kcal` : ""}</p>{item.note ? <i>{item.note}</i> : null}</div>
-                  <button type="button" onClick={() => void removeMeal(item)} aria-label={`Ta bort ${item.title}`}><Trash2 /></button>
+                  <div className="p100-meal-actions">
+                    <button type="button" onClick={() => void saveMealAsRecipe(item)} title="Spara måltiden som recept i receptbanken"><Bookmark /></button>
+                    <button type="button" onClick={() => void removeMeal(item)} aria-label={`Ta bort ${item.title}`}><Trash2 /></button>
+                  </div>
                 </li>
               ))}
             </ol>
@@ -611,7 +664,7 @@ export function NutritionWorkspace({
 
       <section className="p100-nutrition-panel p100-batches-panel">
         <header><div><span>Frysen är läsbar</span><h2>Satser och portioner</h2></div><button type="button" onClick={() => setComposer(view.foods.length ? "batch" : "food")}><Plus /> Ny sats</button></header>
-        {view.batches.length === 0 ? <div className="p100-batch-empty"><CookingPot /><div><strong>Ingen sats registrerad ännu</strong><p>Lägg först in råvarorna du faktiskt använder, bygg sedan en sats med kända makron per portion.</p></div><button type="button" onClick={() => setComposer("food")}>Lägg till råvara</button></div> : <div className="p100-batch-grid">{view.batches.map((item) => { const macros = batchPortionMacros(item); return <article key={item.id} className={item.portionsLeft <= 0 ? "empty" : ""}><header><span><CookingPot /></span><div><small>Lagades {dateLabel(item.cookedOn)}</small><strong>{item.name}</strong></div><b>{item.portionsLeft}/{item.portionsTotal}</b></header><p>{macros.proteinG} g protein · {macros.carbsG} g kolhydrater · {macros.kcal} kcal per portion</p><div className="p100-batch-meter"><span style={{ width: `${Math.min(100, (item.portionsLeft / item.portionsTotal) * 100)}%` }} /></div><footer><small>{item.items.map((ingredient) => ingredient.name).join(" · ")}</small><button type="button" disabled={item.portionsLeft < 1} onClick={() => openMeal(item.id)}>Logga portion</button></footer></article>; })}</div>}
+        {view.batches.length === 0 ? <div className="p100-batch-empty"><CookingPot /><div><strong>Ingen sats registrerad ännu</strong><p>Lägg först in råvarorna du faktiskt använder, bygg sedan en sats med kända makron per portion.</p></div><button type="button" onClick={() => setComposer("food")}>Lägg till råvara</button></div> : <div className="p100-batch-grid">{view.batches.map((item) => { const macros = batchPortionMacros(item); return <article key={item.id} className={item.portionsLeft <= 0 ? "empty" : ""}><header><span><CookingPot /></span><div><small>Lagades {dateLabel(item.cookedOn)}</small><strong>{item.name}</strong></div><b>{item.portionsLeft}/{item.portionsTotal}</b></header><p>{macros.proteinG} g protein · {macros.carbsG} g kolhydrater · {macros.kcal} kcal per portion</p><div className="p100-batch-meter"><span style={{ width: `${Math.min(100, (item.portionsLeft / item.portionsTotal) * 100)}%` }} /></div><footer><small>{item.items.map((ingredient) => ingredient.name).join(" · ")}</small><div className="p100-batch-card-actions"><button type="button" className="p100-btn-ghost-sm" onClick={() => void saveBatchAsRecipe(item)} title="Spara satsens råvaror som recept"><Bookmark /> Spara recept</button><button type="button" disabled={item.portionsLeft < 1} onClick={() => openMeal(item.id)}>Logga portion</button></div></footer></article>; })}</div>}
       </section>
 
       <div className="p100-nutrition-lower-grid">

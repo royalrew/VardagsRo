@@ -120,6 +120,26 @@ vi.mock("@/server/project100-nutrition", () => ({
   saveProject100Supplement: vi.fn(async () => ({ id: "supplement-1" })),
   archiveProject100Supplement: vi.fn(async () => true),
   saveProject100ProteinTarget: vi.fn(async () => 190),
+  loadProject100Recipes: vi.fn(async () => []),
+  saveProject100Recipe: vi.fn(async () => ({ id: "recipe-1" })),
+  updateProject100Recipe: vi.fn(async () => ({ id: "recipe-1" })),
+  saveProject100RecipeFromMeal: vi.fn(async () => ({ id: "recipe-1" })),
+  saveProject100RecipeFromBatch: vi.fn(async () => ({ id: "recipe-1" })),
+  archiveProject100Recipe: vi.fn(async () => true),
+  cookBatchFromRecipe: vi.fn(async () => ({ id: "batch-1" })),
+  updateProject100PantryStock: vi.fn(async () => ({ id: "food-1" })),
+  saveProject100MealPlan: vi.fn(async () => ({ id: "plan-1" })),
+  deleteProject100MealPlan: vi.fn(async () => true),
+  loadProject100MealPlanWeek: vi.fn(async () => ({
+    weekStart: "2026-08-31",
+    weekEnd: "2026-09-06",
+    timeZone: "Europe/Stockholm",
+    days: [],
+    recipes: [],
+    batches: [],
+    foods: [],
+    shoppingList: { items: [], totalGramsToBuy: 0 },
+  })),
 }));
 
 import { PATCH as householdPatch } from "@/app/api/household/route";
@@ -155,6 +175,23 @@ import { DELETE as nutritionMealDelete } from "@/app/api/project100/nutrition/me
 import { POST as nutritionSupplementsPost } from "@/app/api/project100/nutrition/supplements/route";
 import { DELETE as nutritionSupplementDelete } from "@/app/api/project100/nutrition/supplements/[id]/route";
 import { PATCH as nutritionTargetPatch } from "@/app/api/project100/nutrition/target/route";
+import {
+  GET as nutritionRecipesGet,
+  POST as nutritionRecipesPost,
+} from "@/app/api/project100/nutrition/recipes/route";
+import {
+  DELETE as nutritionRecipeDelete,
+  PATCH as nutritionRecipePatch,
+} from "@/app/api/project100/nutrition/recipes/[id]/route";
+import { POST as nutritionRecipeFromMealPost } from "@/app/api/project100/nutrition/recipes/from-meal/route";
+import { POST as nutritionRecipeFromBatchPost } from "@/app/api/project100/nutrition/recipes/from-batch/route";
+import { POST as nutritionCookBatchPost } from "@/app/api/project100/nutrition/recipes/[id]/cook-batch/route";
+import { PATCH as nutritionPantryPatch } from "@/app/api/project100/nutrition/pantry/route";
+import {
+  GET as nutritionPlanGet,
+  POST as nutritionPlanPost,
+} from "@/app/api/project100/nutrition/plan/route";
+import { DELETE as nutritionPlanDelete } from "@/app/api/project100/nutrition/plan/[id]/route";
 
 function membership(
   role: "owner" | "adult" | "viewer",
@@ -719,6 +756,32 @@ describe("Projekt 100 nutrition stays inside the private adult workspace", () =>
     };
   }
 
+  function recipe() {
+    return {
+      name: "Kyckling och ris",
+      description: null,
+      servingsDefault: 4,
+      isFavorite: true,
+      instructions: null,
+      items: [{ foodId: "food-1", grams: 800 }],
+    };
+  }
+
+  function mealPlan() {
+    return {
+      plannedDate: "2026-08-31",
+      plannedMinute: 720,
+      mealType: "lunch",
+      source: "recipe",
+      recipeId: "recipe-1",
+      batchId: null,
+      title: "Kyckling och ris",
+      portions: 2,
+      isCooked: false,
+      note: null,
+    };
+  }
+
   beforeEach(() => {
     harness.state.session = { user: { id: "user-1" } };
     harness.state.membership = membership("owner");
@@ -735,6 +798,56 @@ describe("Projekt 100 nutrition stays inside the private adult workspace", () =>
       nutritionBatchesPost(jsonPost(`${nutritionUrl}/batches`, batch())),
       nutritionSupplementsPost(jsonPost(`${nutritionUrl}/supplements`, supplement())),
       nutritionTargetPatch(jsonPatch(targetUrl, { proteinTargetG: 190 })),
+      nutritionRecipesGet(new Request(`${nutritionUrl}/recipes`)),
+      nutritionRecipesPost(jsonPost(`${nutritionUrl}/recipes`, recipe())),
+      nutritionRecipePatch(
+        jsonPatch(`${nutritionUrl}/recipes/recipe-1`, recipe()),
+        { params: Promise.resolve({ id: "recipe-1" }) },
+      ),
+      nutritionRecipeDelete(
+        new Request(`${nutritionUrl}/recipes/recipe-1`, {
+          method: "DELETE",
+          headers: { origin: "http://localhost" },
+        }),
+        { params: Promise.resolve({ id: "recipe-1" }) },
+      ),
+      nutritionRecipeFromMealPost(
+        jsonPost(`${nutritionUrl}/recipes/from-meal`, {
+          mealId: "meal-1",
+          name: "Favoritlunch",
+          description: null,
+          isFavorite: true,
+        }),
+      ),
+      nutritionRecipeFromBatchPost(
+        jsonPost(`${nutritionUrl}/recipes/from-batch`, {
+          batchId: "batch-1",
+          name: "Veckolåda",
+          description: null,
+          isFavorite: true,
+        }),
+      ),
+      nutritionCookBatchPost(
+        jsonPost(`${nutritionUrl}/recipes/recipe-1/cook-batch`, {
+          name: "Veckolådor",
+          cookedOn: "2026-08-30",
+          portionsTotal: 6,
+          note: null,
+        }),
+        { params: Promise.resolve({ id: "recipe-1" }) },
+      ),
+      nutritionPantryPatch(
+        jsonPatch(`${nutritionUrl}/pantry`, { foodId: "food-1", inStockGrams: 800 }),
+      ),
+      nutritionPlanGet(new Request(`${nutritionUrl}/plan?vecka=2026-08-31`)),
+      nutritionPlanPost(jsonPost(`${nutritionUrl}/plan`, mealPlan())),
+      nutritionPlanDelete(
+        new Request(`${nutritionUrl}/plan/plan-1`, {
+          method: "DELETE",
+          headers: { origin: "http://localhost" },
+        }),
+        { params: Promise.resolve({ id: "plan-1" }) },
+      ),
       nutritionMealDelete(
         new Request(`${mealsUrl}/meal-1`, {
           method: "DELETE",
@@ -751,9 +864,9 @@ describe("Projekt 100 nutrition stays inside the private adult workspace", () =>
       ),
     ]);
 
-    expect(responses.map((response) => response.status)).toEqual([
-      401, 401, 401, 401, 401, 401, 401, 401,
-    ]);
+    expect(responses.map((response) => response.status)).toEqual(
+      Array.from({ length: responses.length }, () => 401),
+    );
   });
 
   it("keeps a child out while letting an adult prepare a batch", async () => {
@@ -776,6 +889,21 @@ describe("Projekt 100 nutrition stays inside the private adult workspace", () =>
     expect(adultWrite.status).toBe(201);
   });
 
+  it("keeps a child out of the recipe bank and meal planner", async () => {
+    harness.state.membership = membership("viewer", "child");
+
+    const responses = await Promise.all([
+      nutritionRecipesGet(new Request(`${nutritionUrl}/recipes`)),
+      nutritionPlanGet(new Request(`${nutritionUrl}/plan?vecka=2026-08-31`)),
+      nutritionRecipesPost(jsonPost(`${nutritionUrl}/recipes`, recipe())),
+    ]);
+
+    expect(responses.map((response) => response.status)).toEqual([403, 403, 403]);
+    for (const response of responses) {
+      expect(await response.json()).toMatchObject({ code: "PROJECT100_ADULT_ONLY" });
+    }
+  });
+
   it("lets a read-only adult see the day without letting them add supplements", async () => {
     harness.state.membership = membership("viewer");
 
@@ -787,6 +915,73 @@ describe("Projekt 100 nutrition stays inside the private adult workspace", () =>
     expect(read.status).toBe(200);
     expect(write.status).toBe(403);
     expect(await write.json()).toMatchObject({ code: "READ_ONLY_MEMBER" });
+  });
+
+  it("keeps every new recipe, pantry and planning mutation behind the write gate", async () => {
+    harness.state.membership = membership("viewer");
+
+    const reads = await Promise.all([
+      nutritionRecipesGet(new Request(`${nutritionUrl}/recipes`)),
+      nutritionPlanGet(new Request(`${nutritionUrl}/plan?vecka=2026-08-31`)),
+    ]);
+    const writes = await Promise.all([
+      nutritionRecipesPost(jsonPost(`${nutritionUrl}/recipes`, recipe())),
+      nutritionRecipePatch(
+        jsonPatch(`${nutritionUrl}/recipes/recipe-1`, recipe()),
+        { params: Promise.resolve({ id: "recipe-1" }) },
+      ),
+      nutritionRecipeDelete(
+        new Request(`${nutritionUrl}/recipes/recipe-1`, {
+          method: "DELETE",
+          headers: { origin: "http://localhost" },
+        }),
+        { params: Promise.resolve({ id: "recipe-1" }) },
+      ),
+      nutritionRecipeFromMealPost(
+        jsonPost(`${nutritionUrl}/recipes/from-meal`, {
+          mealId: "meal-1",
+          name: "Favoritlunch",
+          description: null,
+          isFavorite: true,
+        }),
+      ),
+      nutritionRecipeFromBatchPost(
+        jsonPost(`${nutritionUrl}/recipes/from-batch`, {
+          batchId: "batch-1",
+          name: "Veckolåda",
+          description: null,
+          isFavorite: true,
+        }),
+      ),
+      nutritionCookBatchPost(
+        jsonPost(`${nutritionUrl}/recipes/recipe-1/cook-batch`, {
+          name: "Veckolådor",
+          cookedOn: "2026-08-30",
+          portionsTotal: 6,
+          note: null,
+        }),
+        { params: Promise.resolve({ id: "recipe-1" }) },
+      ),
+      nutritionPantryPatch(
+        jsonPatch(`${nutritionUrl}/pantry`, { foodId: "food-1", inStockGrams: 800 }),
+      ),
+      nutritionPlanPost(jsonPost(`${nutritionUrl}/plan`, mealPlan())),
+      nutritionPlanDelete(
+        new Request(`${nutritionUrl}/plan/plan-1`, {
+          method: "DELETE",
+          headers: { origin: "http://localhost" },
+        }),
+        { params: Promise.resolve({ id: "plan-1" }) },
+      ),
+    ]);
+
+    expect(reads.map((response) => response.status)).toEqual([200, 200]);
+    expect(writes.map((response) => response.status)).toEqual(
+      Array.from({ length: writes.length }, () => 403),
+    );
+    for (const response of writes) {
+      expect(await response.json()).toMatchObject({ code: "READ_ONLY_MEMBER" });
+    }
   });
 
   it("holds the protein override behind both the adult and mutation gates", async () => {
@@ -849,6 +1044,20 @@ describe("Projekt 100 nutrition stays inside the private adult workspace", () =>
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ code: "PROJECT100_UNKNOWN_QUERY" });
+  });
+
+  it("accepts only a real calendar date as the planning week", async () => {
+    const unknown = await nutritionPlanGet(
+      new Request(`${nutritionUrl}/plan?userId=someone-else`),
+    );
+    const invalid = await nutritionPlanGet(
+      new Request(`${nutritionUrl}/plan?vecka=2026-02-31`),
+    );
+
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toMatchObject({ code: "PROJECT100_UNKNOWN_QUERY" });
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toMatchObject({ code: "VALIDATION_ERROR" });
   });
 
   it("accepts route-safe ids and rejects path-shaped ids on both delete routes", async () => {

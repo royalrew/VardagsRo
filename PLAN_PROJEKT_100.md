@@ -32,7 +32,9 @@ Gäller: ersättaren till "Mitt spår"
 - [ ] Avveckling av de gamla Solo-tabellerna och den inbäddade Solo-vyn.
 - [x] Måltidsloggens kärnflöde: bild eller manuella värden, portion ur sats,
   spårbart proteinintervall, förslag med skäl och måltider i tidslinjen.
-- [ ] Kostens planeringslager, insikter, Jarvis-minne och innehållsflöde.
+- [x] Kostens planeringslager: favoriter, recept, härlett skafferi och inköpslista
+  samt måltidsplanering runt det befintliga jobbschemat.
+- [ ] Insikter, Jarvis-minne och innehållsflöde.
 
 ## Vision
 
@@ -479,9 +481,9 @@ arbetsflöden — inte från att visa så mycket information som möjligt samtid
    flödet så länge.
 6. ~~Bygg kropp, dagbok och media ovanpå tidslinjen.~~ Klar 2026-08-29.
    Kostsidorna står härnäst.
-7. ~~Bygg kostsidorna och måltidsflödet.~~ Kärnflödet klart 2026-08-30 på
-   `/projekt-100/kost`; favoriter, recept, härledd inköpslista och veckoplanering
-   återstår som fördjupning.
+7. ~~Bygg kostsidorna och måltidsflödet.~~ Kärnflödet och planeringslagret klara
+   2026-08-30 på `/projekt-100/kost`, `/projekt-100/kost/favoriter` och
+   `/projekt-100/kost/planering`.
 8. Bygg insikter när tillräcklig strukturerad data finns.
 9. Bygg Jarvis som egen arbetsyta.
 10. Bygg innehåll och YouTube-flöde.
@@ -577,12 +579,15 @@ Mål: göra kostloggning visuell, snabb och korrigerbar.
 - ~~Satser: råvaror, portioner och makron per portion, med kvarvarande portioner
   räknade. En måltid ska kunna loggas som en portion ur en sats.~~ Klar
   2026-08-30, inklusive atomär nedräkning och återställning vid radering.
-- Skafferi med det som alltid bör finnas, härlett ur egna satser och favoriter,
-  och en inköpslista över det som saknas inför veckan.
+- ~~Skafferi med det som alltid bör finnas, härlett ur egna satser och favoriter,
+  och en inköpslista över det som saknas inför veckan.~~ Klar 2026-08-30, med
+  synligt underlag och uppdatering av lagersaldo när en rad markeras köpt.
 - ~~Tillskott med dos och syfte. Tidpunkt anges bara där den har betydelse.~~
   Klar 2026-08-30.
-- Återanvändbara favoriter och recept.
-- Satser och måltider planerade mot kommande arbetsdagar.
+- ~~Återanvändbara favoriter och recept.~~ Klar 2026-08-30, inklusive redigering,
+  återbruk från måltid eller sats och proportionell tillagning som ny sats.
+- ~~Satser och måltider planerade mot kommande arbetsdagar.~~ Klar 2026-08-30;
+  varje vald vecka läser samma veckas bekräftade jobbpass ur familjekalendern.
 - Veckoöversikt över protein och måltidskontinuitet.
 - ~~Måltider vävs in i den privata tidslinjen tillsammans med pass och
   mätningar.~~ Klar 2026-08-30.
@@ -728,16 +733,16 @@ Fas 0, fas 1 och fas 2 vilar nu på riktig kod:
 7. Kostens kärnflöde med privata råvaror, satser, måltider och tillskott,
    proteinmatematik med synligt underlag, jobbschema i hushållets tidszon och
    måltider som femte användarscopead tidslinjekälla.
+8. Kostens planeringslager med privata favoritrecept, satstillagning, veckoplan,
+   skafferisaldo och en deterministiskt härledd inköpslista med synliga skäl.
 
 Bildlagringen kräver konfigurerad objektlagring (`R2_*`). Utan den vägrar
 servern spara en bild i stället för att skapa en rad utan bild.
 
 ## Nästa konkreta leverans
 
-1. Kostens nästa lager: favoriter och recept, skafferi härlett ur det som
-   faktiskt lagas, inköpslista samt vecko- och arbetsdagsplanering.
-2. Styrkeutvecklingen bredvid vikt och mått, över samma period.
-3. Insikter när det finns tillräckligt med strukturerad data att jämföra.
-4. Avveckling av `solo_*`-tabellerna och den inbäddade `SoloView` när deras
+1. Styrkeutvecklingen bredvid vikt och mått, över samma period.
+2. Insikter när det finns tillräckligt med strukturerad data att jämföra.
+3. Avveckling av `solo_*`-tabellerna och den inbäddade `SoloView` när deras
    data har flyttats. Vikt, energi, sömn och dagsanteckning är redan migrerade;
    kvar står karriärstegen, som Projekt 100 inte ärver.

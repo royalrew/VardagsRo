@@ -947,6 +947,78 @@ const migrations = [
         check (protein_target_g is null or (protein_target_g > 0 and protein_target_g <= 600))`,
     ],
   },
+  {
+    version: "020_project100_meal_planning",
+    name: "Recipes, meal planning, pantry stock and shopping list derivation",
+    statements: [
+      `alter table project100_foods
+        add column if not exists in_stock_grams numeric(8, 2)
+        check (in_stock_grams is null or (in_stock_grams >= 0 and in_stock_grams <= 100000))`,
+      `create table if not exists project100_recipes (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        name text not null check (char_length(btrim(name)) between 1 and 120),
+        description text check (description is null or char_length(description) <= 1000),
+        servings_default numeric(5, 2) not null check (servings_default > 0 and servings_default <= 100),
+        is_favorite boolean not null default false,
+        instructions text check (instructions is null or char_length(instructions) <= 4000),
+        archived_at timestamptz,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (id, user_id)
+      )`,
+      `create index if not exists project100_recipes_user_idx
+        on project100_recipes (user_id, is_favorite desc, name)
+        where archived_at is null`,
+      `create table if not exists project100_recipe_items (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        recipe_id text not null,
+        food_id text not null,
+        grams numeric(8, 2) not null check (grams > 0 and grams <= 100000),
+        position integer not null check (position >= 0 and position < 100),
+        unique (id, user_id),
+        unique (user_id, recipe_id, position),
+        constraint project100_recipe_items_recipe_fk
+          foreign key (recipe_id, user_id)
+          references project100_recipes(id, user_id)
+          on delete cascade,
+        constraint project100_recipe_items_food_fk
+          foreign key (food_id, user_id)
+          references project100_foods(id, user_id)
+          on delete restrict
+      )`,
+      `create table if not exists project100_meal_plans (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        planned_date date not null,
+        meal_type text not null check (meal_type in (
+          'breakfast', 'lunch', 'dinner', 'snack', 'shake'
+        )),
+        planned_minute integer check (planned_minute is null or (planned_minute >= 0 and planned_minute < 1440)),
+        source text not null check (source in ('recipe', 'batch', 'custom')),
+        recipe_id text,
+        batch_id text,
+        title text not null check (char_length(btrim(title)) between 1 and 160),
+        portions numeric(5, 2) not null check (portions > 0 and portions <= 20),
+        is_cooked boolean not null default false,
+        note text check (note is null or char_length(note) <= 1000),
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (id, user_id),
+        constraint project100_meal_plans_recipe_fk
+          foreign key (recipe_id, user_id)
+          references project100_recipes(id, user_id)
+          on delete set null,
+        constraint project100_meal_plans_batch_fk
+          foreign key (batch_id, user_id)
+          references project100_meal_batches(id, user_id)
+          on delete set null
+      )`,
+      `create index if not exists project100_meal_plans_date_idx
+        on project100_meal_plans (user_id, planned_date asc, meal_type, id)`,
+    ],
+  },
 ];
 
 function checksum(migration) {

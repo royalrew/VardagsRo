@@ -21,6 +21,7 @@ export const project100FoodSchema = z
     kcalPer100g: z.number().finite().min(0).max(950).nullable().default(null),
     isStaple: z.boolean().default(false),
     stapleTargetGrams: z.number().int().min(1).max(100_000).nullable().default(null),
+    inStockGrams: z.number().finite().min(0).max(100_000).nullable().default(null),
   })
   .strict()
   .superRefine((food, ctx) => {
@@ -39,6 +40,116 @@ export const project100FoodSchema = z
       });
     }
   });
+
+export const project100PantryStockSchema = z
+  .object({
+    foodId: project100IdSchema,
+    inStockGrams: z.number().finite().min(0).max(100_000).nullable(),
+  })
+  .strict();
+
+export const project100RecipeSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    description: project100OptionalText(1_000),
+    servingsDefault: z.number().finite().gt(0).max(100).default(4),
+    isFavorite: z.boolean().default(false),
+    instructions: project100OptionalText(4_000),
+    items: z
+      .array(
+        z
+          .object({
+            foodId: project100IdSchema,
+            grams: z.number().finite().gt(0).max(100_000),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(40),
+  })
+  .strict();
+
+export const project100RecipeUpdateSchema = project100RecipeSchema;
+
+export const project100RecipeFromMealSchema = z
+  .object({
+    mealId: project100IdSchema,
+    name: z.string().trim().min(1).max(120),
+    description: project100OptionalText(1_000),
+    servingsDefault: z.number().finite().gt(0).max(100).default(1),
+    isFavorite: z.boolean().default(false),
+  })
+  .strict();
+
+export const project100RecipeFromBatchSchema = z
+  .object({
+    batchId: project100IdSchema,
+    name: z.string().trim().min(1).max(120).nullable().default(null),
+    description: project100OptionalText(1_000),
+    isFavorite: z.boolean().default(false),
+  })
+  .strict();
+
+export const project100CookBatchFromRecipeSchema = z
+  .object({
+    recipeId: project100IdSchema,
+    name: z.string().trim().min(1).max(120).nullable().default(null),
+    cookedOn: project100CalendarDateSchema,
+    portionsTotal: z.number().finite().gt(0).max(100),
+    note: project100OptionalText(1_000),
+  })
+  .strict();
+
+export const project100MealPlanSchema = z
+  .object({
+    plannedDate: project100CalendarDateSchema,
+    plannedMinute: z.number().int().min(0).max(1_439).nullable().default(null),
+    mealType: z.enum(PROJECT100_MEAL_TYPES),
+    source: z.enum(["recipe", "batch", "custom"]),
+    recipeId: project100IdSchema.nullable().default(null),
+    batchId: project100IdSchema.nullable().default(null),
+    title: z.string().trim().min(1).max(160),
+    portions: z.number().finite().gt(0).max(20).default(1),
+    isCooked: z.boolean().default(false),
+    note: project100OptionalText(1_000),
+  })
+  .strict()
+  .superRefine((plan, ctx) => {
+    if (plan.source === "recipe" && plan.recipeId === null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["recipeId"],
+        message: "Ett receptplanerat mål måste referera till ett recept",
+      });
+    }
+    if (plan.source === "batch" && plan.batchId === null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["batchId"],
+        message: "Ett satsplanerat mål måste referera till en sats",
+      });
+    }
+  });
+
+export const project100WeekQuerySchema = z
+  .object({
+    weekStart: project100CalendarDateSchema.nullable().default(null),
+  })
+  .strict();
+
+export type Project100FoodInput = z.infer<typeof project100FoodSchema>;
+export type Project100PantryStockInput = z.infer<typeof project100PantryStockSchema>;
+export type Project100BatchInput = z.infer<typeof project100BatchSchema>;
+export type Project100MealInput = z.infer<typeof project100MealSchema>;
+export type Project100SupplementInput = z.infer<typeof project100SupplementSchema>;
+export type Project100ProteinTargetInput = z.infer<typeof project100ProteinTargetSchema>;
+export type Project100RecipeInput = z.infer<typeof project100RecipeSchema>;
+export type Project100RecipeUpdateInput = z.infer<typeof project100RecipeUpdateSchema>;
+export type Project100RecipeFromMealInput = z.infer<typeof project100RecipeFromMealSchema>;
+export type Project100RecipeFromBatchInput = z.infer<typeof project100RecipeFromBatchSchema>;
+export type Project100CookBatchFromRecipeInput = z.infer<typeof project100CookBatchFromRecipeSchema>;
+export type Project100MealPlanInput = z.infer<typeof project100MealPlanSchema>;
+
 
 export const project100BatchSchema = z
   .object({
@@ -138,9 +249,3 @@ export const project100ProteinTargetSchema = z
     proteinTargetG: z.number().finite().gt(0).lt(600).nullable(),
   })
   .strict();
-
-export type Project100FoodInput = z.infer<typeof project100FoodSchema>;
-export type Project100BatchInput = z.infer<typeof project100BatchSchema>;
-export type Project100MealInput = z.infer<typeof project100MealSchema>;
-export type Project100SupplementInput = z.infer<typeof project100SupplementSchema>;
-export type Project100ProteinTargetInput = z.infer<typeof project100ProteinTargetSchema>;

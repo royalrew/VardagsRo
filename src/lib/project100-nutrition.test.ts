@@ -4,8 +4,11 @@ import {
   batchPortionMacros,
   buildProject100MealSuggestions,
   buildProject100ProteinTarget,
+  deriveShoppingList,
   proteinGoalGrams,
   PROJECT100_TIMING_MATTERS,
+  recipePortionMacros,
+  scaleRecipeIngredients,
   sumMealMacros,
   trainingLoadFromSessions,
   type Project100Meal,
@@ -182,7 +185,6 @@ describe("Projekt 100 protein target", () => {
     expect(proteinGoalGrams(target())).toBe(150);
   });
 });
-
 describe("Projekt 100 batches", () => {
   it("divides a cooked batch into portions with known macros", () => {
     // 1 kg kyckling, 400 g ris, 600 g broccoli, sex portioner.
@@ -313,5 +315,132 @@ describe("Projekt 100 supplements", () => {
     // precision, so the model refuses to imply one.
     expect(PROJECT100_TIMING_MATTERS.creatine).toBe(false);
     expect(PROJECT100_TIMING_MATTERS.protein).toBe(true);
+  });
+});
+
+describe("Projekt 100 recipes & meal planning", () => {
+  const sampleRecipe = {
+    id: "recipe-1",
+    name: "Köttfärssås och pasta",
+    description: "Klassisk vardagsfavorit",
+    servingsDefault: 4,
+    isFavorite: true,
+    instructions: "Bryn köttfärs, koka pasta",
+    items: [
+      {
+        id: "item-beef",
+        foodId: "food-beef",
+        name: "Nötfärs 10%",
+        grams: 500,
+        proteinPer100g: 20,
+        carbsPer100g: 0,
+        fatPer100g: 10,
+        kcalPer100g: 170,
+      },
+      {
+        id: "item-pasta",
+        foodId: "food-pasta",
+        name: "Pasta",
+        grams: 300,
+        proteinPer100g: 12,
+        carbsPer100g: 70,
+        fatPer100g: 2,
+        kcalPer100g: 350,
+      },
+    ],
+  };
+
+  it("calculates recipe portion macros accurately", () => {
+    // 500g nötfärs = 100g protein, 50g fett, 850 kcal
+    // 300g pasta = 36g protein, 210g kolhydrater, 6g fett, 1050 kcal
+    // Totalt = 136g protein, 210g kolhydrater, 56g fett, 1900 kcal
+    // Per portion (4 portioner) = 34g protein, 52.5g kolhydrater, 14g fett, 475 kcal
+    const macros = recipePortionMacros(sampleRecipe);
+    expect(macros.proteinG).toBe(34);
+    expect(macros.carbsG).toBe(52.5);
+    expect(macros.fatG).toBe(14);
+    expect(macros.kcal).toBe(475);
+  });
+
+  it("scales ingredients proportionally when cooking other portion counts", () => {
+    // Scale 4 portions to 6 portions (1.5x)
+    const scaled = scaleRecipeIngredients(sampleRecipe, 6);
+    expect(scaled.find((i) => i.foodId === "food-beef")?.grams).toBe(750);
+    expect(scaled.find((i) => i.foodId === "food-pasta")?.grams).toBe(450);
+  });
+
+  it("derives a shopping list from planned recipes minus pantry stock", () => {
+    const mealPlans = [
+      {
+        id: "plan-1",
+        plannedDate: "2026-08-31",
+        plannedMinute: 720,
+        mealType: "lunch" as const,
+        source: "recipe" as const,
+        recipeId: "recipe-1",
+        batchId: null,
+        title: "Köttfärssås och pasta",
+        portions: 2, // 2 portions = 250g beef, 150g pasta
+        isCooked: false,
+        note: null,
+      },
+    ];
+
+    const foods = [
+      {
+        id: "food-beef",
+        name: "Nötfärs 10%",
+        proteinPer100g: 20,
+        carbsPer100g: 0,
+        fatPer100g: 10,
+        kcalPer100g: 170,
+        isStaple: false,
+        stapleTargetGrams: null,
+        inStockGrams: 100, // 250g needed - 100g in stock = 150g to buy
+      },
+      {
+        id: "food-pasta",
+        name: "Pasta",
+        proteinPer100g: 12,
+        carbsPer100g: 70,
+        fatPer100g: 2,
+        kcalPer100g: 350,
+        isStaple: true,
+        stapleTargetGrams: 500, // staple target 500g > needed 150g, in stock 200g -> 300g to buy
+        inStockGrams: 200,
+      },
+      {
+        id: "food-oats",
+        name: "Havregryn",
+        proteinPer100g: 13,
+        carbsPer100g: 60,
+        fatPer100g: 7,
+        kcalPer100g: 370,
+        isStaple: true,
+        stapleTargetGrams: 1000,
+        inStockGrams: 1000, // fully stocked staple -> not in shopping list
+      },
+    ];
+
+    const list = deriveShoppingList({
+      mealPlans,
+      recipes: [sampleRecipe],
+      foods,
+    });
+
+    expect(list.items.length).toBe(2);
+
+    const beefItem = list.items.find((i) => i.foodId === "food-beef");
+    expect(beefItem?.buyGrams).toBe(150);
+    expect(beefItem?.reasons[0]).toContain("2 port Köttfärssås och pasta");
+
+    const pastaItem = list.items.find((i) => i.foodId === "food-pasta");
+    expect(pastaItem?.buyGrams).toBe(300);
+    expect(pastaItem?.stapleTargetGrams).toBe(500);
+
+    // Oats is fully in stock, so not on list
+    expect(list.items.some((i) => i.foodId === "food-oats")).toBe(false);
+
+    expect(list.totalGramsToBuy).toBe(450);
   });
 });
