@@ -23,6 +23,8 @@ import {
   Sparkles,
   Trash2,
   Utensils,
+  Volume2,
+  VolumeX,
   X,
   Zap,
 } from "lucide-react";
@@ -122,6 +124,52 @@ export function JarvisWorkspace({
       }
     } catch {
       // ignore
+    }
+  }
+
+  // Voice Player (OpenAI TTS Onyx)
+  const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
+  const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
+
+  async function handlePlayVoice(messageId: string, text: string) {
+    if (playingMessageId === messageId) {
+      currentAudio?.pause();
+      setCurrentAudio(null);
+      setPlayingMessageId(null);
+      return;
+    }
+
+    if (currentAudio) {
+      currentAudio.pause();
+      setCurrentAudio(null);
+    }
+
+    setPlayingMessageId(messageId);
+    try {
+      const res = await fetch("/api/project100/jarvis/speak", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text, voice: "onyx" }),
+      });
+      if (!res.ok) throw new Error("Kunde inte generera röst.");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      setCurrentAudio(audio);
+      audio.onended = () => {
+        setPlayingMessageId(null);
+        setCurrentAudio(null);
+        URL.revokeObjectURL(url);
+      };
+      audio.onerror = () => {
+        setPlayingMessageId(null);
+        setCurrentAudio(null);
+        URL.revokeObjectURL(url);
+      };
+      await audio.play();
+    } catch {
+      setPlayingMessageId(null);
+      setCurrentAudio(null);
     }
   }
 
@@ -430,8 +478,22 @@ export function JarvisWorkspace({
                   className={`p100-chat-bubble ${m.role}`}
                 >
                   <header>
-                    {m.role === "assistant" ? <Bot /> : null}
-                    <strong>{m.role === "assistant" ? "Jarvis" : "Du"}</strong>
+                    <div className="p100-bubble-author">
+                      {m.role === "assistant" ? <Bot /> : null}
+                      <strong>{m.role === "assistant" ? "Jarvis" : "Du"}</strong>
+                    </div>
+                    {m.role === "assistant" ? (
+                      <button
+                        type="button"
+                        className={`p100-msg-audio-btn ${playingMessageId === m.id ? "playing" : ""}`}
+                        onClick={() => handlePlayVoice(m.id, m.content)}
+                        aria-label="Lyssna på Jarvis röst"
+                        title="Lyssna på Jarvis (OpenAI TTS Onyx)"
+                      >
+                        <Volume2 />
+                        <span>{playingMessageId === m.id ? "Spelar..." : "Lyssna"}</span>
+                      </button>
+                    ) : null}
                   </header>
                   <div className="p100-message-body">
                     <p>{m.content}</p>

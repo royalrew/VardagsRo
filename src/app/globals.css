@@ -8206,6 +8206,14 @@ button.event-row:hover {
 
 .p100-quick-workout-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
+/* Jarvis Voice Message Audio Player */
+.p100-chat-bubble header { display: flex; justify-content: space-between; align-items: center; }
+.p100-bubble-author { display: flex; align-items: center; gap: 6px; }
+.p100-msg-audio-btn { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; font-size: .56rem; font-weight: 700; border-radius: 6px; background: rgba(200,244,93,.1); color: var(--p100-accent); border: 1px solid rgba(200,244,93,.25); cursor: pointer; transition: all .15s ease; }
+.p100-msg-audio-btn:hover { background: rgba(200,244,93,.2); border-color: var(--p100-accent); }
+.p100-msg-audio-btn.playing { background: var(--p100-accent); color: #121814; font-weight: 800; }
+.p100-msg-audio-btn svg { width: 11px; height: 11px; }
+
 
 
 

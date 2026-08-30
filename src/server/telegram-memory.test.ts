@@ -14,6 +14,7 @@ const dependencies = vi.hoisted(() => ({
   answerFamilyQuestion: vi.fn(async () => ({ text: "Du jobbar söndag 07:00-16:00" })),
   processJarvisAgentMessage: vi.fn(),
   transcribeTelegramVoice: vi.fn(),
+  synthesizeJarvisSpeech: vi.fn(async () => Buffer.from("audio-bytes")),
 }));
 
 vi.stubGlobal("fetch", vi.fn());
@@ -33,6 +34,9 @@ vi.mock("@/server/jarvis-agent", () => ({
 }));
 vi.mock("@/server/audio-transcription", () => ({
   transcribeTelegramVoice: dependencies.transcribeTelegramVoice,
+}));
+vi.mock("@/server/audio-synthesis", () => ({
+  synthesizeJarvisSpeech: dependencies.synthesizeJarvisSpeech,
 }));
 vi.mock("@/server/actor", () => ({
   requireTelegramActor: vi.fn(async () => ({
@@ -94,6 +98,16 @@ describe("Telegram Jarvis Voice & Schedule Engine", () => {
           chat_id: "999",
           text: "God kväll Jimmy! Den 25 september är du ledig. Jag har lagt in en påminnelse om att boka bord.",
         }),
+      }),
+    );
+    expect(dependencies.synthesizeJarvisSpeech).toHaveBeenCalledWith(
+      "God kväll Jimmy! Den 25 september är du ledig. Jag har lagt in en påminnelse om att boka bord.",
+      expect.objectContaining({ voice: "onyx", format: "opus" }),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottest-token/sendVoice",
+      expect.objectContaining({
+        method: "POST",
       }),
     );
   });

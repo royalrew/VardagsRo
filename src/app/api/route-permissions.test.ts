@@ -170,6 +170,9 @@ vi.mock("@/server/jarvis-gaps", () => ({
   listJarvisCapabilityGaps: vi.fn(async () => []),
   updateJarvisCapabilityGapStatus: vi.fn(async () => ({ id: "gap-1", status: "implemented" })),
 }));
+vi.mock("@/server/audio-synthesis", () => ({
+  synthesizeJarvisSpeech: vi.fn(async () => Buffer.from("audio-mock-bytes")),
+}));
 
 import { PATCH as householdPatch } from "@/app/api/household/route";
 import { GET as loginsGet } from "@/app/api/logins/route";
@@ -251,6 +254,7 @@ import { DELETE as contentMediaDelete } from "@/app/api/project100/content/proje
 import { POST as contentSuggestionsPost } from "@/app/api/project100/content/suggestions/route";
 import { GET as jarvisGapsGet } from "@/app/api/project100/jarvis/gaps/route";
 import { PATCH as jarvisGapsPatch } from "@/app/api/project100/jarvis/gaps/[id]/route";
+import { POST as jarvisSpeakPost } from "@/app/api/project100/jarvis/speak/route";
 
 function membership(
   role: "owner" | "adult" | "viewer",
@@ -1446,5 +1450,22 @@ describe("Projekt 100 Content is held behind the adult gate and requires CSRF on
       { params: Promise.resolve({ id: "gap-1" }) },
     );
     expect(adultPatch.status).toBe(200);
+  });
+
+  it("guards jarvis speak speech synthesis", async () => {
+    const speakUrl = "http://localhost/api/project100/jarvis/speak";
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("viewer", "child");
+
+    const child = await jarvisSpeakPost(
+      jsonPost(speakUrl, { text: "God kväll Jimmy!" }),
+    );
+    expect(child.status).toBe(403);
+
+    harness.state.membership = membership("adult");
+    const adult = await jarvisSpeakPost(
+      jsonPost(speakUrl, { text: "God kväll Jimmy!" }),
+    );
+    expect(adult.status).toBe(200);
   });
 });

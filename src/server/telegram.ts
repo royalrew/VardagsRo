@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { requireTelegramActor } from "@/server/actor";
+import { synthesizeJarvisSpeech } from "@/server/audio-synthesis";
 import { transcribeTelegramVoice } from "@/server/audio-transcription";
 import { telegramConfig } from "@/server/config";
 import {
@@ -51,6 +52,24 @@ export async function sendTelegramMessage(chatId: string, text: string): Promise
     cache: "no-store",
   });
   if (!response.ok) throw new Error("Telegram rejected the message");
+}
+
+export async function sendTelegramVoice(chatId: string, audioBuffer: Buffer): Promise<void> {
+  const config = telegramConfig();
+  if (!config) throw new Error("Telegram is not configured");
+
+  const formData = new FormData();
+  formData.append("chat_id", chatId);
+  const blob = new Blob([new Uint8Array(audioBuffer)], { type: "audio/ogg" });
+  formData.append("voice", blob, "voice.ogg");
+
+  const response = await fetch(`https://api.telegram.org/bot${config.botToken}/sendVoice`, {
+    method: "POST",
+    body: formData,
+    cache: "no-store",
+  });
+
+  if (!response.ok) throw new Error("Telegram rejected the voice message");
 }
 
 function command(text: string): string | null {
@@ -120,9 +139,10 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
     }
 
     let messageText = message.text?.trim() || "";
+    const isVoiceInput = Boolean(message.voice || message.audio);
 
     // If voice or audio message, transcribe with Whisper
-    if (!messageText && (message.voice || message.audio)) {
+    if (!messageText && isVoiceInput) {
       const fileId = message.voice?.file_id || message.audio?.file_id;
       if (fileId) {
         try {
@@ -162,6 +182,19 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
           personName: account.personName,
         });
         await sendTelegramMessage(chatId, agentResult.text);
+
+        // Send voice response if input was a voice note
+        if (isVoiceInput) {
+          try {
+            const voiceBuffer = await synthesizeJarvisSpeech(agentResult.text, {
+              voice: "onyx",
+              format: "opus",
+            });
+            await sendTelegramVoice(chatId, voiceBuffer);
+          } catch {
+            // Silently fall back to text-only if TTS fails
+          }
+        }
         return;
       } catch {
         // Fall back to general question answering if agent execution encounters an error
