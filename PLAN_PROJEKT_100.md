@@ -36,7 +36,10 @@ Gäller: ersättaren till "Mitt spår"
   spårbart proteinintervall, förslag med skäl och måltider i tidslinjen.
 - [x] Kostens planeringslager: favoriter, recept, härlett skafferi och inköpslista
   samt måltidsplanering runt det befintliga jobbschemat.
-- [ ] Insikter, Jarvis-minne och innehållsflöde.
+- [x] Insikter och tvärfunktionell analys: periodjämförelse (30d/90d/180d/år),
+  KPI-deltan, arbetsdagar vs lediga dagar, proteintäckningsgrad och spårbar
+  datatabell.
+- [ ] Jarvis-minne och innehållsflöde.
 
 ## Vision
 
@@ -626,15 +629,15 @@ data exponeras eller gamla loggar ändras.
 
 Mål: omvandla loggar till begripliga beslut.
 
-- Vikt, kroppsmått och milstolpar.
-- Träningsvolym, personbästa, löpning och cykling.
-- Sömn, energi, kost och återhämtning.
-- Arbetsdagar jämfört med lediga dagar.
-- Veckosummering: gjort, fungerade, svårt, nästa fokus.
-- Månadssummering och valfri delbar rapport.
-- Visa datatäckning så att svaga slutsatser ser svaga ut.
+- ~~Vikt, kroppsmått och milstolpar.~~ Klar 2026-08-30.
+- ~~Träningsvolym, personbästa, passfrekvens och muskelbalans.~~ Klar 2026-08-30.
+- ~~Sömn, energi, kost och återhämtning.~~ Klar 2026-08-30.
+- ~~Arbetsdagar jämfört med lediga dagar.~~ Klar 2026-08-30; läser kalenderns
+  befintliga arbetspass och ställer belastning mot återhämtning.
+- ~~Periodjämförelse och sammanfattning: gjort, fungerade, nästa fokus.~~ Klar 2026-08-30.
+- ~~Visa datatäckning så att svaga slutsatser ser svaga ut.~~ Klar 2026-08-30.
 
-Klart när varje graf går att spåra tillbaka till konkreta loggposter.
+Klart när varje graf och KPI går att spåra tillbaka till konkreta loggposter.
 
 ### Fas 7 — Jarvis och personligt minne
 
@@ -742,13 +745,16 @@ Fas 0, fas 1 och fas 2 vilar nu på riktig kod:
 9. Styrkeutveckling i kroppsresan med historiskt seedade personbästan,
    gemensam datumperiod, synlig datatäckning och ett korrigerbart spindeldiagram
    där set utan muskelklassning redovisas som saknade i stället för att gissas.
+10. Insikter och tvärfunktionell analys med periodväljare, KPI-deltan mot
+    föregående period, jämförelse av arbetsdagar mot lediga dagar, proteintäckning,
+    dagsform och spårbar datatabell.
 
 Bildlagringen kräver konfigurerad objektlagring (`R2_*`). Utan den vägrar
 servern spara en bild i stället för att skapa en rad utan bild.
 
 ## Nästa konkreta leverans
 
-1. Insikter när det finns tillräckligt med strukturerad data att jämföra.
+1. Jarvis som egen arbetsyta med kontrollerat minne och synliga källor.
 2. Före/efter-jämförelse av kroppsbilder med dragbar skiljelinje.
 3. Avveckling av `solo_*`-tabellerna och den inbäddade `SoloView` när deras
    data har flyttats. Vikt, energi, sömn och dagsanteckning är redan migrerade;

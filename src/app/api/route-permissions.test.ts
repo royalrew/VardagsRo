@@ -145,6 +145,9 @@ vi.mock("@/server/project100-nutrition", () => ({
 vi.mock("@/server/project100-strength", () => ({
   saveProject100ExerciseMuscleGroups: vi.fn(async () => ["chest"]),
 }));
+vi.mock("@/server/project100-insights", () => ({
+  loadProject100Insights: vi.fn(async () => ({})),
+}));
 
 import { PATCH as householdPatch } from "@/app/api/household/route";
 import { GET as loginsGet } from "@/app/api/logins/route";
@@ -162,6 +165,7 @@ import {
 } from "@/app/api/project100/training/sessions/[id]/route";
 import { POST as trainingTemplatesPost } from "@/app/api/project100/training/templates/route";
 import { PATCH as trainingExerciseMusclesPatch } from "@/app/api/project100/training/exercises/[id]/muscles/route";
+import { GET as insightsGet } from "@/app/api/project100/insights/route";
 import { GET as journalGet, POST as journalPost } from "@/app/api/project100/journal/route";
 import { DELETE as journalDelete } from "@/app/api/project100/journal/[date]/route";
 import { GET as bodyGet, POST as bodyPost } from "@/app/api/project100/body/route";
@@ -1230,5 +1234,22 @@ describe("The diary is the most closed door in the workspace", () => {
     );
 
     expect(response.status).toBe(403);
+  });
+});
+
+describe("Projekt 100 insights is held behind the adult gate", () => {
+  const insightsUrl = "http://localhost/api/project100/insights?period=30d";
+
+  it("answers 401 for anonymous and 403 for a child, 200 for an adult", async () => {
+    harness.state.session = null;
+    harness.state.membership = null;
+    expect((await insightsGet(new Request(insightsUrl))).status).toBe(401);
+
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("viewer", "child");
+    expect((await insightsGet(new Request(insightsUrl))).status).toBe(403);
+
+    harness.state.membership = membership("adult");
+    expect((await insightsGet(new Request(insightsUrl))).status).toBe(200);
   });
 });

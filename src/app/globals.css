@@ -7767,3 +7767,97 @@ button.event-row:hover {
 .p100-pantry-list li button { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; padding: 0 8px; border-radius: 5px; background: transparent; border: 1px solid var(--p100-line); color: #77837b; font-size: .56rem; }
 .p100-pantry-list li button:hover { color: var(--p100-text); border-color: rgba(255,255,255,.2); }
 .p100-pantry-list li button svg { width: 10px; }
+
+/* Insights workspace */
+.p100-insights-workspace { display: flex; flex-direction: column; gap: 20px; }
+.p100-insights-controls { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+.p100-insights-range-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 8px; background: rgba(0,0,0,.25); border: 1px solid var(--p100-line); font-size: .63rem; color: #aeb8b1; }
+.p100-insights-range-badge svg { width: 14px; color: var(--p100-accent); }
+.p100-insights-range-badge small { color: #68736c; font-size: .56rem; margin-left: 4px; }
+
+.p100-insights-kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.p100-insight-kpi-card { display: flex; flex-direction: column; justify-content: space-between; padding: 14px 16px; border-radius: 12px; background: rgba(18,24,20,.6); border: 1px solid var(--p100-line); }
+.p100-insight-kpi-card header { display: flex; justify-content: space-between; align-items: flex-start; }
+.p100-insight-kpi-card header small { display: block; color: #68736c; font-size: .56rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.p100-insight-kpi-card header strong { font-size: .78rem; color: #cbd3cd; }
+.p100-insight-kpi-card header span { display: grid; width: 28px; height: 28px; border-radius: 7px; background: rgba(255,255,255,.03); place-items: center; color: var(--p100-accent); }
+.p100-insight-kpi-card header span svg { width: 14px; }
+.p100-kpi-main { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 12px 0 8px; }
+.p100-kpi-main b { font-size: 1.25rem; font-weight: 800; color: #f0f4f1; letter-spacing: -.02em; }
+.p100-insight-delta { display: inline-flex; align-items: center; gap: 3px; font-size: .62rem; font-weight: 700; padding: 2px 6px; border-radius: 5px; }
+.p100-insight-delta.positive { background: rgba(122,160,51,.12); color: #b9d97a; }
+.p100-insight-delta.negative { background: rgba(216,116,106,.12); color: #d8746a; }
+.p100-insight-delta.neutral { background: rgba(255,255,255,.05); color: #77837b; }
+.p100-insight-delta svg { width: 12px; }
+.p100-insight-kpi-card footer small { color: #68736c; font-size: .58rem; }
+
+/* Highlights panel */
+.p100-insights-highlights-panel header svg { width: 16px; color: var(--p100-accent); }
+.p100-insights-highlights-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; padding: 14px 18px; }
+.p100-highlight-card { display: flex; gap: 12px; padding: 12px 14px; border-radius: 9px; background: rgba(0,0,0,.2); border: 1px solid var(--p100-line); }
+.p100-highlight-icon { flex: 0 0 auto; display: grid; width: 28px; height: 28px; border-radius: 7px; place-items: center; }
+.p100-highlight-icon svg { width: 15px; }
+.p100-highlight-card.positive .p100-highlight-icon { background: rgba(122,160,51,.15); color: #b9d97a; }
+.p100-highlight-card.neutral .p100-highlight-icon { background: rgba(255,255,255,.06); color: #cbd3cd; }
+.p100-highlight-card.attention .p100-highlight-icon { background: rgba(216,116,106,.15); color: #d8746a; }
+.p100-highlight-card strong { display: block; font-size: .74rem; color: #cbd3cd; }
+.p100-highlight-card p { margin: 3px 0 0; font-size: .63rem; color: #77837b; line-height: 1.45; }
+
+/* Work comparison */
+.p100-work-comparison-panel header svg { width: 16px; color: #be7a52; }
+.p100-work-comparison-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px 18px; }
+.p100-work-stat-box { padding: 14px 16px; border-radius: 10px; background: rgba(0,0,0,.2); border: 1px solid var(--p100-line); }
+.p100-work-stat-box.work { border-left: 3px solid #be7a52; }
+.p100-work-stat-box.off { border-left: 3px solid var(--p100-accent); }
+.p100-work-stat-box header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.p100-work-stat-box header svg { width: 14px; }
+.p100-work-stat-box.work header svg { color: #be7a52; }
+.p100-work-stat-box.off header svg { color: var(--p100-accent); }
+.p100-work-stat-box header strong { font-size: .78rem; color: #cbd3cd; }
+.p100-work-stat-box dl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0; }
+.p100-work-stat-box dt { color: #68736c; font-size: .58rem; text-transform: uppercase; font-weight: 700; letter-spacing: .06em; }
+.p100-work-stat-box dd { margin: 2px 0 0; color: #f0f4f1; font-size: .82rem; font-weight: 700; }
+
+/* Tabs & detail panels */
+.p100-insights-tabs-panel { padding: 0; }
+.p100-tabs-header { padding: 12px 16px; border-bottom: 1px solid var(--p100-line); background: rgba(0,0,0,.15); }
+.p100-tab-pane { padding: 16px 20px; }
+.p100-tab-pane h3 { font-size: .84rem; margin: 0 0 12px; color: #cbd3cd; }
+.p100-metric-changes-section { margin-top: 20px; border-top: 1px solid var(--p100-line); padding-top: 14px; }
+.p100-metric-changes-section h4 { font-size: .74rem; margin: 0 0 10px; color: #8a968f; }
+.p100-metric-changes-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.p100-metric-changes-grid article { padding: 10px 12px; border-radius: 8px; background: rgba(0,0,0,.2); border: 1px solid var(--p100-line); }
+.p100-metric-changes-grid strong { display: block; font-size: .7rem; color: #cbd3cd; }
+.p100-metric-changes-grid div { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: .6rem; color: #77837b; }
+.p100-metric-changes-grid b { color: var(--p100-accent); }
+
+.p100-training-insights-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.p100-activity-list, .p100-muscles-list { padding: 12px 14px; border-radius: 8px; background: rgba(0,0,0,.18); border: 1px solid var(--p100-line); }
+.p100-activity-list h4, .p100-muscles-list h4 { margin: 0 0 8px; font-size: .72rem; color: #cbd3cd; }
+.p100-activity-list ul, .p100-muscles-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.p100-activity-list li, .p100-muscles-list li { display: flex; justify-content: space-between; font-size: .65rem; padding: 6px 8px; border-radius: 6px; background: rgba(255,255,255,.02); border: 1px solid var(--p100-line); }
+.p100-activity-list strong, .p100-muscles-list strong { color: #c4ccc6; }
+.p100-activity-list span, .p100-muscles-list span { color: #77837b; }
+
+.p100-nutrition-detail-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin: 0; }
+.p100-nutrition-detail-stats > div { padding: 12px 14px; border-radius: 8px; background: rgba(0,0,0,.2); border: 1px solid var(--p100-line); }
+.p100-nutrition-detail-stats dt { color: #68736c; font-size: .6rem; text-transform: uppercase; font-weight: 700; letter-spacing: .06em; }
+.p100-nutrition-detail-stats dd { margin: 4px 0 0; color: #f0f4f1; font-size: .88rem; font-weight: 700; }
+
+.p100-insights-table-scroll { overflow-x: auto; border: 1px solid var(--p100-line); border-radius: 8px; }
+.p100-insights-table { width: 100%; border-collapse: collapse; font-size: .65rem; text-align: right; }
+.p100-insights-table th, .p100-insights-table td { padding: 8px 12px; border-bottom: 1px solid var(--p100-line); }
+.p100-insights-table th { background: rgba(0,0,0,.3); color: #68736c; font-size: .56rem; text-transform: uppercase; font-weight: 800; }
+.p100-insights-table th:first-child, .p100-insights-table td:first-child, .p100-insights-table td:nth-child(2) { text-align: left; }
+.p100-insights-table td { color: #8a968f; }
+.p100-insights-table td strong { color: #cbd3cd; }
+
+@media (max-width: 900px) {
+  .p100-insights-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .p100-work-comparison-grid { grid-template-columns: 1fr; }
+  .p100-training-insights-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 600px) {
+  .p100-insights-kpi-grid { grid-template-columns: 1fr; }
+}
