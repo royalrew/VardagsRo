@@ -1,19 +1,32 @@
 import OpenAI from "openai";
 
-import { calendarDateInTimeZone, DEFAULT_TIME_ZONE } from "@/lib/dates";
+import { addCalendarDateDays, calendarDateInTimeZone, DEFAULT_TIME_ZONE } from "@/lib/dates";
 import {
   MEMORY_CATEGORY_LABELS,
   type Project100MemoryCategory,
   type Project100MemoryKind,
 } from "@/lib/project100-jarvis";
 import { parseMemoryCommand } from "@/lib/project100-memory-classifier";
+import type { Project100MeasurementUnit } from "@/lib/project100-body";
+import type { Project100MealType } from "@/lib/project100-nutrition";
+import type { Project100ActivityType } from "@/lib/project100-training";
 import { openAIConfig } from "@/server/config";
 import { loadDashboard, saveManualTask } from "@/server/database";
 import { assertProject100Adult } from "@/server/project100";
+import { loadProject100BodyJourney, saveProject100BodyEntry } from "@/server/project100-body";
 import { createProject100ContentProject } from "@/server/project100-content";
 import { logJarvisCapabilityGap } from "@/server/jarvis-gaps";
-import { saveProject100JournalEntry } from "@/server/project100-journal";
+import { loadProject100Journal, saveProject100JournalEntry } from "@/server/project100-journal";
 import { handleMemoryTextIntent } from "@/server/project100-memory-assistant";
+import {
+  loadProject100NutritionDay,
+  logProject100Meal,
+} from "@/server/project100-nutrition";
+import {
+  createProject100TrainingSession,
+  loadProject100TrainingSessions,
+  updateProject100TrainingSession,
+} from "@/server/project100-training";
 import type { ActorContext } from "@/server/authorization-types";
 
 let agentClient: OpenAI | null = null;
@@ -211,6 +224,153 @@ const JARVIS_TOOLS: OpenAI.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "log_body_measurement",
+      description: "Logga vikt (t.ex. 80.5 kg), midjemått (t.ex. 84 cm), bröstmått, armar eller andra kroppsmätningar för ett datum.",
+      parameters: {
+        type: "object",
+        properties: {
+          metric: {
+            type: "string",
+            enum: ["weight", "waist", "chest", "arms", "calves", "custom"],
+            description: "Typ av mått: 'weight' (vikt i kg), 'waist' (midjemått i cm), 'chest' (bröst), 'arms' (armar), etc.",
+          },
+          value: {
+            type: "number",
+            description: "Mätvärdet (t.ex. 80.5 för vikt, 84 för midjemått).",
+          },
+          unit: {
+            type: "string",
+            enum: ["kg", "cm", "percent"],
+            description: "Enhet ('kg' för vikt, 'cm' för omkrets, 'percent' för kroppsfett).",
+          },
+          notes: {
+            type: "string",
+            description: "Valfri anteckning till mätningen.",
+          },
+          date: {
+            type: "string",
+            description: "Datum för mätningen i format YYYY-MM-DD (standard är idag).",
+          },
+        },
+        required: ["metric", "value"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "log_quick_nutrition",
+      description: "Logga en snabb måltid, proteinshake, mellanmål eller lunch med proteinmängd och eventuella kalorier.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "Måltidens namn, t.ex. 'Proteinshake', 'Kyckling och ris', 'Keso med bär'.",
+          },
+          protein_g: {
+            type: "number",
+            description: "Mängd protein i gram (t.ex. 35, 42).",
+          },
+          energy_kcal: {
+            type: "number",
+            description: "Valfri energimängd i kilokalorier (kcal).",
+          },
+          meal_type: {
+            type: "string",
+            enum: ["breakfast", "lunch", "dinner", "snack"],
+            description: "Måltidstyp (standard är 'snack' för shakes/mellanmål).",
+          },
+          date: {
+            type: "string",
+            description: "Datum för måltiden i format YYYY-MM-DD (standard är idag).",
+          },
+        },
+        required: ["title", "protein_g"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "log_quick_workout",
+      description: "Skapa och logga ett snabbt eller spontant genomfört träningspass (t.ex. löpning, hemmapass, skogspromenad, armhävningar).",
+      parameters: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "Passets namn (t.ex. 'Löpning 5 km', 'Hemmapass armhävningar', 'Skogspromenad').",
+          },
+          activity_type: {
+            type: "string",
+            enum: ["strength_home", "forest", "running", "cycling", "spinning", "outdoor_gym", "other"],
+            description: "Aktivitetstyp (standard är 'strength_home').",
+          },
+          duration_minutes: {
+            type: "number",
+            description: "Passets längd i minuter.",
+          },
+          distance_km: {
+            type: "number",
+            description: "Valfri distans i kilometer (t.ex. 5.0 för 5 km löpning).",
+          },
+          effort: {
+            type: "integer",
+            minimum: 1,
+            maximum: 10,
+            description: "Upplevd ansträngning från 1 till 10.",
+          },
+          notes: {
+            type: "string",
+            description: "Valfria anteckningar eller utförda övningar/reps.",
+          },
+          date: {
+            type: "string",
+            description: "Datum i format YYYY-MM-DD (standard är idag).",
+          },
+        },
+        required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "complete_planned_session",
+      description: "Klarmarkera ett planerat träningspass som genomfört för dagen (t.ex. när användaren säger 'jag körde mitt benpass enligt planen').",
+      parameters: {
+        type: "object",
+        properties: {
+          title_search: {
+            type: "string",
+            description: "Valfri sökfras för passets namn, t.ex. 'benpass', 'överkropp', 'pass'.",
+          },
+          duration_minutes: {
+            type: "number",
+            description: "Valfri faktisk tid i minuter.",
+          },
+          effort: {
+            type: "integer",
+            minimum: 1,
+            maximum: 10,
+            description: "Upplevd ansträngning från 1 till 10.",
+          },
+          notes: {
+            type: "string",
+            description: "Valfria anteckningar.",
+          },
+          date: {
+            type: "string",
+            description: "Datum i format YYYY-MM-DD (standard är idag).",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "log_missing_capability",
       description: "Logga en förfrågan eller funktion som Jarvis inte har stöd för att utföra ännu till utvecklingslistan.",
       parameters: {
@@ -352,14 +512,44 @@ export async function processJarvisAgentMessage(
 
     if (name === "save_journal") {
       const targetDate = args.date ? String(args.date) : today;
-      const reflection = args.reflection ? String(args.reflection) : null;
-      const energy = typeof args.energy === "number" ? args.energy : null;
-      const mood = typeof args.mood === "number" ? args.mood : null;
-      const sleepHours = typeof args.sleep_hours === "number" ? args.sleep_hours : null;
+      const newReflection = args.reflection ? String(args.reflection).trim() : null;
+      let energy = typeof args.energy === "number" ? args.energy : null;
+      let mood = typeof args.mood === "number" ? args.mood : null;
+      let sleepHours = typeof args.sleep_hours === "number" ? args.sleep_hours : null;
+
+      // Smart Append: Check if day already has an entry to preserve earlier reflections
+      let mergedBody = newReflection;
+      try {
+        const existingJournal = await loadProject100Journal(actor, {
+          from: targetDate,
+          to: targetDate,
+          query: null,
+        });
+        const existingEntry = existingJournal.entries.find((e) => e.writtenOn === targetDate);
+        if (existingEntry) {
+          if (energy === null && existingEntry.energy !== null) energy = existingEntry.energy;
+          if (mood === null && existingEntry.mood !== null) mood = existingEntry.mood;
+          if (sleepHours === null && existingEntry.sleepHours !== null)
+            sleepHours = existingEntry.sleepHours;
+
+          if (existingEntry.body && newReflection) {
+            const timeStr = now.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+            if (!existingEntry.body.includes(newReflection)) {
+              mergedBody = `${existingEntry.body}\n[${timeStr}] ${newReflection}`;
+            } else {
+              mergedBody = existingEntry.body;
+            }
+          } else if (existingEntry.body && !newReflection) {
+            mergedBody = existingEntry.body;
+          }
+        }
+      } catch {
+        // Fall back to new reflection
+      }
 
       await saveProject100JournalEntry(actor, {
         writtenOn: targetDate,
-        body: reflection,
+        body: mergedBody,
         energy,
         mood,
         sleepHours,
@@ -369,7 +559,276 @@ export async function processJarvisAgentMessage(
       return JSON.stringify({
         success: true,
         date: targetDate,
-        summary: `Dagboksanteckning sparad för ${targetDate}.`,
+        summary: `Dagboksanteckning sparad för ${targetDate}${sleepHours ? ` (${sleepHours}h sömn)` : ""}${energy ? ` (energi ${energy}/5)` : ""}.`,
+      });
+    }
+
+    if (name === "log_body_measurement") {
+      const metric = String(args.metric || "weight");
+      const rawValue = Number(args.value);
+      const targetDate = args.date ? String(args.date) : today;
+      const unit = (args.unit as Project100MeasurementUnit) || (metric === "weight" ? "kg" : "cm");
+      const notes = args.notes ? String(args.notes) : null;
+
+      // Sanity checks
+      if (metric === "weight" && (rawValue < 30 || rawValue > 300)) {
+        return JSON.stringify({
+          error: `Orimligt viktvärde: ${rawValue} kg. Vänligen ange en vikt mellan 30 och 300 kg.`,
+        });
+      }
+      if (
+        (metric === "waist" || metric === "chest" || metric === "arms") &&
+        (rawValue < 10 || rawValue > 250)
+      ) {
+        return JSON.stringify({
+          error: `Orimligt mått: ${rawValue} cm. Vänligen ange ett värde mellan 10 och 250 cm.`,
+        });
+      }
+
+      // Atomic Patch & Merge: Load existing measurements for date so we do not overwrite other metrics
+      let measurementsToSave: Array<{
+        metric: string;
+        label: string | null;
+        unit: Project100MeasurementUnit;
+        value: number;
+      }> = [];
+      let goalWeightKg: number | null = null;
+      let prevWeightKg: number | null = null;
+
+      try {
+        const journey = await loadProject100BodyJourney(actor, {
+          from: addCalendarDateDays(targetDate, -60),
+          to: targetDate,
+        });
+        goalWeightKg = journey.goal?.weightGoalKg ?? 100;
+        const existingEntry = journey.entries.find((e) => e.measuredOn === targetDate);
+        if (existingEntry) {
+          measurementsToSave = existingEntry.measurements
+            .filter((m) => m.metric !== metric)
+            .map((m) => ({
+              metric: m.metric,
+              label: m.label,
+              unit: m.unit,
+              value: m.value,
+            }));
+        }
+
+        // Find previous weight point before targetDate
+        const previousEntries = journey.weightHistory.filter((w) => w.measuredOn < targetDate);
+        if (previousEntries.length > 0) {
+          prevWeightKg = previousEntries[previousEntries.length - 1].value;
+        }
+      } catch {
+        // Continue with empty existing list
+      }
+
+      measurementsToSave.push({
+        metric,
+        label: null,
+        unit,
+        value: rawValue,
+      });
+
+      await saveProject100BodyEntry(actor, {
+        measuredOn: targetDate,
+        note: notes,
+        measurements: measurementsToSave,
+      });
+
+      const remainingKg =
+        metric === "weight" && goalWeightKg !== null
+          ? Math.round((goalWeightKg - rawValue) * 10) / 10
+          : null;
+      const diffFromPrev =
+        metric === "weight" && prevWeightKg !== null
+          ? Math.round((rawValue - prevWeightKg) * 10) / 10
+          : null;
+
+      return JSON.stringify({
+        success: true,
+        metric,
+        value: rawValue,
+        unit,
+        date: targetDate,
+        goalWeightKg,
+        remainingKg,
+        diffFromPrev,
+        summary: `Sparat mått: ${rawValue} ${unit} (${metric}) för ${targetDate}.${goalWeightKg ? ` Mål: ${goalWeightKg} kg (${remainingKg} kg kvar).` : ""}${diffFromPrev !== null ? ` Diff mot förra: ${diffFromPrev > 0 ? `+${diffFromPrev}` : diffFromPrev} kg.` : ""}`,
+      });
+    }
+
+    if (name === "log_quick_nutrition") {
+      const title = String(args.title || "Proteinshake");
+      const proteinG = Math.round(Number(args.protein_g));
+      const energyKcal = typeof args.energy_kcal === "number" ? Math.round(args.energy_kcal) : null;
+      const rawMealType = String(args.meal_type || "snack").toLowerCase();
+      const mealType: Project100MealType = /shake|vassle/i.test(rawMealType) || /shake|vassle/i.test(title)
+        ? "shake"
+        : (["breakfast", "lunch", "dinner", "snack", "shake"].includes(rawMealType) ? rawMealType as Project100MealType : "snack");
+      const targetDate = args.date ? String(args.date) : today;
+
+      if (proteinG <= 0 || proteinG > 300) {
+        return JSON.stringify({
+          error: `Orimlig proteinmängd: ${proteinG}g. Vänligen ange mellan 1 och 300g.`,
+        });
+      }
+
+      const meal = await logProject100Meal(actor, {
+        source: "manual",
+        title,
+        eatenOn: targetDate,
+        eatenAtMinute: null,
+        mealType,
+        proteinG,
+        carbsG: null,
+        fatG: null,
+        kcal: energyKcal,
+        hungerBefore: null,
+        fullnessAfter: null,
+        note: null,
+        mediaId: null,
+      });
+
+      let dayTotalProteinG = proteinG;
+      let targetProteinG = 160;
+      try {
+        const nutritionDay = await loadProject100NutritionDay(actor, targetDate);
+        dayTotalProteinG = Math.round(nutritionDay.eaten.proteinG);
+        targetProteinG = nutritionDay.target.overrideGrams ?? nutritionDay.target.lowGrams ?? 160;
+      } catch {
+        // Fall back to meal protein
+      }
+
+      const remainingG = Math.max(0, targetProteinG - dayTotalProteinG);
+
+      return JSON.stringify({
+        success: true,
+        mealId: meal.id,
+        title,
+        loggedProteinG: proteinG,
+        dayTotalProteinG,
+        targetProteinG,
+        remainingG,
+        summary: `Loggat måltid: "${title}" (+${proteinG}g protein). Dagens total: ${dayTotalProteinG}g av ${targetProteinG}g (${remainingG}g kvar till målet).`,
+      });
+    }
+
+    if (name === "log_quick_workout") {
+      const title = String(args.title || "Träningspass");
+      const activityType = (args.activity_type as Project100ActivityType) || "strength_home";
+      const durationMinutes = typeof args.duration_minutes === "number" ? args.duration_minutes : null;
+      const distanceKm = typeof args.distance_km === "number" ? args.distance_km : null;
+      const effort = typeof args.effort === "number" ? args.effort : null;
+      const notes = args.notes ? String(args.notes) : null;
+      const targetDate = args.date ? String(args.date) : today;
+
+      const created = await createProject100TrainingSession(actor, {
+        title,
+        activityType,
+        status: "completed",
+        sessionDate: targetDate,
+        templateId: null,
+        plannedStartAt: null,
+        plannedEndAt: null,
+        durationSeconds: durationMinutes ? Math.round(durationMinutes * 60) : null,
+        location: null,
+        effort,
+        bodyBefore: null,
+        bodyAfter: null,
+        notes: [
+          distanceKm ? `Distans: ${distanceKm} km` : null,
+          notes,
+        ]
+          .filter(Boolean)
+          .join(" · ") || null,
+        exercises: [],
+      });
+
+      return JSON.stringify({
+        success: true,
+        sessionId: created.id,
+        title: created.title,
+        activityType: created.activityType,
+        date: targetDate,
+        durationMinutes,
+        distanceKm,
+        summary: `Träningspass loggat och klarmarkerat: "${created.title}" (${created.activityType})${durationMinutes ? ` · ${durationMinutes} min` : ""}${distanceKm ? ` · ${distanceKm} km` : ""}.`,
+      });
+    }
+
+    if (name === "complete_planned_session") {
+      const targetDate = args.date ? String(args.date) : today;
+      const titleSearch = args.title_search ? String(args.title_search).toLowerCase() : "";
+      const durationMinutes = typeof args.duration_minutes === "number" ? args.duration_minutes : null;
+      const effort = typeof args.effort === "number" ? args.effort : null;
+      const notes = args.notes ? String(args.notes) : null;
+
+      const sessions = await loadProject100TrainingSessions(actor);
+      const plannedOnDate = sessions.filter(
+        (s) => s.sessionDate === targetDate && (s.status === "planned" || s.status === "in_progress"),
+      );
+
+      let targetSession = plannedOnDate[0];
+      if (titleSearch && plannedOnDate.length > 0) {
+        const match = plannedOnDate.find((s) => s.title.toLowerCase().includes(titleSearch));
+        if (match) targetSession = match;
+      }
+
+      if (targetSession) {
+        const completed = await updateProject100TrainingSession(actor, targetSession.id, {
+          action: "complete",
+          sessionDate: targetDate,
+          durationSeconds: durationMinutes ? Math.round(durationMinutes * 60) : targetSession.durationSeconds,
+          location: targetSession.location,
+          effort: effort ?? targetSession.effort,
+          bodyBefore: targetSession.bodyBefore,
+          bodyAfter: targetSession.bodyAfter,
+          notes: notes || targetSession.notes,
+          sets: targetSession.exercises.flatMap((ex) =>
+            ex.sets.map((st) => ({
+              id: st.id,
+              exerciseId: ex.exerciseId,
+              reps: st.target?.reps ?? st.actual?.reps ?? 10,
+              weightKg: st.target?.weightKg ?? st.actual?.weightKg ?? null,
+              durationSeconds: st.target?.durationSeconds ?? st.actual?.durationSeconds ?? null,
+              distanceMeters: st.target?.distanceMeters ?? st.actual?.distanceMeters ?? null,
+              rpe: st.target?.rpe ?? st.actual?.rpe ?? null,
+              completed: true,
+            })),
+          ),
+        });
+
+        return JSON.stringify({
+          success: true,
+          sessionId: completed.id,
+          title: completed.title,
+          summary: `Planerat pass "${completed.title}" är nu klarmarkerat som genomfört för ${targetDate}!`,
+        });
+      }
+
+      // If no planned session existed, create a completed session directly
+      const fallback = await createProject100TrainingSession(actor, {
+        title: titleSearch ? `Genomfört ${titleSearch}` : "Genomfört styrkepass",
+        activityType: "strength_home",
+        status: "completed",
+        sessionDate: targetDate,
+        templateId: null,
+        plannedStartAt: null,
+        plannedEndAt: null,
+        durationSeconds: durationMinutes ? Math.round(durationMinutes * 60) : null,
+        location: null,
+        effort,
+        bodyBefore: null,
+        bodyAfter: null,
+        notes,
+        exercises: [],
+      });
+
+      return JSON.stringify({
+        success: true,
+        sessionId: fallback.id,
+        title: fallback.title,
+        summary: `Träningspass klarmarkerat: "${fallback.title}" för ${targetDate}.`,
       });
     }
 
@@ -417,12 +876,13 @@ export async function processJarvisAgentMessage(
   if (ai) {
     try {
       const systemPrompt = `Du är Jarvis, den personliga assistenten och digitala kollegan i Vardagsro och Projekt 100.
-Du hjälper ${callerName} med hushållets kalender, minnen, dagbok, idéer, att-göra-uppgifter och träning.
+Du hjälper ${callerName} med hushållets kalender, minnen, dagbok, idéer, att-göra-uppgifter, träning, kost och kroppsmätningar.
 
 IDAG ÄR: ${today} (tidszon Europe/Stockholm, klockan är cirka ${now.toTimeString().slice(0, 5)}).
-DITT TILLTAL: Varmt, personligt, professionellt och konformat ("Glass & Steel"). Hälsa gärna med "${getGreeting(callerName, now)}" om användaren inleder en konversation.
-NOLL HALLUCINATION: Gissa aldrig kalenderhändelser, koder eller fakta. Använd alltid verktygen för att slå upp schema (check_schedule), skapa uppgifter (create_task), spara/söka minnen eller logga dagbok.
-KOMBINERADE HANDLINGAR: Om användaren både vill veta något (t.ex. kolla om hen jobbar) OCH göra något (t.ex. boka bord/lägga till uppgift), anropa BÅDA verktygen och ge ett komplett, tydligt svar som bekräftar båda delarna.`;
+DITT TILLTAL: Varmt, personligt, professionellt och koncist ("Glass & Steel"). Hälsa gärna med "${getGreeting(callerName, now)}" om användaren inleder en konversation.
+NOLL HALLUCINATION: Gissa aldrig kalenderhändelser, koder, vikt eller fakta. Använd alltid verktygen för att slå upp schema (check_schedule), skapa uppgifter (create_task), spara/söka minnen, logga mätningar (log_body_measurement), logga protein/mat (log_quick_nutrition), logga pass (log_quick_workout / complete_planned_session) eller logga dagbok (save_journal).
+KOMBINERADE HANDLINGAR: Om användaren nämner flera saker (t.ex. körde benpass OCH sprang 5 km, eller vägde sig OCH drack en shake), anropa ALLA relevanta verktyg och ge ett komplett, strukturerat svar som bekräftar alla delar.
+MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pass, ge konkreta siffror (t.ex. hur mycket protein som återstår till dagens 160g-mål, eller hur mycket som återstår till 100 kg-målet). Undvik tomma klyschor.`;
 
       const messages: OpenAI.ChatCompletionMessageParam[] = [
         { role: "system", content: systemPrompt },
@@ -549,6 +1009,79 @@ KOMBINERADE HANDLINGAR: Om användaren både vill veta något (t.ex. kolla om he
       executedActions.push(memCommand.type === "store" ? "save_memory" : "search_memory");
       return { text: memRes.replyText, executedActions };
     }
+  }
+
+  // Weight & Body Measurement micro-log
+  const weightMatch = text.match(/(?:vägde|vikt(?:en)?|väger).*?(\d{2,3}(?:[.,]\d+)?)\s*(?:kg|kilo)?/i);
+  if (weightMatch) {
+    const weightVal = parseFloat(weightMatch[1].replace(",", "."));
+    if (weightVal >= 30 && weightVal <= 300) {
+      const toolResStr = await executeTool("log_body_measurement", {
+        metric: "weight",
+        value: weightVal,
+        unit: "kg",
+      });
+      const toolRes = JSON.parse(toolResStr);
+      const remainingText = toolRes.remainingKg !== null ? ` ${toolRes.remainingKg} kg kvar till målet på ${toolRes.goalWeightKg} kg.` : "";
+      return {
+        text: `${getGreeting(callerName, now)} Noterat ${weightVal} kg för idag.${remainingText}`,
+        executedActions,
+      };
+    }
+  }
+
+  // Protein & Quick Nutrition micro-log
+  const proteinMatch = text.match(/(\d{1,3})\s*(?:g|gram)\s*protein/i) ||
+    text.match(/(?:drack|åt|tog)\s*(?:en\s*)?(?:proteinshake|shake|vassleshake|keso|kvarg)\s*(?:med\s*)?(\d{1,3})/i);
+  if (proteinMatch) {
+    const proteinVal = parseInt(proteinMatch[1], 10);
+    if (proteinVal > 0 && proteinVal <= 300) {
+      let title = "Proteinmellanmål";
+      if (/shake|vassle/i.test(text)) title = "Proteinshake";
+      else if (/kyckling/i.test(text)) title = "Kycklingmåltid";
+      else if (/keso|kvarg/i.test(text)) title = "Keso/kvarg";
+
+      const toolResStr = await executeTool("log_quick_nutrition", {
+        title,
+        protein_g: proteinVal,
+      });
+      const toolRes = JSON.parse(toolResStr);
+      return {
+        text: `${getGreeting(callerName, now)} Noterat ${proteinVal}g protein (${title}). Dagens total är nu ${toolRes.dayTotalProteinG}g av ditt mål på ${toolRes.targetProteinG}g (${toolRes.remainingG}g kvar till målet).`,
+        executedActions,
+      };
+    }
+  }
+
+  // Quick Workout / Spontaneous Session micro-log
+  const runMatch = text.match(/(?:sprang|löpning|löppass)\s*(\d+(?:[.,]\d+)?)\s*(?:km|kilometer)?(?:\s*(?:på|i)\s*(\d+)\s*(?:min|minuter))?/i);
+  if (runMatch) {
+    const distanceKm = parseFloat(runMatch[1].replace(",", "."));
+    const durationMinutes = runMatch[2] ? parseInt(runMatch[2], 10) : undefined;
+    await executeTool("log_quick_workout", {
+      title: `Löpning ${distanceKm} km`,
+      activity_type: "running",
+      distance_km: distanceKm,
+      duration_minutes: durationMinutes,
+    });
+    return {
+      text: `${getGreeting(callerName, now)} Grymt sprungit! Loggat Löpning ${distanceKm} km${durationMinutes ? ` (${durationMinutes} min)` : ""} som genomfört pass.`,
+      executedActions,
+    };
+  }
+
+  // Spontaneous home workout / pushups
+  const homeMatch = text.match(/(?:gjorde|körde)\s*(\d+)\s*(?:armhävningar|knäböj|situps|chins|dips)/i);
+  if (homeMatch) {
+    await executeTool("log_quick_workout", {
+      title: "Hemmapass",
+      activity_type: "strength_home",
+      notes: text,
+    });
+    return {
+      text: `${getGreeting(callerName, now)} Bra jobbat! Loggat hemmapass ("${text}") som genomfört.`,
+      executedActions,
+    };
   }
 
   // Pure greeting

@@ -14,6 +14,43 @@ const dependencies = vi.hoisted(() => ({
     dueAt: input.dueAt,
   })),
   saveProject100JournalEntry: vi.fn(),
+  loadProject100Journal: vi.fn(async () => ({ entries: [], totalEntries: 0, excludedCount: 0 })),
+  loadProject100BodyJourney: vi.fn(async () => ({
+    today: "2026-08-30",
+    from: "2026-08-01",
+    to: "2026-08-30",
+    entries: [{ measuredOn: "2026-08-30", note: null, measurements: [{ metric: "waist", label: null, unit: "cm" as const, value: 84 }] }],
+    goal: { weightGoalKg: 100, startWeightKg: 78, heightCm: 182 },
+    weightHistory: [{ measuredOn: "2026-08-20", value: 80.2 }],
+  })),
+  saveProject100BodyEntry: vi.fn(async () => ({ measuredOn: "2026-08-30", measurements: [], note: null })),
+  loadProject100NutritionDay: vi.fn(async () => ({
+    eaten: { proteinG: 115, carbsG: 200, fatG: 50, kcal: 1800 },
+    target: { overrideGrams: null, lowGrams: 160, highGrams: 200 },
+  })),
+  logProject100Meal: vi.fn(async () => ({ id: "meal-101", title: "Proteinshake", proteinG: 35 })),
+  createProject100TrainingSession: vi.fn(async (_actor, input) => ({
+    id: "session-101",
+    title: input.title,
+    activityType: input.activityType,
+    status: input.status,
+    sessionDate: input.sessionDate,
+  })),
+  loadProject100TrainingSessions: vi.fn(async () => [
+    {
+      id: "session-planned-1",
+      title: "Benpass",
+      activityType: "strength_gym",
+      status: "planned",
+      sessionDate: "2026-08-30",
+      exercises: [],
+    },
+  ]),
+  updateProject100TrainingSession: vi.fn(async () => ({
+    id: "session-planned-1",
+    title: "Benpass",
+    status: "completed",
+  })),
   createProject100ContentProject: vi.fn(async () => ({ id: "proj-101", title: "Test" })),
   logJarvisCapabilityGap: vi.fn(async () => ({ id: "gap-101" })),
   handleMemoryTextIntent: vi.fn(async () => ({
@@ -30,7 +67,21 @@ vi.mock("@/server/database", () => ({
   saveManualTask: dependencies.saveManualTask,
 }));
 vi.mock("@/server/project100-journal", () => ({
+  loadProject100Journal: dependencies.loadProject100Journal,
   saveProject100JournalEntry: dependencies.saveProject100JournalEntry,
+}));
+vi.mock("@/server/project100-body", () => ({
+  loadProject100BodyJourney: dependencies.loadProject100BodyJourney,
+  saveProject100BodyEntry: dependencies.saveProject100BodyEntry,
+}));
+vi.mock("@/server/project100-nutrition", () => ({
+  loadProject100NutritionDay: dependencies.loadProject100NutritionDay,
+  logProject100Meal: dependencies.logProject100Meal,
+}));
+vi.mock("@/server/project100-training", () => ({
+  createProject100TrainingSession: dependencies.createProject100TrainingSession,
+  loadProject100TrainingSessions: dependencies.loadProject100TrainingSessions,
+  updateProject100TrainingSession: dependencies.updateProject100TrainingSession,
 }));
 vi.mock("@/server/project100-content", () => ({
   createProject100ContentProject: dependencies.createProject100ContentProject,
@@ -117,5 +168,68 @@ describe("jarvis-agent", () => {
     );
     expect(res.executedActions).toContain("log_missing_capability");
     expect(res.text).toContain("utvecklingslista");
+  });
+
+  it("handles weight micro-updates with atomic patch and merge", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "jag vägde mig nu och det var 80,5 kg",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadProject100BodyJourney).toHaveBeenCalled();
+    expect(dependencies.saveProject100BodyEntry).toHaveBeenCalledWith(
+      TEST_ACTOR,
+      expect.objectContaining({
+        measuredOn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        measurements: expect.arrayContaining([
+          expect.objectContaining({ metric: "waist", value: 84 }),
+          expect.objectContaining({ metric: "weight", value: 80.5, unit: "kg" }),
+        ]),
+      }),
+    );
+    expect(res.executedActions).toContain("log_body_measurement");
+    expect(res.text).toContain("80.5 kg");
+    expect(res.text).toContain("19.5 kg kvar till målet");
+  });
+
+  it("handles protein micro-updates and calculates daily progress", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Drack precis en proteinshake med 35g protein",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.logProject100Meal).toHaveBeenCalledWith(
+      TEST_ACTOR,
+      expect.objectContaining({
+        title: "Proteinshake",
+        proteinG: 35,
+        source: "manual",
+      }),
+    );
+    expect(res.executedActions).toContain("log_quick_nutrition");
+    expect(res.text).toContain("35g protein");
+    expect(res.text).toContain("115g av ditt mål");
+  });
+
+  it("handles spontaneous workout micro-updates (running 5 km)", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Sprang 5 km på 28 min",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.createProject100TrainingSession).toHaveBeenCalledWith(
+      TEST_ACTOR,
+      expect.objectContaining({
+        title: "Löpning 5 km",
+        activityType: "running",
+        status: "completed",
+        durationSeconds: 1680,
+      }),
+    );
+    expect(res.executedActions).toContain("log_quick_workout");
+    expect(res.text).toContain("Löpning 5 km");
   });
 });
