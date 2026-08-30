@@ -371,6 +371,27 @@ const JARVIS_TOOLS: OpenAI.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "search_documents",
+      description: "Sök bland familjens uppladdade dokument, PDF:er, kallelser, scheman, blanketter och avtal för att svara på frågor om vad dokumenten innehåller.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Sökord eller ämne, t.ex. 'tandläkare', 'skola', 'vaccination', 'bvc', 'försäkring', 'hyra', 'betyg'.",
+          },
+          person_name: {
+            type: "string",
+            description: "Valfritt namn på familjemedlemmen som dokumentet gäller.",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "log_missing_capability",
       description: "Logga en förfrågan eller funktion som Jarvis inte har stöd för att utföra ännu till utvecklingslistan.",
       parameters: {
@@ -507,6 +528,79 @@ export async function processJarvisAgentMessage(
       return JSON.stringify({
         success: res.handled,
         summary: res.replyText || `Inga resultat för "${query}".`,
+      });
+    }
+
+    if (name === "search_documents") {
+      const query = String(args.query || "").toLowerCase();
+      const personName = args.person_name ? String(args.person_name).toLowerCase() : "";
+      const dashboard = await loadDashboard(actor);
+
+      const searchTerms = query
+        .toLowerCase()
+        .replace(/kallelsen?|från|om|i|på|ett|en|det|vad|står|finns/g, "")
+        .trim()
+        .split(/\s+/)
+        .filter((t) => t.length >= 2);
+
+      const matchingDocs = dashboard.documents.filter((doc) => {
+        const textToMatch = [doc.title, doc.summary, doc.filename, doc.periodLabel].join(" ").toLowerCase();
+        const matchesQuery =
+          searchTerms.length === 0
+            ? true
+            : searchTerms.some((term) => {
+                const stem = term.length > 4 ? term.slice(0, 4) : term;
+                return textToMatch.includes(term) || textToMatch.includes(stem);
+              });
+
+        if (!personName) return matchesQuery;
+
+        const person = dashboard.people.find((p) => p.id === doc.personId);
+        const matchesPerson = person
+          ? person.name.toLowerCase().includes(personName) ||
+            person.aliases.some((a) => a.toLowerCase().includes(personName))
+          : false;
+        return matchesQuery && matchesPerson;
+      });
+
+      if (matchingDocs.length === 0) {
+        return JSON.stringify({
+          success: false,
+          found: 0,
+          summary: `Hittade inga dokument som matchar "${query}"${personName ? ` för ${personName}` : ""}.`,
+        });
+      }
+
+      const results = matchingDocs.map((doc) => {
+        const person = dashboard.people.find((p) => p.id === doc.personId);
+        const folder = dashboard.folders.find((f) => f.id === doc.folderId);
+        const linkedEvents = dashboard.events.filter((e) => e.documentId === doc.id);
+        const linkedTasks = dashboard.tasks.filter((t) => t.documentId === doc.id);
+
+        return {
+          id: doc.id,
+          title: doc.title,
+          summary: doc.summary,
+          filename: doc.filename,
+          person: person?.name ?? "Hela familjen",
+          category: folder?.name ?? "Roten (Alla dokument)",
+          status: doc.status,
+          uploadedAt: doc.uploadedAt,
+          events: linkedEvents.map((e) => `${e.title} (${e.startsAt})`),
+          tasks: linkedTasks.map((t) => t.title),
+        };
+      });
+
+      return JSON.stringify({
+        success: true,
+        found: results.length,
+        documents: results,
+        summary: `Hittade ${results.length} dokument:\n${results
+          .map(
+            (r) =>
+              `• [${r.category}] "${r.title}" (${r.person}): ${r.summary}${r.events.length ? ` · Extraherade tider: ${r.events.join(", ")}` : ""}${r.tasks.length ? ` · Att göra: ${r.tasks.join(", ")}` : ""}`,
+          )
+          .join("\n")}`,
       });
     }
 
@@ -1082,6 +1176,28 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
       text: `${getGreeting(callerName, now)} Bra jobbat! Loggat hemmapass ("${text}") som genomfört.`,
       executedActions,
     };
+  }
+
+  // Document search fallback (kallelser, scheman, dokument, tandläkare etc.)
+  if (
+    /(?:kallelse|dokument|brev|schema|tandläkar|vaccin|läkar|bvc|intyg|avtal|betyg)/i.test(text) &&
+    /(?:vad står|vad är|när är|har vi|finns det|kolla|sök|hitta|läs)/i.test(text)
+  ) {
+    let query = "kallelse";
+    if (/tandläk/i.test(text)) query = "tandläkare";
+    else if (/vaccin/i.test(text)) query = "vaccination";
+    else if (/schema/i.test(text)) query = "schema";
+    else if (/avtal|hyra/i.test(text)) query = "avtal";
+
+    const toolResStr = await executeTool("search_documents", { query });
+    const toolRes = JSON.parse(toolResStr);
+    if (toolRes.success && toolRes.documents?.length > 0) {
+      const doc = toolRes.documents[0];
+      return {
+        text: `${getGreeting(callerName, now)} Enligt kallelsen "${doc.title}" (${doc.category}): ${doc.summary}${doc.events?.length ? ` Inbokad tid: ${doc.events.join(", ")}.` : ""}`,
+        executedActions,
+      };
+    }
   }
 
   // Pure greeting

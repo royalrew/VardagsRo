@@ -4,9 +4,29 @@ import { TEST_ACTOR } from "../../test/actor-fixture";
 
 const dependencies = vi.hoisted(() => ({
   loadDashboard: vi.fn(async () => ({
-    events: [],
-    people: [],
+    events: [
+      { id: "event-doc-1", title: "Tandläkartid", startsAt: "2026-09-15T10:00:00.000Z", documentId: "doc-1" },
+    ],
+    people: [{ id: "person-1", name: "Jimmy", aliases: ["Pappa"] }],
     tasks: [],
+    documents: [
+      {
+        id: "doc-1",
+        title: "Kallelse Folktandvården",
+        filename: "kallelse.pdf",
+        summary: "Årlig undersökning och tandhygienist den 15 september.",
+        personId: "person-1",
+        folderId: "folder-health",
+        status: "confirmed" as const,
+        uploadedAt: "2026-08-25T10:00:00.000Z",
+        periodLabel: "2026",
+        eventsCount: 1,
+        tasksCount: 0,
+      },
+    ],
+    folders: [
+      { id: "folder-health", name: "🏥 Kallelser & Vård", parentId: null },
+    ],
   })),
   saveManualTask: vi.fn(async (_actor, input) => ({
     id: "task-101",
@@ -231,5 +251,18 @@ describe("jarvis-agent", () => {
     );
     expect(res.executedActions).toContain("log_quick_workout");
     expect(res.text).toContain("Löpning 5 km");
+  });
+
+  it("searches uploaded documents for dentist appointments and summaries", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Vad står det i kallelsen från tandläkaren?",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadDashboard).toHaveBeenCalledWith(TEST_ACTOR);
+    expect(res.executedActions).toContain("search_documents");
+    expect(res.text).toContain("Folktandvården");
+    expect(res.text).toContain("15 september");
   });
 });
