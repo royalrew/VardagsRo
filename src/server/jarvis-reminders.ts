@@ -289,6 +289,14 @@ export async function dispatchDueTelegramReminders(
   const sql = await readyClient();
   const nowIso = now.toISOString();
 
+  // Nattfrid / Sleep protection: do not send automatic reminder alerts between 22:30 and 07:00
+  const clockStr = clockValueInTimeZone(nowIso, DEFAULT_TIME_ZONE);
+  const currentMinute = minuteOfDayFromClockValue(clockStr) ?? 12 * 60;
+  const isNightQuietHours = currentMinute >= 22 * 60 + 30 || currentMinute < 7 * 60;
+  if (isNightQuietHours) {
+    return { dispatchedCount: 0, reminders: [] };
+  }
+
   // Find uncompleted tasks that are due, have not been reminded yet, and where person has a linked Telegram account
   const rows = await sql<
     Array<{

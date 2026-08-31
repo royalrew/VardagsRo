@@ -259,4 +259,35 @@ describe("Telegram Jarvis Voice & Schedule Engine", () => {
       }),
     );
   });
+
+  it("handles task snooze tomorrow button (task:snooze_tomorrow:task-1)", async () => {
+    await processTelegramUpdate({
+      update_id: 304,
+      callback_query: {
+        id: "cb-4",
+        from: { id: 12345, first_name: "Jimmy", is_bot: false },
+        message: {
+          message_id: 457,
+          chat: { id: 999, type: "private" },
+          text: "⏰ Påminnelse från Jarvis: Packa lådor",
+        },
+        data: "task:snooze_tomorrow:task-1",
+      },
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottest-token/answerCallbackQuery",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("flyttats till imorgon"),
+      }),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottest-token/editMessageText",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("Flyttad till imorgon"),
+      }),
+    );
+  });
 });

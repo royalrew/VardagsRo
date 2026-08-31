@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+import {
+  addCalendarDateDays,
+  calendarDateInTimeZone,
+  DEFAULT_TIME_ZONE,
+  zonedDateTimeToInstant,
+} from "@/lib/dates";
 import { requireTelegramActor } from "@/server/actor";
 import { synthesizeJarvisSpeech } from "@/server/audio-synthesis";
 import { transcribeTelegramVoice } from "@/server/audio-transcription";
@@ -57,6 +63,9 @@ export function taskReminderInlineKeyboard(taskId: string) {
     inline_keyboard: [
       [
         { text: "✓ Klarmarkera", callback_data: `task:done:${taskId}` },
+        { text: "🌅 Till imorgon (08:30)", callback_data: `task:snooze_tomorrow:${taskId}` },
+      ],
+      [
         { text: "⏰ Snooza 1h", callback_data: `task:snooze:${taskId}` },
       ],
     ],
@@ -316,6 +325,41 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
           await sendTelegramMessage(
             chatId,
             `✓ Uppgiften "${title}" är nu klarmarkerad!`,
+            { replyMarkup: DEFAULT_TELEGRAM_KEYBOARD },
+          );
+        }
+        return;
+      }
+
+      if (data && data.startsWith("task:snooze_tomorrow:")) {
+        const taskId = data.slice("task:snooze_tomorrow:".length);
+        const tomorrowDate = addCalendarDateDays(
+          calendarDateInTimeZone(new Date(), DEFAULT_TIME_ZONE),
+          1,
+        );
+        const tomorrowInstant = zonedDateTimeToInstant(tomorrowDate, 8 * 60 + 30, DEFAULT_TIME_ZONE);
+        const sql = await readyClient();
+        const res = await sql`
+          update family_tasks
+          set due_at = ${tomorrowInstant},
+              notes = regexp_replace(coalesce(notes, ''), '\\[telegram_reminded:[^\\]]+\\]', '', 'g')
+          where id = ${taskId} and household_id = ${actor.householdId}
+          returning id, title
+        `;
+        const title = res[0]?.title || "Uppgiften";
+        await answerTelegramCallbackQuery(cb.id, `🌅 "${title}" har flyttats till imorgon kl 08:30.`);
+
+        if (cb.message?.message_id) {
+          const originalText = cb.message.text || `⏰ Påminnelse: ${title}`;
+          await editTelegramMessageText(
+            chatId,
+            cb.message.message_id,
+            `${originalText}\n\n🌅 *Flyttad till imorgon kl 08:30*`,
+          );
+        } else {
+          await sendTelegramMessage(
+            chatId,
+            `🌅 Påminnelsen för "${title}" har flyttats till imorgon kl 08:30.`,
             { replyMarkup: DEFAULT_TELEGRAM_KEYBOARD },
           );
         }

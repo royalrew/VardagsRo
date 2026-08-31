@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TEST_ACTOR } from "../../test/actor-fixture";
 import {
@@ -54,6 +54,10 @@ vi.mock("@/server/telegram", () => ({
 }));
 
 describe("Jarvis Contextual Reminder Engine", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   const referenceMonday = new Date("2026-08-31T10:00:00Z"); // Måndag 31 augusti 2026
 
   describe("parseSwedishReminder", () => {
@@ -155,6 +159,14 @@ describe("Jarvis Contextual Reminder Engine", () => {
         expect.stringContaining("Packa lådor hemma"),
         expect.objectContaining({ replyMarkup: expect.any(Object) }),
       );
+    });
+
+    it("respects night quiet hours (22:30-07:00) and suppresses alerts", async () => {
+      // 23:30 CEST is 21:30 UTC
+      const nightTime = new Date("2026-08-31T21:30:00.000Z");
+      const result = await dispatchDueTelegramReminders(nightTime);
+      expect(result.dispatchedCount).toBe(0);
+      expect(dependencies.sendTelegramMessage).not.toHaveBeenCalled();
     });
   });
 });
