@@ -16,7 +16,7 @@ const dependencies = vi.hoisted(() => ({
         endsAt: "2026-08-31T16:00:00.000Z",
         allDay: false,
         category: "work" as const,
-        personId: "person-jimmy",
+        personId: "person-nora",
       },
       {
         id: "school-event-1",
@@ -29,7 +29,8 @@ const dependencies = vi.hoisted(() => ({
       },
     ],
     people: [
-      { id: "person-jimmy", name: "Jimmy", aliases: ["Pappa"] },
+      { id: "person-nora", name: "Jimmy", aliases: ["Pappa"] },
+      { id: "person-hanni", name: "Hanni", aliases: ["Mamma"] },
       { id: "person-child", name: "Barnet", aliases: [] },
     ],
     tasks: [
@@ -100,11 +101,43 @@ describe("Jarvis Briefing Service", () => {
       expect(briefing.date).toBe("2026-08-31");
       expect(briefing.workShift?.type).toBe("day");
       expect(briefing.text).toContain("God morgon Jimmy");
-      expect(briefing.text).toContain("Arbetspass Dag");
+      expect(briefing.text).toContain("Du (Jimmy) jobbar Arbetspass Dag");
       expect(briefing.text).toContain("Idrottsdag");
       expect(briefing.text).toContain("Underkropp & Ben");
       expect(briefing.text).toContain("160g protein");
       expect(briefing.text).toContain("Packa idrottskläder");
+    });
+
+    it("correctly indicates caller is free when only spouse has a work shift", async () => {
+      dependencies.loadDashboard.mockResolvedValueOnce({
+        events: [
+          {
+            id: "work-event-hanni",
+            title: "Jobb",
+            startsAt: "2026-08-31T14:00:00.000Z",
+            endsAt: "2026-08-31T21:00:00.000Z",
+            allDay: false,
+            category: "work" as const,
+            personId: "person-hanni",
+          },
+        ],
+        people: [
+          { id: "person-nora", name: "Jimmy", aliases: ["Pappa"] },
+          { id: "person-hanni", name: "Hanni", aliases: ["Mamma"] },
+        ],
+        tasks: [],
+        documents: [],
+        folders: [],
+      });
+
+      const briefing = await generateMorningBriefing(TEST_ACTOR, {
+        date: "2026-08-31",
+        callerName: "Jimmy",
+      });
+
+      expect(briefing.workShift).toBeNull();
+      expect(briefing.text).toContain("Du (Jimmy) är ledig idag!");
+      expect(briefing.text).toContain("Hanni jobbar");
     });
   });
 

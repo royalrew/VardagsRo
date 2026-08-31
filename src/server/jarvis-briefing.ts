@@ -83,23 +83,32 @@ export async function generateMorningBriefing(
     loadProject100NutritionDay(actor, targetDate).catch(() => null),
   ]);
 
-  // 1. Work shift
+  // 1. Work shifts (distinguishing caller vs other family members)
   const dayEvents = dashboard.events.filter((e) => {
     const eventDate = e.startsAt.slice(0, 10);
     return eventDate === targetDate;
   });
 
-  const workEvent = dayEvents.find((e) => e.category === "work");
+  const callerPerson = dashboard.people.find((p) => p.id === actor.personId);
+  const resolvedCallerName = options.callerName || callerPerson?.name || "Jimmy";
+
+  const myWorkEvent = dayEvents.find(
+    (e) => e.category === "work" && (e.personId === actor.personId || (!e.personId && dashboard.people.length === 1)),
+  );
+  const otherWorkEvents = dayEvents.filter(
+    (e) => e.category === "work" && e.personId && e.personId !== actor.personId,
+  );
+
   let workShift: MorningBriefingResult["workShift"] = null;
 
-  if (workEvent) {
-    const startTime = formatTimeOnly(workEvent.startsAt);
-    const endTime = formatTimeOnly(workEvent.endsAt);
+  if (myWorkEvent) {
+    const startTime = formatTimeOnly(myWorkEvent.startsAt);
+    const endTime = formatTimeOnly(myWorkEvent.endsAt);
     const startHour = parseInt(startTime.slice(0, 2), 10) || 7;
     const shiftType = startHour < 12 ? "day" : startHour < 18 ? "evening" : "night";
 
     workShift = {
-      title: workEvent.title,
+      title: myWorkEvent.title,
       startsAt: startTime,
       endsAt: endTime,
       type: shiftType,
@@ -152,13 +161,27 @@ export async function generateMorningBriefing(
 
   // Synthesize Text
   const parts: string[] = [
-    `God morgon ${callerName}! Här är din morgonöversikt för ${dayLabel}:`,
+    `God morgon ${resolvedCallerName}! Här är din morgonöversikt för ${dayLabel}:`,
   ];
 
+  const spouseWorkSummaries = otherWorkEvents.map((e) => {
+    const person = dashboard.people.find((p) => p.id === e.personId);
+    const personName = person?.name ?? "Hanni";
+    const startTime = formatTimeOnly(e.startsAt);
+    const endTime = formatTimeOnly(e.endsAt);
+    return `${personName} jobbar (${startTime}–${endTime})`;
+  });
+
   if (workShift) {
-    parts.push(`💼 Jobb: Du har ${workShift.title} (${workShift.startsAt}–${workShift.endsAt}).`);
+    let jobText = `💼 Jobb: Du (${resolvedCallerName}) jobbar ${workShift.title} (${workShift.startsAt}–${workShift.endsAt}).`;
+    if (spouseWorkSummaries.length > 0) {
+      jobText += ` ${spouseWorkSummaries.join(", ")}.`;
+    }
+    parts.push(jobText);
+  } else if (spouseWorkSummaries.length > 0) {
+    parts.push(`💼 Jobb: Du (${resolvedCallerName}) är ledig idag! ${spouseWorkSummaries.join(", ")}.`);
   } else {
-    parts.push(`🎉 Jobb: Du är ledig från arbete idag!`);
+    parts.push(`🎉 Jobb: Du (${resolvedCallerName}) är ledig från arbete idag!`);
   }
 
   if (familyEvents.length > 0) {
