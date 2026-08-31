@@ -12,6 +12,10 @@ import {
   releaseTelegramUpdate,
 } from "@/server/database";
 import { processJarvisAgentMessage } from "@/server/jarvis-agent";
+import {
+  dispatchDueTelegramReminders,
+  ensureReminderTicker,
+} from "@/server/jarvis-reminders";
 import { answerFamilyQuestion } from "@/server/questions";
 import { generateTelegramLinkCode, hashTelegramLinkCode } from "@/server/telegram-security";
 
@@ -88,6 +92,8 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
   const chatId = String(message.chat.id);
   const userId = String(sender.id);
   try {
+    ensureReminderTicker();
+    dispatchDueTelegramReminders().catch(() => {});
     const account = await getTelegramAccount(userId);
     const requestedCommand = message.text ? command(message.text) : null;
 

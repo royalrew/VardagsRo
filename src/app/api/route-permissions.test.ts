@@ -263,6 +263,10 @@ import {
   GET as jarvisBriefingGet,
   POST as jarvisBriefingPost,
 } from "@/app/api/project100/jarvis/briefing/route";
+import {
+  GET as remindersDispatchGet,
+  POST as remindersDispatchPost,
+} from "@/app/api/telegram/reminders/dispatch/route";
 
 function membership(
   role: "owner" | "adult" | "viewer",
@@ -1501,6 +1505,25 @@ describe("Projekt 100 Content is held behind the adult gate and requires CSRF on
     const adultPost = await jarvisBriefingPost(
       jsonPost(briefingUrl, { type: "evening" }),
     );
+    expect(adultPost.status).toBe(200);
+  });
+
+  it("guards telegram reminders dispatch (GET and POST)", async () => {
+    const dispatchUrl = "http://localhost/api/telegram/reminders/dispatch";
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("viewer", "child");
+
+    const childGet = await remindersDispatchGet(new Request(dispatchUrl));
+    expect(childGet.status).toBe(403);
+
+    const childPost = await remindersDispatchPost(jsonPost(dispatchUrl, {}));
+    expect(childPost.status).toBe(403);
+
+    harness.state.membership = membership("adult");
+    const adultGet = await remindersDispatchGet(new Request(dispatchUrl));
+    expect(adultGet.status).toBe(200);
+
+    const adultPost = await remindersDispatchPost(jsonPost(dispatchUrl, {}));
     expect(adultPost.status).toBe(200);
   });
 });

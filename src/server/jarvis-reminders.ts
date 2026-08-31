@@ -1,15 +1,26 @@
 /**
  * Jarvis Contextual Reminder Engine.
  *
- * Intelligently parses natural Swedish reminder commands and anchors
+ * Intelligently parses natural Swedish reminder commands, anchors
  * reminder due dates/times to user calendar context (e.g. work shift end time,
- * specific weekdays, morning/evening context).
+ * specific weekdays, morning/evening context), and dispatches due reminders
+ * directly to Telegram.
  */
 
-import { addCalendarDateDays, calendarDateInTimeZone, DEFAULT_TIME_ZONE } from "@/lib/dates";
+import {
+  addCalendarDateDays,
+  calendarDateInTimeZone,
+  clockValueInTimeZone,
+  DEFAULT_TIME_ZONE,
+  formatClock,
+  formatLongDate,
+  minuteOfDayFromClockValue,
+  zonedDateTimeToInstant,
+} from "@/lib/dates";
 import type { ActorContext } from "@/server/authorization-types";
-import { loadDashboard, saveManualTask } from "@/server/database";
+import { loadDashboard, readyClient, saveManualTask } from "@/server/database";
 import { assertProject100Adult } from "@/server/project100";
+import { sendTelegramMessage } from "@/server/telegram";
 
 export interface ParsedSwedishReminder {
   title: string;
@@ -26,6 +37,16 @@ export interface ContextualReminderResult {
   timeLabel: string;
   workShiftNote: string | null;
   text: string;
+}
+
+export interface DispatchedReminderResult {
+  dispatchedCount: number;
+  reminders: Array<{
+    taskId: string;
+    title: string;
+    personName: string;
+    chatId: string;
+  }>;
 }
 
 const SWEDISH_WEEKDAYS: Record<string, number> = {
@@ -170,7 +191,7 @@ export function parseSwedishReminder(
 }
 
 /**
- * Creates a contextual reminder anchored to the user's work schedule.
+ * Creates a contextual reminder anchored to the user's work schedule and local timezone.
  */
 export async function createContextualReminder(
   actor: ActorContext,
@@ -196,8 +217,7 @@ export async function createContextualReminder(
 
   if (input.contextAnchor === "after_work") {
     if (workEvent) {
-      // e.g. "2026-09-04T16:00:00.000Z" -> endsAt 16:00
-      const workEndTime = workEvent.endsAt.slice(11, 16);
+      const workEndTime = clockValueInTimeZone(workEvent.endsAt, DEFAULT_TIME_ZONE);
       const [hours, mins] = workEndTime.split(":").map(Number);
       const reminderMin = mins + 30;
       const remHours = (hours + Math.floor(reminderMin / 60)) % 24;
@@ -210,7 +230,7 @@ export async function createContextualReminder(
     }
   } else if (input.contextAnchor === "before_work") {
     if (workEvent) {
-      const workStartTime = workEvent.startsAt.slice(11, 16);
+      const workStartTime = clockValueInTimeZone(workEvent.startsAt, DEFAULT_TIME_ZONE);
       const [hours, mins] = workStartTime.split(":").map(Number);
       const remHours = (hours - 1 + 24) % 24;
       timeStr = `${String(remHours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
@@ -227,7 +247,10 @@ export async function createContextualReminder(
     timeStr = "19:30";
   }
 
-  const dueAtIso = `${targetDate}T${timeStr}:00.000Z`;
+  // Timezone-safe conversion to exact UTC instant
+  const minute = minuteOfDayFromClockValue(timeStr) ?? 12 * 60;
+  const dueAtInstant = zonedDateTimeToInstant(targetDate, minute, DEFAULT_TIME_ZONE);
+  const dueAtIso = dueAtInstant.toISOString();
 
   const task = await saveManualTask(actor, {
     title: input.title,
@@ -241,7 +264,7 @@ export async function createContextualReminder(
   const swedishDay = dayDate.toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "long" });
 
   const contextPhrase = workShiftNote ? ` (${workShiftNote})` : "";
-  const text = `Jag har lagt in en påminnelse om att "${task.title}" på ${swedishDay} kl ${timeStr}${contextPhrase}. Den är nu sparad i dina uppgifter.`;
+  const text = `Jag har lagt in en påminnelse om att "${task.title}" på ${swedishDay} kl ${timeStr}${contextPhrase}. Den är nu sparad i dina uppgifter och skickas till Telegram vid tidpunkten.`;
 
   return {
     taskId: task.id,
@@ -252,4 +275,91 @@ export async function createContextualReminder(
     workShiftNote,
     text,
   };
+}
+
+/**
+ * Dispatches all due tasks to their owners' linked Telegram accounts.
+ */
+export async function dispatchDueTelegramReminders(
+  now: Date = new Date(),
+): Promise<DispatchedReminderResult> {
+  const sql = await readyClient();
+  const nowIso = now.toISOString();
+
+  // Find uncompleted tasks that are due, have not been reminded yet, and where person has a linked Telegram account
+  const rows = await sql<
+    Array<{
+      id: string;
+      title: string;
+      notes: string | null;
+      due_at: string;
+      person_id: string;
+      person_name: string;
+      telegram_chat_id: string;
+    }>
+  >`
+    select t.id, t.title, t.notes, t.due_at, t.person_id,
+           p.name as person_name, a.telegram_chat_id
+    from family_tasks t
+    join telegram_accounts a on a.person_id = t.person_id and a.household_id = t.household_id
+    join family_people p on p.id = t.person_id and p.household_id = t.household_id
+    where t.completed_at is null
+      and t.due_at is not null
+      and t.due_at <= ${nowIso}
+      and (t.notes is null or t.notes not like '%[telegram_reminded:%')
+    order by t.due_at asc
+    limit 20
+  `;
+
+  const dispatched: DispatchedReminderResult["reminders"] = [];
+
+  for (const row of rows) {
+    const safeDueDate = new Date(row.due_at);
+    const validDate = !Number.isNaN(safeDueDate.getTime()) ? safeDueDate : new Date();
+    const formattedTime = formatClock(validDate, DEFAULT_TIME_ZONE);
+    const dateFormatted = formatLongDate(validDate);
+    const message = `⏰ Påminnelse från Jarvis\n\nHej ${row.person_name}! Dags att:\n👉 ${row.title}\n\n(Tid: kl ${formattedTime}, ${dateFormatted})`;
+
+    try {
+      await sendTelegramMessage(row.telegram_chat_id, message);
+
+      const stamp = `[telegram_reminded:${nowIso}]`;
+      const updatedNotes = row.notes ? `${row.notes}\n${stamp}` : stamp;
+      await sql`
+        update family_tasks
+        set notes = ${updatedNotes}
+        where id = ${row.id}
+      `;
+
+      dispatched.push({
+        taskId: row.id,
+        title: row.title,
+        personName: row.person_name,
+        chatId: row.telegram_chat_id,
+      });
+    } catch (err) {
+      console.error(`Failed to send Telegram reminder for task ${row.id}:`, err);
+    }
+  }
+
+  return {
+    dispatchedCount: dispatched.length,
+    reminders: dispatched,
+  };
+}
+
+let tickerStarted = false;
+
+/**
+ * Ensures in-process heartbeat for periodic reminder dispatching.
+ */
+export function ensureReminderTicker(): void {
+  if (tickerStarted || typeof window !== "undefined") return;
+  tickerStarted = true;
+  const timer = setInterval(() => {
+    dispatchDueTelegramReminders().catch(() => {
+      // Ignored in background
+    });
+  }, 20_000);
+  timer.unref?.();
 }

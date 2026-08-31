@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TEST_ACTOR } from "../../test/actor-fixture";
 import {
   createContextualReminder,
+  dispatchDueTelegramReminders,
   parseSwedishReminder,
 } from "@/server/jarvis-reminders";
 
@@ -12,8 +13,8 @@ const dependencies = vi.hoisted(() => ({
       {
         id: "work-event-friday",
         title: "Arbetspass Dag",
-        startsAt: "2026-09-04T07:00:00.000Z",
-        endsAt: "2026-09-04T16:00:00.000Z",
+        startsAt: "2026-09-04T05:00:00.000Z", // 07:00 CEST
+        endsAt: "2026-09-04T14:00:00.000Z", // 16:00 CEST
         allDay: false,
         category: "work" as const,
         personId: "person-nora",
@@ -31,11 +32,22 @@ const dependencies = vi.hoisted(() => ({
     kind: input.kind,
     notes: input.notes,
   })),
+  sendTelegramMessage: vi.fn(async () => undefined),
+  sqlQuery: vi.fn(),
 }));
 
 vi.mock("@/server/database", () => ({
   loadDashboard: dependencies.loadDashboard,
   saveManualTask: dependencies.saveManualTask,
+  readyClient: vi.fn(async () => {
+    const fn = (strings: TemplateStringsArray, ...values: unknown[]) =>
+      dependencies.sqlQuery(strings.join("?"), values);
+    return fn as any;
+  }),
+}));
+
+vi.mock("@/server/telegram", () => ({
+  sendTelegramMessage: dependencies.sendTelegramMessage,
 }));
 
 describe("Jarvis Contextual Reminder Engine", () => {
@@ -77,10 +89,22 @@ describe("Jarvis Contextual Reminder Engine", () => {
       expect(parsed?.targetDate).toBe("2026-08-31");
       expect(parsed?.contextAnchor).toBe("evening");
     });
+
+    it("parses 'Påminn mig om att packa lådor hemma kl 20:00'", () => {
+      const parsed = parseSwedishReminder(
+        "Påminn mig om att packa lådor hemma kl 20:00",
+        referenceMonday,
+      );
+
+      expect(parsed).not.toBeNull();
+      expect(parsed?.title).toBe("Packa lådor hemma");
+      expect(parsed?.targetDate).toBe("2026-08-31");
+      expect(parsed?.timeString).toBe("20:00");
+    });
   });
 
   describe("createContextualReminder", () => {
-    it("anchors reminder to work shift end time (16:00 + 30 min = 16:30)", async () => {
+    it("anchors reminder to work shift end time with timezone awareness", async () => {
       const result = await createContextualReminder(
         TEST_ACTOR,
         {
@@ -90,17 +114,43 @@ describe("Jarvis Contextual Reminder Engine", () => {
         },
       );
 
+      // 16:00 CEST end time + 30 min = 16:30 CEST = 14:30 UTC
       expect(dependencies.saveManualTask).toHaveBeenCalledWith(
         TEST_ACTOR,
         expect.objectContaining({
           title: "Storhandla",
-          dueAt: "2026-09-04T16:30:00.000Z",
+          dueAt: "2026-09-04T14:30:00.000Z",
         }),
       );
       expect(result.text).toContain("Storhandla");
       expect(result.text).toContain("fredag");
       expect(result.text).toContain("16:30");
-      expect(result.text).toContain("16:00");
+    });
+  });
+
+  describe("dispatchDueTelegramReminders", () => {
+    it("finds due tasks and sends Telegram push messages", async () => {
+      dependencies.sqlQuery
+        .mockResolvedValueOnce([
+          {
+            id: "task-due-1",
+            title: "Packa lådor hemma",
+            notes: null,
+            due_at: "2026-08-31T18:00:00.000Z", // 20:00 CEST
+            person_id: "person-nora",
+            person_name: "Jimmy",
+            telegram_chat_id: "123456789",
+          },
+        ])
+        .mockResolvedValueOnce([]); // update query
+
+      const result = await dispatchDueTelegramReminders(new Date("2026-08-31T18:05:00.000Z"));
+
+      expect(result.dispatchedCount).toBe(1);
+      expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith(
+        "123456789",
+        expect.stringContaining("Packa lådor hemma"),
+      );
     });
   });
 });
