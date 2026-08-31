@@ -20,7 +20,10 @@ import {
 import type { ActorContext } from "@/server/authorization-types";
 import { loadDashboard, readyClient, saveManualTask } from "@/server/database";
 import { assertProject100Adult } from "@/server/project100";
-import { sendTelegramMessage } from "@/server/telegram";
+import {
+  sendTelegramMessage,
+  taskReminderInlineKeyboard,
+} from "@/server/telegram";
 
 export interface ParsedSwedishReminder {
   title: string;
@@ -321,7 +324,9 @@ export async function dispatchDueTelegramReminders(
     const message = `⏰ Påminnelse från Jarvis\n\nHej ${row.person_name}! Dags att:\n👉 ${row.title}\n\n(Tid: kl ${formattedTime}, ${dateFormatted})`;
 
     try {
-      await sendTelegramMessage(row.telegram_chat_id, message);
+      await sendTelegramMessage(row.telegram_chat_id, message, {
+        replyMarkup: taskReminderInlineKeyboard(row.id),
+      });
 
       const stamp = `[telegram_reminded:${nowIso}]`;
       const updatedNotes = row.notes ? `${row.notes}\n${stamp}` : stamp;

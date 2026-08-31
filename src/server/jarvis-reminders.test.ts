@@ -48,6 +48,9 @@ vi.mock("@/server/database", () => ({
 
 vi.mock("@/server/telegram", () => ({
   sendTelegramMessage: dependencies.sendTelegramMessage,
+  taskReminderInlineKeyboard: vi.fn((taskId: string) => ({
+    inline_keyboard: [[{ text: "✓ Klarmarkera", callback_data: `task:done:${taskId}` }]],
+  })),
 }));
 
 describe("Jarvis Contextual Reminder Engine", () => {
@@ -150,6 +153,7 @@ describe("Jarvis Contextual Reminder Engine", () => {
       expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith(
         "123456789",
         expect.stringContaining("Packa lådor hemma"),
+        expect.objectContaining({ replyMarkup: expect.any(Object) }),
       );
     });
   });

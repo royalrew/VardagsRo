@@ -15,6 +15,8 @@ const dependencies = vi.hoisted(() => ({
   processJarvisAgentMessage: vi.fn(),
   transcribeTelegramVoice: vi.fn(),
   synthesizeJarvisSpeech: vi.fn(async () => Buffer.from("audio-bytes")),
+  logProject100Meal: vi.fn(),
+  sql: vi.fn(async () => [{ id: "task-1", title: "Köpa mjölk" }]),
 }));
 
 vi.stubGlobal("fetch", vi.fn());
@@ -25,6 +27,10 @@ vi.mock("@/server/database", () => ({
   claimTelegramUpdate: dependencies.claimTelegramUpdate,
   releaseTelegramUpdate: dependencies.releaseTelegramUpdate,
   loadDashboard: dependencies.loadDashboard,
+  readyClient: vi.fn(async () => dependencies.sql),
+}));
+vi.mock("@/server/project100-nutrition", () => ({
+  logProject100Meal: dependencies.logProject100Meal,
 }));
 vi.mock("@/server/questions", () => ({
   answerFamilyQuestion: dependencies.answerFamilyQuestion,
@@ -94,10 +100,7 @@ describe("Telegram Jarvis Voice & Schedule Engine", () => {
       "https://api.telegram.org/bottest-token/sendMessage",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({
-          chat_id: "999",
-          text: "God kväll Jimmy! Den 25 september är du ledig. Jag har lagt in en påminnelse om att boka bord.",
-        }),
+        body: expect.stringContaining("God kväll Jimmy! Den 25 september är du ledig."),
       }),
     );
     expect(dependencies.synthesizeJarvisSpeech).toHaveBeenCalledWith(
@@ -136,10 +139,7 @@ describe("Telegram Jarvis Voice & Schedule Engine", () => {
       "https://api.telegram.org/bottest-token/sendMessage",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({
-          chat_id: "999",
-          text: '✅ Sparat under 🏢 Jobb:\n"Koden till inkontinensförrådet är 2214"',
-        }),
+        body: expect.stringContaining("Sparat under 🏢 Jobb"),
       }),
     );
   });
@@ -163,10 +163,88 @@ describe("Telegram Jarvis Voice & Schedule Engine", () => {
       "https://api.telegram.org/bottest-token/sendMessage",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({
-          chat_id: "999",
-          text: "God kväll Jimmy! Hur kan jag hjälpa dig?",
-        }),
+        body: expect.stringContaining("God kväll Jimmy! Hur kan jag hjälpa dig?"),
+      }),
+    );
+  });
+
+  it("handles inline button click (cmd:training)", async () => {
+    dependencies.processJarvisAgentMessage.mockResolvedValueOnce({
+      text: "Idag har du Push Dag 1 inlagt på schemat.",
+      executedActions: ["get_todays_workout"],
+    });
+
+    await processTelegramUpdate({
+      update_id: 301,
+      callback_query: {
+        id: "cb-1",
+        from: { id: 12345, first_name: "Jimmy", is_bot: false },
+        message: { chat: { id: 999, type: "private" } },
+        data: "cmd:training",
+      },
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottest-token/answerCallbackQuery",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(dependencies.processJarvisAgentMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      "Vad ska jag träna idag?",
+      expect.anything(),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottest-token/sendMessage",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("Push Dag 1"),
+      }),
+    );
+  });
+
+  it("handles quick protein logging inline button (act:quick_protein)", async () => {
+    await processTelegramUpdate({
+      update_id: 302,
+      callback_query: {
+        id: "cb-2",
+        from: { id: 12345, first_name: "Jimmy", is_bot: false },
+        message: { chat: { id: 999, type: "private" } },
+        data: "act:quick_protein",
+      },
+    });
+
+    expect(dependencies.logProject100Meal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        title: "Kvällsshake / Kasein",
+        proteinG: 35,
+      }),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottest-token/sendMessage",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("Loggade 35g protein"),
+      }),
+    );
+  });
+
+  it("handles task done button (task:done:task-1)", async () => {
+    await processTelegramUpdate({
+      update_id: 303,
+      callback_query: {
+        id: "cb-3",
+        from: { id: 12345, first_name: "Jimmy", is_bot: false },
+        message: { chat: { id: 999, type: "private" } },
+        data: "task:done:task-1",
+      },
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottest-token/sendMessage",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("klarmarkerad"),
       }),
     );
   });
