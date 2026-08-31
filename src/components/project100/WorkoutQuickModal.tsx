@@ -1,12 +1,8 @@
 "use client";
 
 import {
-  Check,
-  CheckCircle2,
   Dumbbell,
   Flame,
-  Plus,
-  Sparkles,
   Utensils,
   X,
   Zap,
@@ -23,7 +19,7 @@ interface WorkoutQuickModalProps {
   isOpen: boolean;
   onClose: () => void;
   templates: Project100TrainingTemplate[];
-  plannedSessions: Project100TrainingSession[];
+  plannedSessions?: Project100TrainingSession[];
   todayDate: string;
   onSaved?: () => void;
 }
@@ -32,7 +28,6 @@ export function WorkoutQuickModal({
   isOpen,
   onClose,
   templates,
-  plannedSessions,
   todayDate,
   onSaved,
 }: WorkoutQuickModalProps) {

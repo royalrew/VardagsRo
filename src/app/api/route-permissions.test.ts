@@ -232,29 +232,17 @@ import {
 import { DELETE as nutritionPlanDelete } from "@/app/api/project100/nutrition/plan/[id]/route";
 import {
   GET as jarvisConversationsGet,
-  POST as jarvisConversationsPost,
 } from "@/app/api/project100/jarvis/conversations/route";
-import { DELETE as jarvisConversationDelete } from "@/app/api/project100/jarvis/conversations/[id]/route";
 import { POST as jarvisMessagePost } from "@/app/api/project100/jarvis/messages/route";
 import {
   GET as jarvisMemoriesGet,
   POST as jarvisMemoriesPost,
 } from "@/app/api/project100/jarvis/memories/route";
 import {
-  DELETE as jarvisMemoryDelete,
-  PATCH as jarvisMemoryPatch,
-} from "@/app/api/project100/jarvis/memories/[id]/route";
-import {
   GET as contentProjectsGet,
   POST as contentProjectsPost,
 } from "@/app/api/project100/content/projects/route";
-import {
-  DELETE as contentProjectDelete,
-  GET as contentProjectGet,
-  PATCH as contentProjectPatch,
-} from "@/app/api/project100/content/projects/[id]/route";
 import { POST as contentMediaPost } from "@/app/api/project100/content/projects/[id]/media/route";
-import { DELETE as contentMediaDelete } from "@/app/api/project100/content/projects/[id]/media/[mediaId]/route";
 import { POST as contentSuggestionsPost } from "@/app/api/project100/content/suggestions/route";
 import { GET as jarvisGapsGet } from "@/app/api/project100/jarvis/gaps/route";
 import { PATCH as jarvisGapsPatch } from "@/app/api/project100/jarvis/gaps/[id]/route";
@@ -1375,7 +1363,6 @@ describe("Projekt 100 Jarvis is held behind the adult gate and requires CSRF on 
 
 describe("Projekt 100 Content is held behind the adult gate and requires CSRF on writes", () => {
   const projectsUrl = "http://localhost/api/project100/content/projects";
-  const itemUrl = "http://localhost/api/project100/content/projects/proj-1";
   const mediaUrl = "http://localhost/api/project100/content/projects/proj-1/media";
   const suggestionsUrl = "http://localhost/api/project100/content/suggestions";
 

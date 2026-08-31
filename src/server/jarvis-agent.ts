@@ -2,9 +2,7 @@ import OpenAI from "openai";
 
 import { addCalendarDateDays, calendarDateInTimeZone, DEFAULT_TIME_ZONE } from "@/lib/dates";
 import {
-  MEMORY_CATEGORY_LABELS,
   type Project100MemoryCategory,
-  type Project100MemoryKind,
 } from "@/lib/project100-jarvis";
 import { parseMemoryCommand } from "@/lib/project100-memory-classifier";
 import type { Project100MeasurementUnit } from "@/lib/project100-body";
@@ -548,7 +546,7 @@ export async function processJarvisAgentMessage(
           title,
           targetDate: dueDate ? dueDate.slice(0, 10) : today,
           timeString: args.time_string ? String(args.time_string) : undefined,
-          contextAnchor: contextAnchor as any,
+          contextAnchor: contextAnchor as "after_work" | "before_work" | "morning" | "afternoon" | "evening",
           notes: notes || undefined,
         });
 
@@ -1163,7 +1161,6 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
 
   // Combined: "Kolla om jag jobbar ... och lägg in ..."
   const scheduleMatch = lower.match(/jobbar.*?(?:den\s+)?(\d{1,2})[e|a]?\s+([a-zåäö]+)/i);
-  const taskMatch = lower.match(/(?:lägg in|boka|påminn|skapa).*?(?:att|om)?\s+(.+)$/i);
 
   if (scheduleMatch) {
     const day = scheduleMatch[1].padStart(2, "0");
@@ -1193,7 +1190,7 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
     let taskSummary = "";
     const taskMatch = text.match(/(?:och\s+)?(?:lägga in|lägg in|påminn|skapa)(?:\s+att|\s+om|\s+in)?\s+(.+)$/i);
     if (taskMatch) {
-      let taskTitle = taskMatch[1]
+      const taskTitle = taskMatch[1]
         .replace(/^(?:jag\s+vill\s+|vi\s+måste\s+|vi\s+ska\s+|att\s+jag\s+vill\s+|att\s+|om\s+att\s+|om\s+)/i, "")
         .replace(/[?.!]+$/, "")
         .trim();

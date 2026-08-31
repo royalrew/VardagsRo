@@ -12,7 +12,7 @@ import {
   Sparkles,
   SplitSquareVertical,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import type { Project100MediaItem } from "@/lib/project100-media";
 import {
@@ -51,10 +51,8 @@ export function BodyComparisonSlider({
     return [...photos].sort((a, b) => a.capturedOn.localeCompare(b.capturedOn));
   }, [photos]);
 
-  const [beforeId, setBeforeId] = useState<string>(() => sortedPhotos[0]?.id ?? "");
-  const [afterId, setAfterId] = useState<string>(
-    () => sortedPhotos[sortedPhotos.length - 1]?.id ?? "",
-  );
+  const [beforeId, setBeforeId] = useState<string>("");
+  const [afterId, setAfterId] = useState<string>("");
   const [sliderPos, setSliderPos] = useState<number>(50); // 0 to 100 %
   const [fadePos, setFadePos] = useState<number>(50); // 0 to 100 %
   const [viewMode, setViewMode] = useState<"split" | "side" | "fade">("split");
@@ -62,27 +60,21 @@ export function BodyComparisonSlider({
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Sync initial selection if photos change and current selection is empty
-  useEffect(() => {
-    if (sortedPhotos.length >= 2) {
-      if (!beforeId || !sortedPhotos.some((p) => p.id === beforeId)) {
-        setBeforeId(sortedPhotos[0].id);
-      }
-      if (!afterId || !sortedPhotos.some((p) => p.id === afterId)) {
-        setAfterId(sortedPhotos[sortedPhotos.length - 1].id);
-      }
+  const beforePhoto = useMemo(() => {
+    if (beforeId) {
+      const match = sortedPhotos.find((p) => p.id === beforeId);
+      if (match) return match;
     }
-  }, [sortedPhotos, beforeId, afterId]);
+    return sortedPhotos[0] ?? null;
+  }, [sortedPhotos, beforeId]);
 
-  const beforePhoto = useMemo(
-    () => sortedPhotos.find((p) => p.id === beforeId) ?? null,
-    [sortedPhotos, beforeId],
-  );
-
-  const afterPhoto = useMemo(
-    () => sortedPhotos.find((p) => p.id === afterId) ?? null,
-    [sortedPhotos, afterId],
-  );
+  const afterPhoto = useMemo(() => {
+    if (afterId) {
+      const match = sortedPhotos.find((p) => p.id === afterId);
+      if (match) return match;
+    }
+    return sortedPhotos[sortedPhotos.length - 1] ?? null;
+  }, [sortedPhotos, afterId]);
 
   const stats: BodyComparisonStats | null = useMemo(
     () => calculateBodyComparison(beforePhoto, afterPhoto, weightsByDay),

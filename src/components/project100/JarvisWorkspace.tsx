@@ -5,13 +5,8 @@ import {
   Bot,
   Brain,
   BriefcaseBusiness,
-  Calendar,
-  CheckCircle2,
   ChevronRight,
-  Clock,
   Dumbbell,
-  ExternalLink,
-  Flame,
   Lightbulb,
   MessageSquare,
   MessageSquarePlus,
@@ -26,11 +21,9 @@ import {
   Trash2,
   Utensils,
   Volume2,
-  VolumeX,
   X,
   Zap,
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -158,17 +151,14 @@ export function JarvisWorkspace({
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
+      const cleanupAudio = () => {
+        setPlayingMessageId(null);
+        setCurrentAudio(null);
+        URL.revokeObjectURL(url);
+      };
+      audio.addEventListener("ended", cleanupAudio);
+      audio.addEventListener("error", cleanupAudio);
       setCurrentAudio(audio);
-      audio.onended = () => {
-        setPlayingMessageId(null);
-        setCurrentAudio(null);
-        URL.revokeObjectURL(url);
-      };
-      audio.onerror = () => {
-        setPlayingMessageId(null);
-        setCurrentAudio(null);
-        URL.revokeObjectURL(url);
-      };
       await audio.play();
     } catch {
       setPlayingMessageId(null);
@@ -206,7 +196,7 @@ export function JarvisWorkspace({
 
     // Optimistic user message
     const tempUserMsg: Project100ChatMessage = {
-      id: `temp-${Date.now()}`,
+      id: `temp-${crypto.randomUUID()}`,
       conversationId: activeConversation?.id ?? "new",
       role: "user",
       content: text,

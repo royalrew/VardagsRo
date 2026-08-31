@@ -380,9 +380,7 @@ vi.mock("@/server/config", () => ({
 vi.mock("@/server/auth", () => ({ getAuth: () => ({ api: { getSession: vi.fn() } }) }));
 
 import {
-  createProject100Conversation,
   createProject100Memory,
-  deleteProject100Conversation,
   deleteProject100Memory,
   loadProject100JarvisWorkspace,
   sendProject100JarvisMessage,

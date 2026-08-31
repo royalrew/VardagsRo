@@ -4,27 +4,22 @@ import {
   AlertCircle,
   Calendar,
   CheckCircle2,
-  ChevronRight,
   Circle,
-  ExternalLink,
   Film,
   Image as ImageIcon,
   Lightbulb,
   Link as LinkIcon,
   ListTodo,
   Plus,
-  Radio,
   Save,
   Sparkles,
   Tag,
   Trash2,
-  Video,
   X,
   Youtube,
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   CONTENT_STATUS_LABELS,
@@ -38,15 +33,17 @@ import {
 } from "@/lib/project100-content";
 import type { Project100MediaItem } from "@/lib/project100-media";
 
+interface ContentWorkspaceProps {
+  projects: Project100ContentProject[];
+  activeProject: Project100ContentProject | null;
+  availableMedia: Project100MediaItem[];
+}
+
 export function ContentWorkspace({
   projects: initialProjects,
   activeProject: initialActiveProject,
   availableMedia,
-}: {
-  projects: Project100ContentProject[];
-  activeProject: Project100ContentProject | null;
-  availableMedia: Project100MediaItem[];
-}) {
+}: ContentWorkspaceProps) {
   const router = useRouter();
 
   const [projects, setProjects] = useState(initialProjects);
@@ -88,21 +85,21 @@ export function ContentWorkspace({
   const [suggestion, setSuggestion] = useState<EditorSuggestion | null>(null);
   const [loadingSuggestion, setLoadingSuggestion] = useState(false);
 
-  // Sync state when active project changes
-  useEffect(() => {
-    if (activeProject) {
-      setTitle(activeProject.title);
-      setHook(activeProject.hook ?? "");
-      setConcept(activeProject.concept ?? "");
-      setScript(activeProject.script ?? "");
-      setStatus(activeProject.status);
-      setTargetPublishDate(activeProject.targetPublishDate ?? "");
-      setPublishedUrl(activeProject.publishedUrl ?? "");
-      setShotlist(activeProject.shotlist ?? []);
-      setThumbnailIdeas(activeProject.thumbnailIdeas ?? []);
-      setMedia(activeProject.media ?? []);
+  function selectProject(p: Project100ContentProject | null) {
+    setActiveProject(p);
+    if (p) {
+      setTitle(p.title);
+      setHook(p.hook ?? "");
+      setConcept(p.concept ?? "");
+      setScript(p.script ?? "");
+      setStatus(p.status);
+      setTargetPublishDate(p.targetPublishDate ?? "");
+      setPublishedUrl(p.publishedUrl ?? "");
+      setShotlist(p.shotlist ?? []);
+      setThumbnailIdeas(p.thumbnailIdeas ?? []);
+      setMedia(p.media ?? []);
     }
-  }, [activeProject]);
+  }
 
   const filteredProjects = useMemo(() => {
     if (statusFilter === "all") return projects;
@@ -120,7 +117,7 @@ export function ContentWorkspace({
       if (res.ok) {
         const data = await res.json();
         setProjects((prev) => [data.project, ...prev]);
-        setActiveProject(data.project);
+        selectProject(data.project);
         router.push(`/projekt-100/innehall?id=${data.project.id}`);
       }
     } catch {
@@ -157,7 +154,7 @@ export function ContentWorkspace({
       }
 
       const data = await res.json();
-      setActiveProject(data.project);
+      selectProject(data.project);
       setProjects((prev) =>
         prev.map((p) => (p.id === data.project.id ? data.project : p)),
       );
@@ -182,7 +179,7 @@ export function ContentWorkspace({
         setProjects((prev) => prev.filter((p) => p.id !== id));
         if (activeProject?.id === id) {
           const next = projects.find((p) => p.id !== id) ?? null;
-          setActiveProject(next);
+          selectProject(next);
           if (next) {
             router.push(`/projekt-100/innehall?id=${next.id}`);
           } else {
@@ -341,7 +338,7 @@ export function ContentWorkspace({
                   activeProject?.id === p.id ? "active" : ""
                 }`}
                 onClick={() => {
-                  setActiveProject(p);
+                  selectProject(p);
                   router.push(`/projekt-100/innehall?id=${p.id}`);
                 }}
               >

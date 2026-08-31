@@ -14,7 +14,6 @@ import {
   resolveInsightPeriodDates,
   type Project100ActivityStat,
   type Project100BodyInsights,
-  type Project100InsightHighlight,
   type Project100InsightsSummary,
   type Project100InsightsTimelinePoint,
   type Project100MetricChange,
@@ -80,10 +79,6 @@ function asNumber(value: number | string | null | undefined): number | null {
   if (value === null || value === undefined) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function dateSlice(isoOrDate: string): string {
-  return isoOrDate.slice(0, 10);
 }
 
 export async function loadProject100Insights(

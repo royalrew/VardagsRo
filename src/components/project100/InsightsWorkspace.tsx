@@ -1,38 +1,26 @@
 "use client";
 
 import {
-  Activity,
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
-  Award,
   BarChart3,
   Beef,
-  BookOpen,
   BriefcaseBusiness,
   Calendar,
   CheckCircle2,
-  ChevronRight,
-  Clock,
   Dumbbell,
-  Flame,
   Info,
-  Layers,
   Moon,
   Scale,
   Sparkles,
   TrendingDown,
   TrendingUp,
-  Utensils,
-  Wheat,
-  Zap,
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useId, useState } from "react";
+import { useState } from "react";
 
 import {
-  type Project100InsightHighlight,
   type Project100InsightPeriodPreset,
   type Project100InsightsSummary,
   type Project100MetricDelta,

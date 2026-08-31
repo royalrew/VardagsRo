@@ -125,7 +125,7 @@ describe("Jarvis Briefing Service", () => {
         eaten: { proteinG: 145, carbsG: 200, fatG: 50, kcal: 1850 },
         target: { overrideGrams: null, lowGrams: 160, highGrams: 200 },
         batches: [],
-      } as any);
+      });
 
       const briefing = await generateEveningBriefing(TEST_ACTOR, {
         date: "2026-08-31",

@@ -76,7 +76,7 @@ describe("Jarvis Audio Synthesis (OpenAI TTS)", () => {
   });
 
   it("throws when OpenAI is not configured", async () => {
-    dependencies.openAIConfig.mockReturnValue(null as any);
+    dependencies.openAIConfig.mockReturnValue(null as unknown as { apiKey: string; model: string; allowed: boolean });
 
     await expect(synthesizeJarvisSpeech("Hej")).rejects.toMatchObject({
       code: "OPENAI_NOT_CONFIGURED",

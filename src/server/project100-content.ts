@@ -132,7 +132,7 @@ export async function loadProject100ContentWorkspace(
     loadProject100MediaLibrary(actor, { category: null, limit: 40 }),
   ]);
 
-  let activeProjectRow = projectId
+  const activeProjectRow = projectId
     ? projectRows.find((p) => p.id === projectId) ?? null
     : projectRows[0] ?? null;
 

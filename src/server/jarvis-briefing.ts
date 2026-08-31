@@ -77,11 +77,10 @@ export async function generateMorningBriefing(
   const callerName = options.callerName || "Jimmy";
   const dayLabel = getSwedishDayLabel(targetDate);
 
-  const [dashboard, sessions, nutritionDay, journal] = await Promise.all([
+  const [dashboard, sessions, nutritionDay] = await Promise.all([
     loadDashboard(actor),
     loadProject100TrainingSessions(actor),
     loadProject100NutritionDay(actor, targetDate).catch(() => null),
-    loadProject100Journal(actor, { from: targetDate, to: targetDate, query: null }).catch(() => null),
   ]);
 
   // 1. Work shift

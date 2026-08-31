@@ -42,7 +42,7 @@ vi.mock("@/server/database", () => ({
   readyClient: vi.fn(async () => {
     const fn = (strings: TemplateStringsArray, ...values: unknown[]) =>
       dependencies.sqlQuery(strings.join("?"), values);
-    return fn as any;
+    return fn as unknown as ReturnType<typeof vi.fn>;
   }),
 }));
 
