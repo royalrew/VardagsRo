@@ -67,39 +67,46 @@ const telegramUpdateSchema = z.object({
   update_id: z.number().int().nonnegative(),
   message: z
     .object({
-      text: z.string().max(4_096).optional(),
-      voice: z.object({ file_id: z.string(), duration: z.number().optional() }).optional(),
-      audio: z.object({ file_id: z.string(), duration: z.number().optional() }).optional(),
-      chat: z.object({ id: z.number().int(), type: z.string() }),
+      text: z.string().optional(),
+      voice: z.object({ file_id: z.string() }).passthrough().optional(),
+      audio: z.object({ file_id: z.string() }).passthrough().optional(),
+      chat: z.object({ id: z.number() }).passthrough(),
       from: z
         .object({
-          id: z.number().int().positive(),
+          id: z.number(),
           is_bot: z.boolean().optional(),
-          first_name: z.string().max(128),
-          last_name: z.string().max(128).optional(),
-          username: z.string().max(128).optional(),
+          first_name: z.string().optional(),
+          last_name: z.string().optional(),
+          username: z.string().optional(),
         })
+        .passthrough()
         .optional(),
     })
+    .passthrough()
     .optional(),
   callback_query: z
     .object({
       id: z.string(),
-      from: z.object({
-        id: z.number().int().positive(),
-        is_bot: z.boolean().optional(),
-        first_name: z.string().max(128),
-        last_name: z.string().max(128).optional(),
-        username: z.string().max(128).optional(),
-      }),
+      from: z
+        .object({
+          id: z.number(),
+          is_bot: z.boolean().optional(),
+          first_name: z.string().optional(),
+          last_name: z.string().optional(),
+          username: z.string().optional(),
+        })
+        .passthrough(),
       message: z
         .object({
-          chat: z.object({ id: z.number().int(), type: z.string() }),
-          message_id: z.number().int().optional(),
+          chat: z.object({ id: z.number() }).passthrough().optional(),
+          message_id: z.number().optional(),
+          text: z.string().optional(),
         })
+        .passthrough()
         .optional(),
-      data: z.string().max(256),
+      data: z.string().optional(),
     })
+    .passthrough()
     .optional(),
 });
 
@@ -134,6 +141,34 @@ export async function sendTelegramMessage(
     cache: "no-store",
   });
   if (!response.ok) throw new Error("Telegram rejected the message");
+}
+
+export async function editTelegramMessageText(
+  chatId: string,
+  messageId: number,
+  text: string,
+  options?: TelegramSendOptions,
+): Promise<void> {
+  const config = telegramConfig();
+  if (!config) return;
+  const payload: Record<string, unknown> = {
+    chat_id: chatId,
+    message_id: messageId,
+    text: text.slice(0, 4_000),
+  };
+  if (options?.replyMarkup) {
+    payload.reply_markup = options.replyMarkup;
+  }
+  try {
+    await fetch(`https://api.telegram.org/bot${config.botToken}/editMessageText`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+    });
+  } catch {
+    // ignore
+  }
 }
 
 export async function answerTelegramCallbackQuery(
@@ -192,7 +227,7 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
     if (update.callback_query) {
       const cb = update.callback_query;
       const userId = String(cb.from.id);
-      const chatId = String(cb.message?.chat.id || cb.from.id);
+      const chatId = String(cb.message?.chat?.id || cb.from.id);
 
       await answerTelegramCallbackQuery(cb.id);
       const account = await getTelegramAccount(userId);
@@ -258,7 +293,7 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
         return;
       }
 
-      if (data.startsWith("task:done:")) {
+      if (data && data.startsWith("task:done:")) {
         const taskId = data.slice("task:done:".length);
         const sql = await readyClient();
         const res = await sql`
@@ -267,21 +302,27 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
           where id = ${taskId} and household_id = ${actor.householdId}
           returning id, title
         `;
-        if (res.length > 0) {
-          await sendTelegramMessage(
+        const title = res[0]?.title || "Uppgiften";
+        await answerTelegramCallbackQuery(cb.id, `✓ "${title}" är nu klarmarkerad!`);
+
+        if (cb.message?.message_id) {
+          const originalText = cb.message.text || `⏰ Påminnelse: ${title}`;
+          await editTelegramMessageText(
             chatId,
-            `✓ Uppgiften "${res[0].title}" är nu klarmarkerad!`,
-            { replyMarkup: DEFAULT_TELEGRAM_KEYBOARD },
+            cb.message.message_id,
+            `${originalText}\n\n✅ *Klarmarkerad!*`,
           );
         } else {
-          await sendTelegramMessage(chatId, "Uppgiften hittades inte eller är redan klar.", {
-            replyMarkup: DEFAULT_TELEGRAM_KEYBOARD,
-          });
+          await sendTelegramMessage(
+            chatId,
+            `✓ Uppgiften "${title}" är nu klarmarkerad!`,
+            { replyMarkup: DEFAULT_TELEGRAM_KEYBOARD },
+          );
         }
         return;
       }
 
-      if (data.startsWith("task:snooze:")) {
+      if (data && data.startsWith("task:snooze:")) {
         const taskId = data.slice("task:snooze:".length);
         const sql = await readyClient();
         const res = await sql`
@@ -291,16 +332,22 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
           where id = ${taskId} and household_id = ${actor.householdId}
           returning id, title
         `;
-        if (res.length > 0) {
-          await sendTelegramMessage(
+        const title = res[0]?.title || "Uppgiften";
+        await answerTelegramCallbackQuery(cb.id, `⏰ "${title}" har snoozats i 1 timme.`);
+
+        if (cb.message?.message_id) {
+          const originalText = cb.message.text || `⏰ Påminnelse: ${title}`;
+          await editTelegramMessageText(
             chatId,
-            `⏰ Påminnelsen för "${res[0].title}" har snoozats i 1 timme.`,
-            { replyMarkup: DEFAULT_TELEGRAM_KEYBOARD },
+            cb.message.message_id,
+            `${originalText}\n\n⏰ *Snoozad 1 timme*`,
           );
         } else {
-          await sendTelegramMessage(chatId, "Uppgiften hittades inte.", {
-            replyMarkup: DEFAULT_TELEGRAM_KEYBOARD,
-          });
+          await sendTelegramMessage(
+            chatId,
+            `⏰ Påminnelsen för "${title}" har snoozats i 1 timme.`,
+            { replyMarkup: DEFAULT_TELEGRAM_KEYBOARD },
+          );
         }
         return;
       }

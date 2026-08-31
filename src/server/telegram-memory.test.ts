@@ -235,16 +235,27 @@ describe("Telegram Jarvis Voice & Schedule Engine", () => {
       callback_query: {
         id: "cb-3",
         from: { id: 12345, first_name: "Jimmy", is_bot: false },
-        message: { chat: { id: 999, type: "private" } },
+        message: {
+          message_id: 456,
+          chat: { id: 999, type: "private" },
+          text: "⏰ Påminnelse från Jarvis: Packa lådor",
+        },
         data: "task:done:task-1",
       },
     });
 
     expect(fetch).toHaveBeenCalledWith(
-      "https://api.telegram.org/bottest-token/sendMessage",
+      "https://api.telegram.org/bottest-token/answerCallbackQuery",
       expect.objectContaining({
         method: "POST",
         body: expect.stringContaining("klarmarkerad"),
+      }),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottest-token/editMessageText",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("Klarmarkerad"),
       }),
     );
   });
