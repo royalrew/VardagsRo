@@ -1,6 +1,11 @@
 import OpenAI from "openai";
 
-import { addCalendarDateDays, calendarDateInTimeZone, DEFAULT_TIME_ZONE } from "@/lib/dates";
+import {
+  addCalendarDateDays,
+  calendarDateInTimeZone,
+  clockValueInTimeZone,
+  DEFAULT_TIME_ZONE,
+} from "@/lib/dates";
 import {
   type Project100MemoryCategory,
 } from "@/lib/project100-jarvis";
@@ -1109,11 +1114,14 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
 
   // 3. Deterministic Engine (Offline / Tests / Fallback)
   const lower = text.toLowerCase();
+  const clockStr = clockValueInTimeZone(now.toISOString(), DEFAULT_TIME_ZONE);
+  const hour = parseInt(clockStr.slice(0, 2), 10) || now.getHours();
+  const isEveningHour = hour >= 17 || hour < 4;
 
   // Proactive Morning Briefing trigger
   const isMorningBriefing =
-    /(?:god\s*morgon|morgon\s*brief|morgon\s*briefing|morgon\s*översikt|morgon\s*rapport|dagens\s*brief|dagens\s*schema|schema\s*idag|vad\s*händer\s*idag|hur\s*ser\s*dagen\s*ut|hur\s*ser\s*schemat\s*ut|ge\s*mig\s*(?:en\s*)?morgonbrief|briefa\s*mig)/i.test(lower) ||
-    ((/^(briefing|brief|morgonbrief|översikt|rapport)$/i.test(lower.trim()) || /(?:ge\s+mig\s+)?(?:en\s+)?(?:morgon)?briefing/i.test(lower)) && now.getHours() < 17);
+    /(?:god\s*morgon|morgon\s*brief|morgon\s*briefing|morgon\s*översikt|morgonens\s*briefing|morgon\s*rapport|dagens\s*brief|dagens\s*schema|schema\s*idag|vad\s*händer\s*idag|hur\s*ser\s*dagen\s*ut|hur\s*ser\s*schemat\s*ut|ge\s*mig\s*(?:en\s*)?morgonbrief|briefa\s*mig)/i.test(lower) ||
+    ((/^(briefing|brief|morgonbrief|morgonens briefing|dagens briefing|översikt|rapport)$/i.test(lower.trim()) || /(?:ge\s+mig\s+)?(?:en\s+)?(?:morgon)?briefing/i.test(lower)) && !isEveningHour);
 
   if (isMorningBriefing) {
     const toolResStr = await executeTool("get_daily_briefing", { type: "morning" });
@@ -1126,8 +1134,8 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
 
   // Proactive Evening Debrief trigger
   const isEveningBriefing =
-    /(?:kvälls\s*avstämning|kvälls\s*översikt|kvälls\s*briefing|kvälls\s*brief|kvälls\s*rapport|avstämning|hur\s*gick\s*dagen|sammanfatta\s*dagen|dagens\s*avstämning|ge\s*mig\s*(?:en\s*)?kvällsbrief)/i.test(lower) ||
-    ((/^(briefing|brief|kvällsbrief|avstämning)$/i.test(lower.trim()) || /(?:ge\s+mig\s+)?(?:en\s+)?kvällsbriefing/i.test(lower)) && now.getHours() >= 17);
+    /(?:kvälls\s*avstämning|kvälls\s*översikt|kvälls\s*briefing|kvälls\s*brief|kvällens\s*briefing|kvälls\s*rapport|avstämning|hur\s*gick\s*dagen|sammanfatta\s*dagen|dagens\s*avstämning|ge\s*mig\s*(?:en\s*)?kvällsbrief)/i.test(lower) ||
+    ((/^(briefing|brief|kvällsbrief|kvällens briefing|dagens briefing|avstämning)$/i.test(lower.trim()) || /(?:ge\s+mig\s+)?(?:en\s+)?kvällsbriefing/i.test(lower)) && isEveningHour);
 
   if (isEveningBriefing) {
     const toolResStr = await executeTool("get_daily_briefing", { type: "evening" });

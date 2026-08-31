@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   addCalendarDateDays,
   calendarDateInTimeZone,
+  clockValueInTimeZone,
   DEFAULT_TIME_ZONE,
   zonedDateTimeToInstant,
 } from "@/lib/dates";
@@ -31,14 +32,27 @@ import { logProject100Meal } from "@/server/project100-nutrition";
 import { answerFamilyQuestion } from "@/server/questions";
 import { generateTelegramLinkCode, hashTelegramLinkCode } from "@/server/telegram-security";
 
-export const DEFAULT_TELEGRAM_KEYBOARD = {
-  keyboard: [
-    [{ text: "🌅 Dagens Briefing" }, { text: "🏋️‍♂️ Dagens Träning" }],
-    [{ text: "🥩 Protein & Mat" }, { text: "📅 Familjens Schema" }],
-  ],
-  resize_keyboard: true,
-  is_persistent: true,
-};
+export function isEveningTime(now: Date = new Date()): boolean {
+  const clockStr = clockValueInTimeZone(now.toISOString(), DEFAULT_TIME_ZONE);
+  const hour = parseInt(clockStr.slice(0, 2), 10) || 12;
+  return hour >= 17 || hour < 4;
+}
+
+export function getTelegramReplyKeyboard(now: Date = new Date()) {
+  const isEvening = isEveningTime(now);
+  const briefingButtonText = isEvening ? "🌙 Kvällens Briefing" : "🌅 Dagens Briefing";
+
+  return {
+    keyboard: [
+      [{ text: briefingButtonText }, { text: "🏋️‍♂️ Dagens Träning" }],
+      [{ text: "🥩 Protein & Mat" }, { text: "📅 Familjens Schema" }],
+    ],
+    resize_keyboard: true,
+    is_persistent: true,
+  };
+}
+
+export const DEFAULT_TELEGRAM_KEYBOARD = getTelegramReplyKeyboard();
 
 export const MORNING_INLINE_KEYBOARD = {
   inline_keyboard: [
@@ -535,10 +549,10 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
 
         const isBriefingResponse = agentResult.executedActions.includes("get_daily_briefing");
         const replyMarkup = isBriefingResponse
-          ? new Date().getHours() >= 17
+          ? isEveningTime()
             ? EVENING_INLINE_KEYBOARD
             : MORNING_INLINE_KEYBOARD
-          : DEFAULT_TELEGRAM_KEYBOARD;
+          : getTelegramReplyKeyboard();
 
         await sendTelegramMessage(chatId, agentResult.text, { replyMarkup });
 
@@ -563,7 +577,7 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
     const data = await loadDashboard(actor);
     const answer = await answerFamilyQuestion(messageText, data, actor.personId);
     await sendTelegramMessage(chatId, answer.text, {
-      replyMarkup: DEFAULT_TELEGRAM_KEYBOARD,
+      replyMarkup: getTelegramReplyKeyboard(),
     });
   } catch (error) {
     await releaseTelegramUpdate(update.update_id).catch(() => undefined);
