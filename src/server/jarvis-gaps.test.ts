@@ -15,6 +15,7 @@ vi.mock("@/server/audit", () => ({
 }));
 
 import {
+  deleteJarvisCapabilityGap,
   listJarvisCapabilityGaps,
   logJarvisCapabilityGap,
   updateJarvisCapabilityGapStatus,
@@ -134,6 +135,23 @@ describe("Jarvis Capability Gaps Engine", () => {
       TEST_ACTOR,
       expect.objectContaining({
         action: "jarvis.gap.update",
+        targetType: "jarvis_capability_gap",
+        targetId: "gap-101",
+      }),
+    );
+  });
+
+  it("deletes capability gap and records audit", async () => {
+    dependencies.sql.mockResolvedValueOnce([{ id: "gap-101" }]);
+
+    const deleted = await deleteJarvisCapabilityGap(TEST_ACTOR, "gap-101");
+
+    expect(deleted).toBe(true);
+    expect(dependencies.recordAudit).toHaveBeenCalledWith(
+      expect.anything(),
+      TEST_ACTOR,
+      expect.objectContaining({
+        action: "jarvis.gap.deleted",
         targetType: "jarvis_capability_gap",
         targetId: "gap-101",
       }),

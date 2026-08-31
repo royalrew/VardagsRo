@@ -89,6 +89,10 @@ export function JarvisWorkspace({
     }>
   >([]);
   const [isLoadingGaps, setIsLoadingGaps] = useState(false);
+  const [showAddGap, setShowAddGap] = useState(false);
+  const [newGapQuery, setNewGapQuery] = useState("");
+  const [newGapCategory, setNewGapCategory] = useState("general");
+  const [newGapNotes, setNewGapNotes] = useState("");
 
   async function loadGaps() {
     setIsLoadingGaps(true);
@@ -102,6 +106,49 @@ export function JarvisWorkspace({
       // ignore
     } finally {
       setIsLoadingGaps(false);
+    }
+  }
+
+  async function handleCreateGap(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newGapQuery.trim()) return;
+
+    try {
+      const res = await fetch("/api/project100/jarvis/gaps", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          query: newGapQuery.trim(),
+          categoryHint: newGapCategory || undefined,
+          notes: newGapNotes.trim() || undefined,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.gap) {
+          setGaps((prev) => [data.gap, ...prev]);
+        }
+        setShowAddGap(false);
+        setNewGapQuery("");
+        setNewGapCategory("general");
+        setNewGapNotes("");
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  async function handleDeleteGap(id: string) {
+    if (!confirm("Vill du ta bort denna önskan från backloggen?")) return;
+    try {
+      const res = await fetch(`/api/project100/jarvis/gaps/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setGaps((prev) => prev.filter((g) => g.id !== id));
+      }
+    } catch {
+      // ignore
     }
   }
 
@@ -891,31 +938,104 @@ export function JarvisWorkspace({
           <div className="p100-memories-panel">
             <div className="p100-memories-header">
               <div>
-                <strong>Önskelista / Backlogg</strong>
+                <strong>Önskelista & Backlogg</strong>
                 <p>
-                  Frågor och kommandon du ställt i Telegram eller webben som
-                  Jarvis saknar funktion för än.
+                  Frågor och funktioner du efterfrågat i vardagen via Telegram eller webben.
                 </p>
               </div>
-              <button
-                type="button"
-                className="p100-btn p100-btn-sm"
-                onClick={() => void loadGaps()}
-                disabled={isLoadingGaps}
-              >
-                <RotateCcw /> Uppdatera
-              </button>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className="p100-btn p100-btn-sm"
+                  onClick={() => setShowAddGap(true)}
+                >
+                  <Plus /> Skriv upp
+                </button>
+                <button
+                  type="button"
+                  className="p100-btn p100-btn-sm"
+                  onClick={() => void loadGaps()}
+                  disabled={isLoadingGaps}
+                  aria-label="Uppdatera lista"
+                >
+                  <RotateCcw />
+                </button>
+              </div>
             </div>
+
+            {showAddGap ? (
+              <form className="p100-memory-form" onSubmit={handleCreateGap}>
+                <header>
+                  <strong>Skriv upp i önskelistan</strong>
+                  <button
+                    type="button"
+                    aria-label="Stäng"
+                    onClick={() => setShowAddGap(false)}
+                  >
+                    <X />
+                  </button>
+                </header>
+                <div className="p100-field">
+                  <label htmlFor="gap-cat">Kategori</label>
+                  <select
+                    id="gap-cat"
+                    value={newGapCategory}
+                    onChange={(e) => setNewGapCategory(e.target.value)}
+                  >
+                    <option value="car">🚗 Bilen & Fordon</option>
+                    <option value="finance">💰 Ekonomi & Avtal</option>
+                    <option value="nutrition">🥗 Mat & Kylskåp</option>
+                    <option value="kids">🎒 Barnen & Skola</option>
+                    <option value="house">🏠 Hushåll & Hem</option>
+                    <option value="training">🏋️‍♂️ Träning & Hälsa</option>
+                    <option value="general">✨ Övrigt</option>
+                  </select>
+                </div>
+                <div className="p100-field">
+                  <label htmlFor="gap-query">Önskad funktion eller fråga</label>
+                  <textarea
+                    id="gap-query"
+                    value={newGapQuery}
+                    onChange={(e) => setNewGapQuery(e.target.value)}
+                    placeholder="t.ex. 'Kolla däckbyte och besiktningstid för bilen' eller 'AI-förslag på middag av resterna i kylen'"
+                    rows={2}
+                    required
+                  />
+                </div>
+                <div className="p100-field">
+                  <label htmlFor="gap-notes">Anteckning / Detaljer (valfritt)</label>
+                  <input
+                    id="gap-notes"
+                    type="text"
+                    value={newGapNotes}
+                    onChange={(e) => setNewGapNotes(e.target.value)}
+                    placeholder="t.ex. 'Kolla Transportstyrelsen API eller räkna på fast pris'"
+                  />
+                </div>
+                <div className="p100-memory-form-actions">
+                  <button
+                    type="button"
+                    className="p100-btn"
+                    onClick={() => setShowAddGap(false)}
+                  >
+                    Avbryt
+                  </button>
+                  <button type="submit" className="p100-btn p100-btn-primary">
+                    Spara i önskelistan
+                  </button>
+                </div>
+              </form>
+            ) : null}
 
             {isLoadingGaps ? (
               <p className="p100-empty-copy">Laddar önskemål...</p>
             ) : gaps.length === 0 ? (
               <div className="p100-memory-empty">
                 <Lightbulb />
-                <h4>Inga olösta önskemål loggade</h4>
+                <h4>Inga önskemål loggade än</h4>
                 <p>
                   När du frågar Jarvis om något som koden inte stödjer än, sparas
-                  det automatiskt här som underlag för nästa utvecklingssession.
+                  det automatiskt här som underlag för nästa utvecklingssession. Du kan även klicka på &quot;Skriv upp&quot; för att lägga in idéer direkt.
                 </p>
               </div>
             ) : (
@@ -956,17 +1076,28 @@ export function JarvisWorkspace({
                     ) : null}
                     <footer>
                       <small>{gap.createdAt.slice(0, 10)}</small>
-                      <button
-                        type="button"
-                        className="p100-btn p100-btn-xs"
-                        onClick={() =>
-                          void handleToggleGapStatus(gap.id, gap.status)
-                        }
-                      >
-                        {gap.status === "implemented"
-                          ? "Markera som väntande"
-                          : "Markera som löst"}
-                      </button>
+                      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                        <button
+                          type="button"
+                          className="p100-btn p100-btn-xs"
+                          onClick={() =>
+                            void handleToggleGapStatus(gap.id, gap.status)
+                          }
+                        >
+                          {gap.status === "implemented"
+                            ? "Markera som väntande"
+                            : "Markera som löst"}
+                        </button>
+                        <button
+                          type="button"
+                          className="p100-memory-del-btn"
+                          title="Ta bort från backloggen"
+                          aria-label="Ta bort från backloggen"
+                          onClick={() => void handleDeleteGap(gap.id)}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </footer>
                   </article>
                 ))}

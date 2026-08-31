@@ -65,6 +65,7 @@ export type AuditAction =
   | "project100.content.media.detach"
   | "jarvis.gap.logged"
   | "jarvis.gap.update"
+  | "jarvis.gap.deleted"
   | "login.create";
 
 /**

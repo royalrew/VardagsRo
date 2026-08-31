@@ -169,6 +169,8 @@ vi.mock("@/server/project100-content", () => ({
 vi.mock("@/server/jarvis-gaps", () => ({
   listJarvisCapabilityGaps: vi.fn(async () => []),
   updateJarvisCapabilityGapStatus: vi.fn(async () => ({ id: "gap-1", status: "implemented" })),
+  logJarvisCapabilityGap: vi.fn(async () => ({ id: "gap-1", rawQuery: "Kolla besiktning", status: "pending" })),
+  deleteJarvisCapabilityGap: vi.fn(async () => true),
 }));
 vi.mock("@/server/audio-synthesis", () => ({
   synthesizeJarvisSpeech: vi.fn(async () => Buffer.from("audio-mock-bytes")),
@@ -244,8 +246,14 @@ import {
 } from "@/app/api/project100/content/projects/route";
 import { POST as contentMediaPost } from "@/app/api/project100/content/projects/[id]/media/route";
 import { POST as contentSuggestionsPost } from "@/app/api/project100/content/suggestions/route";
-import { GET as jarvisGapsGet } from "@/app/api/project100/jarvis/gaps/route";
-import { PATCH as jarvisGapsPatch } from "@/app/api/project100/jarvis/gaps/[id]/route";
+import {
+  GET as jarvisGapsGet,
+  POST as jarvisGapsPost,
+} from "@/app/api/project100/jarvis/gaps/route";
+import {
+  DELETE as jarvisGapsDelete,
+  PATCH as jarvisGapsPatch,
+} from "@/app/api/project100/jarvis/gaps/[id]/route";
 import { POST as jarvisSpeakPost } from "@/app/api/project100/jarvis/speak/route";
 import {
   GET as jarvisBriefingGet,
@@ -1440,15 +1448,37 @@ describe("Projekt 100 Content is held behind the adult gate and requires CSRF on
     );
     expect(childPatch.status).toBe(403);
 
+    const childPost = await jarvisGapsPost(
+      jsonPost(gapsUrl, { query: "Kolla besiktning" }),
+    );
+    expect(childPost.status).toBe(403);
+
+    const childDelete = await jarvisGapsDelete(
+      new Request(`${gapsUrl}/gap-1`, { method: "DELETE" }),
+      { params: Promise.resolve({ id: "gap-1" }) },
+    );
+    expect(childDelete.status).toBe(403);
+
     harness.state.membership = membership("adult");
     const adultGet = await jarvisGapsGet(new Request(gapsUrl));
     expect(adultGet.status).toBe(200);
+
+    const adultPost = await jarvisGapsPost(
+      jsonPost(gapsUrl, { query: "Kolla besiktning" }),
+    );
+    expect(adultPost.status).toBe(201);
 
     const adultPatch = await jarvisGapsPatch(
       jsonPatch(`${gapsUrl}/gap-1`, { status: "implemented" }),
       { params: Promise.resolve({ id: "gap-1" }) },
     );
     expect(adultPatch.status).toBe(200);
+
+    const adultDelete = await jarvisGapsDelete(
+      new Request(`${gapsUrl}/gap-1`, { method: "DELETE" }),
+      { params: Promise.resolve({ id: "gap-1" }) },
+    );
+    expect(adultDelete.status).toBe(200);
   });
 
   it("guards jarvis speak speech synthesis", async () => {

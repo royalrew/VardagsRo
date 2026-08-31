@@ -183,3 +183,30 @@ export async function updateJarvisCapabilityGapStatus(
 
   return mapGap(rows[0]);
 }
+
+export async function deleteJarvisCapabilityGap(
+  actor: ActorContext,
+  id: string,
+): Promise<boolean> {
+  assertProject100Adult(actor);
+  const sql = await readyClient();
+
+  const rows = await sql<{ id: string }[]>`
+    delete from jarvis_capability_gaps
+    where id = ${id} and user_id = ${actor.userId}
+    returning id
+  `;
+
+  if (rows.length === 0) {
+    return false;
+  }
+
+  await recordAudit(sql, actor, {
+    action: "jarvis.gap.deleted",
+    targetType: "jarvis_capability_gap",
+    targetId: id,
+    metadata: {},
+  });
+
+  return true;
+}
