@@ -15,6 +15,15 @@ Varje gång en förfrågan faller utanför Jarvis befintliga verktyg loggas den 
 
 ---
 
+## ✅ Nyligen Implementerade & Slutförda Funktioner
+
+* [x] **Telegram Påminnelser med schema-ankare & tidszoner:** "Påminn mig att köpa mjölk på fredag efter jobbet" eller "Påminn mig kl 20:00" skapar uppgift och pushar automatisk påminnelse till Telegram vid rätt klockslag svensk tid via den inbyggda bakgrundsmotorn.
+* [x] **Morgon- & Kvällsbriefing i Telegram & Webb:** Fullt stöd för `/briefing`, `/morgonbrief`, `/kvallsbrief` och naturliga fraser ("God morgon Jarvis, vad har vi idag?", "Hur ser dagen ut?", "Kvällsavstämning", "Kvällsbrief"). Sammanfattar arbetspass, familj/skola, träningsfönster, 160g proteinmål & matlådor samt dagbok.
+* [x] **Projekt 100 Före/Efter-kroppsscanning & Analys:** Interaktiv split/side/fade-jämförelse, tidsfilter (Start vs Senaste, 30d, 90d) och automatisk muskelökningsanalys (vikt vs midjemått).
+* [x] **Röstinmatning & Tal-syntes i Telegram:** Röstmeddelanden i Telegram transkriberas via Whisper och besvaras med röstsvar (Onyx) och text.
+
+---
+
 ## 📋 Identifierade funktionsområden för framtida utbyggnad
 
 ### 1. Bilen & Fordon (`car`)
