@@ -277,6 +277,38 @@ describe("jarvis-agent", () => {
     expect(res.text).toContain("morgonöversikt");
   });
 
+  it("handles short morning brief phrasings ('Morgonbrief' and 'Vad händer idag?')", async () => {
+    const res1 = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Morgonbrief",
+      { personName: "Jimmy" },
+    );
+    expect(res1.executedActions).toContain("get_daily_briefing");
+
+    const res2 = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Vad händer idag?",
+      { personName: "Jimmy" },
+    );
+    expect(res2.executedActions).toContain("get_daily_briefing");
+  });
+
+  it("handles evening briefing triggers ('Kvällsbrief' and 'Kvällsavstämning')", async () => {
+    const res1 = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Kvällsbrief",
+      { personName: "Jimmy" },
+    );
+    expect(res1.executedActions).toContain("get_daily_briefing");
+
+    const res2 = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Kvällsavstämning",
+      { personName: "Jimmy" },
+    );
+    expect(res2.executedActions).toContain("get_daily_briefing");
+  });
+
   it("handles contextual reminder ('Påminn mig att jag skall storhandla på fredag efter jobbet')", async () => {
     const res = await processJarvisAgentMessage(
       TEST_ACTOR,

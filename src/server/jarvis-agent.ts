@@ -1045,7 +1045,8 @@ Du hjälper ${callerName} med hushållets kalender, minnen, dagbok, idéer, att-
 
 IDAG ÄR: ${today} (tidszon Europe/Stockholm, klockan är cirka ${now.toTimeString().slice(0, 5)}).
 DITT TILLTAL: Varmt, personligt, professionellt och koncist ("Glass & Steel"). Hälsa gärna med "${getGreeting(callerName, now)}" om användaren inleder en konversation.
-NOLL HALLUCINATION: Gissa aldrig kalenderhändelser, koder, vikt eller fakta. Använd alltid verktygen för att slå upp schema (check_schedule), skapa uppgifter (create_task), spara/söka minnen, logga mätningar (log_body_measurement), logga protein/mat (log_quick_nutrition), logga pass (log_quick_workout / complete_planned_session) eller logga dagbok (save_journal).
+NOLL HALLUCINATION: Gissa aldrig kalenderhändelser, koder, vikt eller fakta. Använd alltid verktygen för att slå upp schema (check_schedule), hämta daglig briefing (get_daily_briefing), skapa uppgifter (create_task), spara/söka minnen, logga mätningar (log_body_measurement), logga protein/mat (log_quick_nutrition), logga pass (log_quick_workout / complete_planned_session) eller logga dagbok (save_journal).
+BRIEFING & DAGLIG ÖVERSIKT: När användaren efterfrågar en briefing, morgonöversikt, kvällsavstämning eller frågar vad som händer idag / hur dagen ser ut / hur dagen gick, anropa ALLTID verktyget "get_daily_briefing" med type "morning" (på morgonen/dagen) eller "evening" (på kvällen / vid summering). Återge verktygets strukturerade sammanfattning.
 KOMBINERADE HANDLINGAR: Om användaren nämner flera saker (t.ex. körde benpass OCH sprang 5 km, eller vägde sig OCH drack en shake), anropa ALLA relevanta verktyg och ge ett komplett, strukturerat svar som bekräftar alla delar.
 MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pass, ge konkreta siffror (t.ex. hur mycket protein som återstår till dagens 160g-mål, eller hur mycket som återstår till 100 kg-målet). Undvik tomma klyschor.`;
 
@@ -1110,10 +1111,11 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
   const lower = text.toLowerCase();
 
   // Proactive Morning Briefing trigger
-  if (
-    /(?:god\s*morgon|morgonbriefing|morgonöversikt)/i.test(lower) &&
-    /(?:vad|hur|läge|översikt|briefing|schema|idag|plan|status)/i.test(lower)
-  ) {
+  const isMorningBriefing =
+    /(?:god\s*morgon|morgon\s*brief|morgon\s*briefing|morgon\s*översikt|morgon\s*rapport|dagens\s*brief|dagens\s*schema|schema\s*idag|vad\s*händer\s*idag|hur\s*ser\s*dagen\s*ut|hur\s*ser\s*schemat\s*ut|ge\s*mig\s*(?:en\s*)?morgonbrief|briefa\s*mig)/i.test(lower) ||
+    ((/^(briefing|brief|morgonbrief|översikt|rapport)$/i.test(lower.trim()) || /(?:ge\s+mig\s+)?(?:en\s+)?(?:morgon)?briefing/i.test(lower)) && now.getHours() < 17);
+
+  if (isMorningBriefing) {
     const toolResStr = await executeTool("get_daily_briefing", { type: "morning" });
     const toolRes = JSON.parse(toolResStr);
     return {
@@ -1123,10 +1125,11 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
   }
 
   // Proactive Evening Debrief trigger
-  if (
-    /(?:kvällsavstämning|kvällsöversikt|avstämning|hur gick dagen|god kväll)/i.test(lower) &&
-    /(?:hur gick|avstämning|status|sammanfatta|idag|resultat)/i.test(lower)
-  ) {
+  const isEveningBriefing =
+    /(?:kvälls\s*avstämning|kvälls\s*översikt|kvälls\s*briefing|kvälls\s*brief|kvälls\s*rapport|avstämning|hur\s*gick\s*dagen|sammanfatta\s*dagen|dagens\s*avstämning|ge\s*mig\s*(?:en\s*)?kvällsbrief)/i.test(lower) ||
+    ((/^(briefing|brief|kvällsbrief|avstämning)$/i.test(lower.trim()) || /(?:ge\s+mig\s+)?(?:en\s+)?kvällsbriefing/i.test(lower)) && now.getHours() >= 17);
+
+  if (isEveningBriefing) {
     const toolResStr = await executeTool("get_daily_briefing", { type: "evening" });
     const toolRes = JSON.parse(toolResStr);
     return {

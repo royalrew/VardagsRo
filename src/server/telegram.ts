@@ -13,6 +13,10 @@ import {
 } from "@/server/database";
 import { processJarvisAgentMessage } from "@/server/jarvis-agent";
 import {
+  generateEveningBriefing,
+  generateMorningBriefing,
+} from "@/server/jarvis-briefing";
+import {
   dispatchDueTelegramReminders,
   ensureReminderTicker,
 } from "@/server/jarvis-reminders";
@@ -77,7 +81,7 @@ export async function sendTelegramVoice(chatId: string, audioBuffer: Buffer): Pr
 }
 
 function command(text: string): string | null {
-  const match = /^\/(start|help|whoami)(?:@[A-Za-z0-9_]+)?(?:\s|$)/i.exec(text.trim());
+  const match = /^\/(start|help|whoami|briefing|brief|morgonbrief|kvallsbrief)(?:@[A-Za-z0-9_]+)?(?:\s|$)/i.exec(text.trim());
   return match?.[1]?.toLocaleLowerCase("en-US") ?? null;
 }
 
@@ -101,7 +105,7 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
       if (account) {
         await sendTelegramMessage(
           chatId,
-          `Du är redan kopplad som ${account.personName}. Skriv en fråga om familjens schema, eller /help för hjälp.`,
+          `Du är redan kopplad som ${account.personName}. Skriv en fråga om familjens schema, be om /briefing, eller /help för hjälp.`,
         );
         return;
       }
@@ -135,13 +139,36 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
     if (requestedCommand === "help") {
       await sendTelegramMessage(
         chatId,
-        "Jag är Jarvis, din personliga digitala kollega.\n\nDu kan skriva eller tala in vad som helst:\n• Frågor & Schema: ”Kolla om jag jobbar den 25e september och lägg in att boka restaurang”\n• Spara minne: ”Jobb - Koden till inkontinensförrådet är 2214” eller ”Bilen - Däck 205/55 R16”\n• Sök i minnet: ”Vad är koden till förrådet?”\n• Dagbok & Mående: ”Kändes bra idag, energi 4 av 5, sov 7 timmar”\n\n/help – visa hjälp\n/whoami – visa din koppling\n/start – kontrollera kopplingen",
+        "Jag är Jarvis, din personliga digitala kollega.\n\nDu kan skriva eller tala in vad som helst:\n• Morgon-/kvällsbriefing: ”God morgon Jarvis, vad händer idag?”, ”Hur ser dagen ut?”, ”Kvällsavstämning” eller /briefing\n• Påminnelser: ”Påminn mig att köpa mjölk på fredag efter jobbet” eller ”Påminn mig kl 20:00”\n• Frågor & Schema: ”Kolla om jag jobbar den 25e september och lägg in att boka restaurang”\n• Spara minne: ”Jobb - Koden till inkontinensförrådet är 2214” eller ”Bilen - Däck 205/55 R16”\n• Sök i minnet: ”Vad är koden till förrådet?”\n• Dagbok & Mående: ”Kändes bra idag, energi 4 av 5, sov 7 timmar”\n\n/briefing – visa dagens briefing/översikt\n/help – visa hjälp\n/whoami – visa din koppling\n/start – kontrollera kopplingen",
       );
       return;
     }
     if (requestedCommand === "whoami") {
       await sendTelegramMessage(chatId, `Du är kopplad som ${account.personName} i Vardagsro.`);
       return;
+    }
+
+    // The bot reads the household its chat is linked to, through the same
+    // permission layer as the browser. It never reaches a household by default.
+    const actor = await requireTelegramActor(userId);
+
+    // Direct /briefing slash command support
+    if (
+      requestedCommand === "briefing" ||
+      requestedCommand === "brief" ||
+      requestedCommand === "morgonbrief" ||
+      requestedCommand === "kvallsbrief"
+    ) {
+      if (actor.personType === "adult") {
+        const isEvening =
+          requestedCommand === "kvallsbrief" ||
+          (requestedCommand !== "morgonbrief" && new Date().getHours() >= 17);
+        const briefing = isEvening
+          ? await generateEveningBriefing(actor, { callerName: account.personName })
+          : await generateMorningBriefing(actor, { callerName: account.personName });
+        await sendTelegramMessage(chatId, briefing.text);
+        return;
+      }
     }
 
     let messageText = message.text?.trim() || "";
@@ -175,10 +202,6 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
       await sendTelegramMessage(chatId, "Meddelandet behöver vara mellan 2 och 2 000 tecken.");
       return;
     }
-
-    // The bot reads the household its chat is linked to, through the same
-    // permission layer as the browser. It never reaches a household by default.
-    const actor = await requireTelegramActor(userId);
 
     // If adult, run through Jarvis Agentic Brain
     if (actor.personType === "adult") {
