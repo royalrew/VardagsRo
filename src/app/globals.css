@@ -8358,6 +8358,147 @@ button.event-row:hover {
   cursor: not-allowed;
 }
 
+/* Milestone Progress Gauge */
+.p100-milestone-gauge {
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.p100-gauge-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.p100-gauge-stat small {
+  display: block;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.p100-gauge-stat strong {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.p100-gauge-stat.end {
+  text-align: right;
+}
+
+.p100-gauge-center {
+  text-align: center;
+}
+
+.p100-gauge-percentage {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #38bdf8;
+  line-height: 1.1;
+}
+
+.p100-gauge-center small {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.p100-gauge-track {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  position: relative;
+}
+
+.p100-gauge-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #38bdf8, #34d399);
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+}
+
+.p100-gauge-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* Composition Insight Badge */
+.p100-composition-insight-badge {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.9rem 1.1rem;
+  border-radius: 10px;
+  background: rgba(56, 189, 248, 0.07);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: #e0f2fe;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  margin: 1.25rem 0;
+}
+
+.p100-composition-insight-badge .p100-insight-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+/* Body Compare Quick Presets */
+.p100-compare-presets-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
+}
+
+.p100-presets-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-right: 0.25rem;
+}
+
+.p100-preset-chip {
+  padding: 0.25rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.p100-preset-chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.p100-preset-chip.active {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+
+
 
 
 

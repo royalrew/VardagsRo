@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildProject100MetricSeries,
   buildProject100Milestones,
+  calculateJourneyProgress,
   project100MetricLabel,
   type Project100BodyEntry,
   type Project100WeightPoint,
@@ -140,5 +141,31 @@ describe("Projekt 100 measurement series", () => {
   it("returns nothing for a period with nothing measured in it", () => {
     expect(buildProject100MetricSeries([])).toEqual([]);
     expect(buildProject100MetricSeries([entry("2026-03-01", [])])).toEqual([]);
+  });
+});
+
+describe("Projekt 100 journey progress calculator", () => {
+  it("calculates percentage and remaining kg when gaining toward 100 kg", () => {
+    const history = weights(["2026-01-01", 80.0], ["2026-06-01", 85.0]);
+    const goal = { weightGoalKg: 100.0, startWeightKg: 80.0, heightCm: 182 };
+
+    const progress = calculateJourneyProgress(history, goal);
+
+    expect(progress.startWeightKg).toBe(80.0);
+    expect(progress.currentWeightKg).toBe(85.0);
+    expect(progress.goalWeightKg).toBe(100.0);
+    expect(progress.progressPercent).toBe(25.0); // 5kg out of 20kg = 25%
+    expect(progress.weightDeltaKg).toBe(5.0);
+    expect(progress.remainingKg).toBe(15.0);
+  });
+
+  it("handles missing goal or start weight gracefully", () => {
+    const history = weights(["2026-01-01", 80.0]);
+    const goal = { weightGoalKg: null, startWeightKg: null, heightCm: null };
+
+    const progress = calculateJourneyProgress(history, goal);
+
+    expect(progress.progressPercent).toBeNull();
+    expect(progress.remainingKg).toBeNull();
   });
 });

@@ -20,6 +20,7 @@ import { addCalendarDateDays } from "@/lib/dates";
 import {
   buildProject100MetricSeries,
   buildProject100Milestones,
+  calculateJourneyProgress,
   formatDelta,
   formatMeasurement,
   measurementOf,
@@ -153,6 +154,41 @@ export function BodyJourney({
     latestWeight !== null && goal.weightGoalKg !== null
       ? goal.weightGoalKg - latestWeight.value
       : null;
+
+  const progress = useMemo(
+    () => calculateJourneyProgress(journey.weightHistory, goal),
+    [journey.weightHistory, goal],
+  );
+
+  const waistSeries = series.find((s) => s.metric === "waist");
+  const weightSeries = series.find((s) => s.metric === "weight");
+  const compositionInsight = useMemo(() => {
+    if (!waistSeries || waistSeries.points.length < 2 || !weightSeries || weightSeries.points.length < 2) {
+      return null;
+    }
+    const firstWeight = weightSeries.points[0].value;
+    const lastWeight = weightSeries.points[weightSeries.points.length - 1].value;
+    const firstWaist = waistSeries.points[0].value;
+    const lastWaist = waistSeries.points[waistSeries.points.length - 1].value;
+
+    const weightDiff = Math.round((lastWeight - firstWeight) * 10) / 10;
+    const waistDiff = Math.round((lastWaist - firstWaist) * 10) / 10;
+
+    let verdict = "Stabil kroppsform i perioden.";
+    let icon = "⚖️";
+    if (weightDiff > 0 && waistDiff <= 0) {
+      verdict = "✨ Ren muskelökning! Vikten ökar medan midjemåttet hålls stabilt eller minskar.";
+      icon = "🔥";
+    } else if (weightDiff > 0 && waistDiff > 0) {
+      verdict = "📈 Massaökning (Bulk): Både vikt och midjemått ökar.";
+      icon = "💪";
+    } else if (weightDiff < 0 && waistDiff < 0) {
+      verdict = "⚡ Fettminskning (Deff): Både vikt och midjemått minskar.";
+      icon = "🎯";
+    }
+
+    return { weightDiff, waistDiff, verdict, icon };
+  }, [waistSeries, weightSeries]);
 
   const columns = useMemo(() => {
     const seen = new Map<string, { metric: string; label: string; unit: "kg" | "cm" }>();
@@ -443,13 +479,53 @@ export function BodyJourney({
         <section className="p100-body-milestones">
           <header>
             <div>
-              <span>Riktning</span>
-              <h2>Milstolpar</h2>
+              <span>Riktning mot {goal.weightGoalKg ? `${goal.weightGoalKg} kg` : "100 kg"}</span>
+              <h2>Milstolpar & Målföljning</h2>
             </div>
             <small>
               {reached} av {milestones.length} passerade
             </small>
           </header>
+
+          {progress.progressPercent !== null ? (
+            <div className="p100-milestone-gauge">
+              <div className="p100-gauge-header">
+                <div className="p100-gauge-stat">
+                  <small>Startvikt</small>
+                  <strong>{formatMeasurement(progress.startWeightKg ?? 0, "kg")}</strong>
+                </div>
+                <div className="p100-gauge-center">
+                  <span className="p100-gauge-percentage">{progress.progressPercent}%</span>
+                  <small>av resan till målet</small>
+                </div>
+                <div className="p100-gauge-stat end">
+                  <small>Målvikt</small>
+                  <strong>{formatMeasurement(progress.goalWeightKg ?? 100, "kg")}</strong>
+                </div>
+              </div>
+
+              <div className="p100-gauge-track">
+                <div
+                  className="p100-gauge-fill"
+                  style={{ width: `${progress.progressPercent}%` }}
+                />
+              </div>
+
+              <div className="p100-gauge-footer">
+                <span>
+                  {progress.weightDeltaKg !== null && progress.weightDeltaKg > 0
+                    ? `+${progress.weightDeltaKg} kg sedan start`
+                    : `${progress.weightDeltaKg ?? 0} kg sedan start`}
+                </span>
+                <span>
+                  {progress.remainingKg !== null
+                    ? `${progress.remainingKg} kg kvar till ${progress.goalWeightKg ?? 100} kg`
+                    : ""}
+                </span>
+              </div>
+            </div>
+          ) : null}
+
           <ol>
             {milestones.map((milestone) => (
               <li
@@ -476,6 +552,17 @@ export function BodyJourney({
               </li>
             ))}
           </ol>
+
+          {compositionInsight ? (
+            <div className="p100-composition-insight-badge">
+              <span className="p100-insight-icon">{compositionInsight.icon}</span>
+              <div>
+                <strong>Formanalys ({activePreset === "allt" ? "Hela resan" : `${activePreset} dagar`}):</strong>{" "}
+                {compositionInsight.verdict} (Vikt: {compositionInsight.weightDiff > 0 ? `+${compositionInsight.weightDiff}` : compositionInsight.weightDiff} kg, Midja: {compositionInsight.waistDiff > 0 ? `+${compositionInsight.waistDiff}` : compositionInsight.waistDiff} cm).
+              </div>
+            </div>
+          ) : null}
+
           <p>
             100 kg är en riktning, inte ett bevis på ren muskelökning. Måtten och styrkan
             bredvid vikten är det som säger vad förändringen består av.

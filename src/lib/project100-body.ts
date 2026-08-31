@@ -182,3 +182,47 @@ export function formatDelta(value: number, unit: Project100MeasurementUnit): str
   const sign = rounded > 0 ? "+" : "";
   return `${sign}${rounded.toLocaleString("sv-SE", { maximumFractionDigits: 1 })} ${unit}`;
 }
+
+export interface Project100JourneyProgress {
+  startWeightKg: number | null;
+  currentWeightKg: number | null;
+  goalWeightKg: number | null;
+  progressPercent: number | null;
+  weightDeltaKg: number | null;
+  remainingKg: number | null;
+}
+
+export function calculateJourneyProgress(
+  weightHistory: Project100WeightPoint[],
+  goal: Project100BodyGoal,
+): Project100JourneyProgress {
+  const start = goal.startWeightKg ?? weightHistory[0]?.value ?? null;
+  const current = weightHistory.at(-1)?.value ?? null;
+  const target = goal.weightGoalKg;
+
+  if (start === null || current === null || target === null || start === target) {
+    return {
+      startWeightKg: start,
+      currentWeightKg: current,
+      goalWeightKg: target,
+      progressPercent: null,
+      weightDeltaKg: current !== null && start !== null ? Math.round((current - start) * 10) / 10 : null,
+      remainingKg: current !== null && target !== null ? Math.round(Math.abs(target - current) * 10) / 10 : null,
+    };
+  }
+
+  const totalDistance = Math.abs(target - start);
+  const coveredDistance = Math.abs(current - start);
+  const isMovingTowards = target > start ? current >= start : current <= start;
+  const rawPercent = isMovingTowards ? (coveredDistance / totalDistance) * 100 : 0;
+  const progressPercent = Math.max(0, Math.min(100, Math.round(rawPercent * 10) / 10));
+
+  return {
+    startWeightKg: start,
+    currentWeightKg: current,
+    goalWeightKg: target,
+    progressPercent,
+    weightDeltaKg: Math.round((current - start) * 10) / 10,
+    remainingKg: Math.round(Math.abs(target - current) * 10) / 10,
+  };
+}

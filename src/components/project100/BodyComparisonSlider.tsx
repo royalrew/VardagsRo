@@ -150,6 +150,34 @@ export function BodyComparisonSlider({
     setAfterId(beforeId);
   };
 
+  const handleQuickPreset = (preset: "start_latest" | "30d" | "90d") => {
+    if (sortedPhotos.length < 2) return;
+    const latest = sortedPhotos[sortedPhotos.length - 1];
+    setAfterId(latest.id);
+
+    if (preset === "start_latest") {
+      setBeforeId(sortedPhotos[0].id);
+      return;
+    }
+
+    const targetDaysAgo = preset === "30d" ? 30 : 90;
+    const latestDate = new Date(`${latest.capturedOn}T12:00:00Z`).getTime();
+    const targetTime = latestDate - targetDaysAgo * 24 * 60 * 60 * 1000;
+
+    let closest = sortedPhotos[0];
+    let minDiff = Infinity;
+    for (const p of sortedPhotos) {
+      if (p.id === latest.id) continue;
+      const pTime = new Date(`${p.capturedOn}T12:00:00Z`).getTime();
+      const diff = Math.abs(pTime - targetTime);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = p;
+      }
+    }
+    setBeforeId(closest.id);
+  };
+
   if (photos.length < 2) {
     return null;
   }
@@ -207,6 +235,36 @@ export function BodyComparisonSlider({
           </button>
         </div>
       </header>
+
+      {/* Quick Presets Bar */}
+      <div className="p100-compare-presets-bar">
+        <span className="p100-presets-label">Snabbval:</span>
+        <button
+          type="button"
+          className={`p100-preset-chip ${beforeId === sortedPhotos[0]?.id && afterId === sortedPhotos[sortedPhotos.length - 1]?.id ? "active" : ""}`}
+          onClick={() => handleQuickPreset("start_latest")}
+        >
+          Start vs Senaste
+        </button>
+        {sortedPhotos.length >= 3 ? (
+          <>
+            <button
+              type="button"
+              className="p100-preset-chip"
+              onClick={() => handleQuickPreset("30d")}
+            >
+              Senaste 30d
+            </button>
+            <button
+              type="button"
+              className="p100-preset-chip"
+              onClick={() => handleQuickPreset("90d")}
+            >
+              Senaste 90d
+            </button>
+          </>
+        ) : null}
+      </div>
 
       {/* Selectors & Delta Stat Bar */}
       <div className="p100-compare-controls">
