@@ -173,6 +173,10 @@ vi.mock("@/server/jarvis-gaps", () => ({
 vi.mock("@/server/audio-synthesis", () => ({
   synthesizeJarvisSpeech: vi.fn(async () => Buffer.from("audio-mock-bytes")),
 }));
+vi.mock("@/server/jarvis-briefing", () => ({
+  generateMorningBriefing: vi.fn(async () => ({ text: "Morgonöversikt", date: "2026-08-31" })),
+  generateEveningBriefing: vi.fn(async () => ({ text: "Kvällsavstämning", date: "2026-08-31" })),
+}));
 
 import { PATCH as householdPatch } from "@/app/api/household/route";
 import { GET as loginsGet } from "@/app/api/logins/route";
@@ -255,6 +259,10 @@ import { POST as contentSuggestionsPost } from "@/app/api/project100/content/sug
 import { GET as jarvisGapsGet } from "@/app/api/project100/jarvis/gaps/route";
 import { PATCH as jarvisGapsPatch } from "@/app/api/project100/jarvis/gaps/[id]/route";
 import { POST as jarvisSpeakPost } from "@/app/api/project100/jarvis/speak/route";
+import {
+  GET as jarvisBriefingGet,
+  POST as jarvisBriefingPost,
+} from "@/app/api/project100/jarvis/briefing/route";
 
 function membership(
   role: "owner" | "adult" | "viewer",
@@ -1467,5 +1475,32 @@ describe("Projekt 100 Content is held behind the adult gate and requires CSRF on
       jsonPost(speakUrl, { text: "God kväll Jimmy!" }),
     );
     expect(adult.status).toBe(200);
+  });
+
+  it("guards jarvis daily briefings (GET and POST)", async () => {
+    const briefingUrl = "http://localhost/api/project100/jarvis/briefing";
+    harness.state.session = { user: { id: "user-1" } };
+    harness.state.membership = membership("viewer", "child");
+
+    const childGet = await jarvisBriefingGet(
+      new Request(`${briefingUrl}?type=morning`),
+    );
+    expect(childGet.status).toBe(403);
+
+    const childPost = await jarvisBriefingPost(
+      jsonPost(briefingUrl, { type: "morning" }),
+    );
+    expect(childPost.status).toBe(403);
+
+    harness.state.membership = membership("adult");
+    const adultGet = await jarvisBriefingGet(
+      new Request(`${briefingUrl}?type=morning`),
+    );
+    expect(adultGet.status).toBe(200);
+
+    const adultPost = await jarvisBriefingPost(
+      jsonPost(briefingUrl, { type: "evening" }),
+    );
+    expect(adultPost.status).toBe(200);
   });
 });

@@ -8300,6 +8300,65 @@ button.event-row:hover {
   color: #ffffff;
 }
 
+/* Jarvis Briefing Quick Action Buttons */
+.p100-briefing-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.p100-briefing-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  white-space: nowrap;
+}
+
+.p100-briefing-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.p100-briefing-btn.morning {
+  color: #fde047;
+  border-color: rgba(253, 224, 71, 0.3);
+  background: rgba(253, 224, 71, 0.08);
+}
+
+.p100-briefing-btn.morning:hover:not(:disabled) {
+  background: rgba(253, 224, 71, 0.2);
+  border-color: #fde047;
+  transform: translateY(-1px);
+}
+
+.p100-briefing-btn.evening {
+  color: #a78bfa;
+  border-color: rgba(167, 139, 250, 0.3);
+  background: rgba(167, 139, 250, 0.08);
+}
+
+.p100-briefing-btn.evening:hover:not(:disabled) {
+  background: rgba(167, 139, 250, 0.2);
+  border-color: #a78bfa;
+  transform: translateY(-1px);
+}
+
+.p100-briefing-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
 
 
 

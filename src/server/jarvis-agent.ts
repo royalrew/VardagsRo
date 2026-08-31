@@ -28,6 +28,10 @@ import {
   updateProject100TrainingSession,
 } from "@/server/project100-training";
 import { sanitizePII } from "@/server/pii-sanitizer";
+import {
+  generateEveningBriefing,
+  generateMorningBriefing,
+} from "@/server/jarvis-briefing";
 import type { ActorContext } from "@/server/authorization-types";
 
 let agentClient: OpenAI | null = null;
@@ -58,6 +62,28 @@ export interface JarvisAgentResult {
 }
 
 const JARVIS_TOOLS: OpenAI.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "get_daily_briefing",
+      description: "Generera en fullständig morgonöversikt eller kvällsavstämning som sammanfattar jobbschema, familjehändelser, skola, träningsfönster, proteinmål och uppgifter.",
+      parameters: {
+        type: "object",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["morning", "evening"],
+            description: "Typ av briefing: 'morning' för morgonöversikt eller 'evening' för kvällsavstämning.",
+          },
+          date: {
+            type: "string",
+            description: "Valfritt datum i format YYYY-MM-DD (standard är idag).",
+          },
+        },
+        required: ["type"],
+      },
+    },
+  },
   {
     type: "function",
     function: {
@@ -446,6 +472,29 @@ export async function processJarvisAgentMessage(
   // 1. Tool execution implementations
   async function executeTool(name: string, args: Record<string, unknown>): Promise<string> {
     executedActions.push(name);
+
+    if (name === "get_daily_briefing") {
+      const type = String(args.type || "morning").toLowerCase();
+      const date = args.date ? String(args.date) : today;
+
+      if (type === "evening") {
+        const briefing = await generateEveningBriefing(actor, { date, callerName });
+        return JSON.stringify({
+          success: true,
+          type: "evening",
+          summary: briefing.text,
+          data: briefing,
+        });
+      }
+
+      const briefing = await generateMorningBriefing(actor, { date, callerName });
+      return JSON.stringify({
+        success: true,
+        type: "morning",
+        summary: briefing.text,
+        data: briefing,
+      });
+    }
 
     if (name === "check_schedule") {
       const date = String(args.date || today);
@@ -1038,6 +1087,32 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
 
   // 3. Deterministic Engine (Offline / Tests / Fallback)
   const lower = text.toLowerCase();
+
+  // Proactive Morning Briefing trigger
+  if (
+    /(?:god\s*morgon|morgonbriefing|morgonöversikt)/i.test(lower) &&
+    /(?:vad|hur|läge|översikt|briefing|schema|idag|plan|status)/i.test(lower)
+  ) {
+    const toolResStr = await executeTool("get_daily_briefing", { type: "morning" });
+    const toolRes = JSON.parse(toolResStr);
+    return {
+      text: toolRes.summary || toolRes.data?.text,
+      executedActions,
+    };
+  }
+
+  // Proactive Evening Debrief trigger
+  if (
+    /(?:kvällsavstämning|kvällsöversikt|avstämning|hur gick dagen|god kväll)/i.test(lower) &&
+    /(?:hur gick|avstämning|status|sammanfatta|idag|resultat)/i.test(lower)
+  ) {
+    const toolResStr = await executeTool("get_daily_briefing", { type: "evening" });
+    const toolRes = JSON.parse(toolResStr);
+    return {
+      text: toolRes.summary || toolRes.data?.text,
+      executedActions,
+    };
+  }
 
   // Pure greeting
   if (/^(hej|tjena|hallå|god kväll|god morgon|god dag|läget)(\s+jarvis)?[!.]?$/i.test(lower)) {

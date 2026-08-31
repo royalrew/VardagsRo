@@ -15,12 +15,14 @@ import {
   Lightbulb,
   MessageSquare,
   MessageSquarePlus,
+  Moon,
   Plus,
   RotateCcw,
   Scale,
   Search,
   Send,
   Sparkles,
+  Sun,
   Trash2,
   Utensils,
   Volume2,
@@ -46,11 +48,12 @@ import {
 } from "@/lib/project100-jarvis";
 
 const QUICK_QUESTIONS = [
+  "☀️ God morgon Jarvis! Vad har vi idag?",
+  "🌙 God kväll Jarvis, hur gick dagen?",
   "Vad tränade jag senast och hur kändes det?",
   "När finns nästa träningsfönster runt jobbet?",
   "Vilka färdiga matlådor finns i frysen och hur mycket protein ger de?",
   "Hur ser min vikt- och styrkeutveckling ut just nu?",
-  "Vilket är det minsta bra steget jag kan ta idag?",
 ];
 
 export function JarvisWorkspace({
@@ -437,6 +440,28 @@ export function JarvisWorkspace({
             <p>
               Källbunden assistent · Läser träning, kost och jobbschema utan hallucination.
             </p>
+          </div>
+          <div className="p100-briefing-quick-actions">
+            <button
+              type="button"
+              className="p100-briefing-btn morning"
+              onClick={() => void handleSendMessage("☀️ God morgon Jarvis! Vad har vi idag?")}
+              disabled={isSending}
+              title="Kör dagens morgonöversikt"
+            >
+              <Sun />
+              <span>Morgonbriefing</span>
+            </button>
+            <button
+              type="button"
+              className="p100-briefing-btn evening"
+              onClick={() => void handleSendMessage("🌙 God kväll Jarvis, hur gick dagen?")}
+              disabled={isSending}
+              title="Kör kvällens avstämning"
+            >
+              <Moon />
+              <span>Kvällsavstämning</span>
+            </button>
           </div>
         </header>
 

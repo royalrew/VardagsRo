@@ -2,6 +2,7 @@ import { recordAudit } from "@/server/audit";
 import type { ActorContext } from "@/server/authorization-types";
 import { readyClient } from "@/server/database";
 import { AppError } from "@/server/errors";
+import { validateWishlistQuery } from "@/server/jarvis-gaps-guard";
 import { assertProject100Adult } from "@/server/project100";
 
 export type JarvisCapabilityGapStatus = "pending" | "implemented" | "dismissed";
@@ -56,20 +57,45 @@ export async function logJarvisCapabilityGap(
     categoryHint?: string;
     notes?: string;
   } = {},
-): Promise<JarvisCapabilityGap> {
+): Promise<JarvisCapabilityGap | null> {
   assertProject100Adult(actor);
+
+  const validation = validateWishlistQuery(rawQuery);
+  if (!validation.allowed) {
+    // Block weird / malicious / gibberish inputs from polluting the wishlist
+    return null;
+  }
+
   const sql = await readyClient();
   const id = crypto.randomUUID();
-  const trimmedQuery = rawQuery.trim().slice(0, 2000);
+  const sanitizedQuery = validation.sanitizedQuery;
+  const effectiveCategory = options.categoryHint || validation.categoryHint || null;
+
+  // Deduplication check: Avoid multiple pending duplicates
+  const existing = await sql<GapRow[]>`
+    select id, user_id, raw_query, detected_intent, category_hint,
+           channel, status, notes,
+           to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
+           to_char(updated_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as updated_at
+    from jarvis_capability_gaps
+    where user_id = ${actor.userId}
+      and status = 'pending'
+      and lower(raw_query) = lower(${sanitizedQuery})
+    limit 1
+  `;
+
+  if (existing.length > 0) {
+    return mapGap(existing[0]);
+  }
 
   const rows = await sql<GapRow[]>`
     insert into jarvis_capability_gaps (
       id, user_id, raw_query, detected_intent, category_hint,
       channel, status, notes
     ) values (
-      ${id}, ${actor.userId}, ${trimmedQuery},
+      ${id}, ${actor.userId}, ${sanitizedQuery},
       ${options.detectedIntent?.slice(0, 120) || null},
-      ${options.categoryHint?.slice(0, 60) || null},
+      ${effectiveCategory?.slice(0, 60) || null},
       ${channel}, 'pending',
       ${options.notes?.slice(0, 2000) || null}
     )
@@ -85,7 +111,7 @@ export async function logJarvisCapabilityGap(
     targetId: id,
     metadata: {
       channel,
-      categoryHint: options.categoryHint || null,
+      categoryHint: effectiveCategory,
     },
   });
 

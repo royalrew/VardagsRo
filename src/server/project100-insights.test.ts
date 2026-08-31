@@ -323,7 +323,7 @@ describe("Project 100 Insights Server", () => {
 
   it("aggregates body, training, nutrition, recovery, and work comparison for the signed-in user", async () => {
     const result = await loadProject100Insights(TEST_ACTOR, {
-      period: "30d",
+      period: "custom",
       from: "2026-08-01",
       to: "2026-08-30",
     });

@@ -35,11 +35,11 @@ const dependencies = vi.hoisted(() => ({
   })),
   saveProject100JournalEntry: vi.fn(),
   loadProject100Journal: vi.fn(async () => ({ entries: [], totalEntries: 0, excludedCount: 0 })),
-  loadProject100BodyJourney: vi.fn(async () => ({
-    today: "2026-08-30",
-    from: "2026-08-01",
-    to: "2026-08-30",
-    entries: [{ measuredOn: "2026-08-30", note: null, measurements: [{ metric: "waist", label: null, unit: "cm" as const, value: 84 }] }],
+  loadProject100BodyJourney: vi.fn(async (_actor, filter) => ({
+    today: filter?.to || "2026-08-31",
+    from: filter?.from || "2026-08-01",
+    to: filter?.to || "2026-08-31",
+    entries: [{ measuredOn: filter?.to || "2026-08-31", note: null, measurements: [{ metric: "waist", label: null, unit: "cm" as const, value: 84 }] }],
     goal: { weightGoalKg: 100, startWeightKg: 78, heightCm: 182 },
     weightHistory: [{ measuredOn: "2026-08-20", value: 80.2 }],
   })),
@@ -264,5 +264,27 @@ describe("jarvis-agent", () => {
     expect(res.executedActions).toContain("search_documents");
     expect(res.text).toContain("Folktandvården");
     expect(res.text).toContain("15 september");
+  });
+
+  it("handles morning briefing trigger ('God morgon Jarvis! Vad har vi idag?')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "God morgon Jarvis! Vad har vi idag?",
+      { personName: "Jimmy" },
+    );
+
+    expect(res.executedActions).toContain("get_daily_briefing");
+    expect(res.text).toContain("morgonöversikt");
+  });
+
+  it("handles evening debrief trigger ('God kväll Jarvis, hur gick dagen?')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "God kväll Jarvis, hur gick dagen?",
+      { personName: "Jimmy" },
+    );
+
+    expect(res.executedActions).toContain("get_daily_briefing");
+    expect(res.text).toContain("avstämning");
   });
 });
