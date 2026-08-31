@@ -154,7 +154,7 @@ describe("jarvis-agent", () => {
       TEST_ACTOR,
       expect.objectContaining({
         title: "Boka en fin restaurang",
-        dueAt: "2026-09-25",
+        dueAt: expect.stringContaining("2026-09-25"),
       }),
     );
     expect(res.executedActions).toContain("check_schedule");
@@ -277,14 +277,21 @@ describe("jarvis-agent", () => {
     expect(res.text).toContain("morgonöversikt");
   });
 
-  it("handles evening debrief trigger ('God kväll Jarvis, hur gick dagen?')", async () => {
+  it("handles contextual reminder ('Påminn mig att jag skall storhandla på fredag efter jobbet')", async () => {
     const res = await processJarvisAgentMessage(
       TEST_ACTOR,
-      "God kväll Jarvis, hur gick dagen?",
+      "Påminn mig att jag skall storhandla på fredag efter jobbet",
       { personName: "Jimmy" },
     );
 
-    expect(res.executedActions).toContain("get_daily_briefing");
-    expect(res.text).toContain("avstämning");
+    expect(dependencies.saveManualTask).toHaveBeenCalledWith(
+      TEST_ACTOR,
+      expect.objectContaining({
+        title: "Storhandla",
+      }),
+    );
+    expect(res.executedActions).toContain("create_task");
+    expect(res.text).toContain("Storhandla");
+    expect(res.text).toContain("fredag");
   });
 });

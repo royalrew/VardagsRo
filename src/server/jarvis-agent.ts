@@ -32,6 +32,10 @@ import {
   generateEveningBriefing,
   generateMorningBriefing,
 } from "@/server/jarvis-briefing";
+import {
+  createContextualReminder,
+  parseSwedishReminder,
+} from "@/server/jarvis-reminders";
 import type { ActorContext } from "@/server/authorization-types";
 
 let agentClient: OpenAI | null = null;
@@ -537,6 +541,25 @@ export async function processJarvisAgentMessage(
       const title = String(args.title || "Ny uppgift");
       const dueDate = args.due_date ? String(args.due_date) : null;
       const notes = args.notes ? String(args.notes) : null;
+      const contextAnchor = args.context_anchor ? String(args.context_anchor).toLowerCase() : undefined;
+
+      if (contextAnchor || (dueDate && dueDate.length === 10)) {
+        const res = await createContextualReminder(actor, {
+          title,
+          targetDate: dueDate ? dueDate.slice(0, 10) : today,
+          timeString: args.time_string ? String(args.time_string) : undefined,
+          contextAnchor: contextAnchor as any,
+          notes: notes || undefined,
+        });
+
+        return JSON.stringify({
+          success: true,
+          taskId: res.taskId,
+          title: res.title,
+          dueDate: res.dueAt,
+          summary: res.text,
+        });
+      }
 
       const created = await saveManualTask(actor, {
         title,
@@ -1119,6 +1142,22 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
     return {
       text: `${getGreeting(callerName, now)} Hur kan jag hjälpa dig?`,
       executedActions: [],
+    };
+  }
+
+  // Natural Swedish reminder trigger ("påminn mig att storhandla på fredag efter jobbet")
+  const parsedReminder = parseSwedishReminder(text, now);
+  if (parsedReminder) {
+    executedActions.push("create_task");
+    const res = await createContextualReminder(actor, {
+      title: parsedReminder.title,
+      targetDate: parsedReminder.targetDate,
+      timeString: parsedReminder.timeString,
+      contextAnchor: parsedReminder.contextAnchor,
+    });
+    return {
+      text: `${getGreeting(callerName, now)} ${res.text}`,
+      executedActions,
     };
   }
 
