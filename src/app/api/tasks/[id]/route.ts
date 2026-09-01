@@ -21,7 +21,6 @@ function taskId(value: string): string {
 export async function PATCH(request: Request, context: RouteContext) {
   try {
     const actor = await requireActor(request);
-    assertCanMutate(actor);
     const id = taskId((await context.params).id);
     const input = taskCompletionSchema.parse(await readJsonMutation(request));
     const task = await updateTaskCompletion(actor, id, input.completed);

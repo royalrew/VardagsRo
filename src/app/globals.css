@@ -8204,6 +8204,20 @@ button.event-row:hover {
 .p100-protein-input-wrap { display: inline-flex; align-items: center; gap: 6px; font-size: .6rem; color: #8a968f; }
 .p100-protein-input-wrap input { width: 60px; padding: 4px 8px; font-size: .65rem; background: rgba(0,0,0,.4); border: 1px solid var(--p100-line); border-radius: 5px; color: #fff; text-align: center; }
 
+.p100-quick-mode-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--p100-line); padding-bottom: 10px; }
+.p100-quick-mode-tab { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; background: rgba(0,0,0,.3); border: 1px solid var(--p100-line); color: #8a968f; font-size: .62rem; font-weight: 700; cursor: pointer; transition: all .15s ease; }
+.p100-quick-mode-tab:hover { color: #cbd3cd; border-color: rgba(200,244,93,.3); }
+.p100-quick-mode-tab.active { background: rgba(200,244,93,.12); border-color: var(--p100-accent); color: var(--p100-accent); font-weight: 800; }
+
+.p100-quick-planned-list { display: flex; flex-direction: column; gap: 6px; }
+.p100-quick-plan-confirmation { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 6px; background: rgba(0,0,0,.25); border: 1px dashed var(--p100-line); }
+.p100-quick-hint { font-size: .52rem; color: #77837b; line-height: 1.3; }
+
+.p100-quick-rpe-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.p100-rpe-btn { flex: 1 1 28px; min-width: 28px; height: 28px; border-radius: 5px; border: 1px solid var(--p100-line); background: rgba(0,0,0,.3); color: #77837b; font-weight: 700; font-size: .62rem; cursor: pointer; display: grid; place-items: center; transition: all .15s ease; }
+.p100-rpe-btn:hover { border-color: rgba(200,244,93,.4); color: #cbd3cd; }
+.p100-rpe-btn.active { background: var(--p100-accent); color: #121814; font-weight: 800; border-color: var(--p100-accent); }
+
 .p100-quick-workout-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
 /* Jarvis Voice Message Audio Player */
@@ -8497,6 +8511,305 @@ button.event-row:hover {
   border-color: #38bdf8;
   color: #38bdf8;
 }
+
+/* Kids Chores & Cleaning Areas Notice / Banner */
+.kids-chores-notice {
+  margin-bottom: 24px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  background: white;
+  border: 1px solid #e0e9e3;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+}
+
+.kids-chores-child-notice {
+  border-left: 5px solid #22a6b3;
+  background: linear-gradient(135deg, #ffffff 0%, #f7fbf9 100%);
+}
+
+.kids-chores-child-notice.kids-chores-done {
+  border-left-color: #2ed573;
+  background: linear-gradient(135deg, #f0fff4 0%, #ffffff 100%);
+}
+
+.kids-notice-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.kids-notice-badge {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.kids-notice-icon {
+  font-size: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  background: #f0f7f3;
+  border-radius: 12px;
+}
+
+.kids-notice-badge h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.kids-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.kids-pill-progress {
+  background: #e1f5fe;
+  color: #0288d1;
+}
+
+.kids-pill-success {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.kids-pill-neutral {
+  background: #f5f5f5;
+  color: #757575;
+}
+
+.kids-notice-task-list {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kids-notice-task-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1px solid #eef2f0;
+  border-radius: 10px;
+  transition: background 0.15s ease;
+}
+
+.kids-notice-task-item:hover {
+  background: #f9fbf9;
+}
+
+.kids-task-checkbox {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #0288d1;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  transition: transform 0.1s ease;
+}
+
+.kids-task-checkbox:hover {
+  transform: scale(1.1);
+  color: #2ed573;
+}
+
+.kids-task-text strong {
+  display: block;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.kids-task-text small {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.kids-notice-congrats {
+  margin-top: 12px;
+  color: #2e7d32;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.kids-notice-empty {
+  margin-top: 12px;
+  color: var(--ink-faint);
+  font-size: 13px;
+}
+
+/* Parent Overview Cards */
+.kids-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.kids-overview-card {
+  padding: 14px;
+  background: #f8faf8;
+  border: 1px solid #e5ece7;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kids-overview-card.card-done {
+  background: #f0faf2;
+  border-color: #c8e6c9;
+}
+
+.kids-overview-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kids-area-tag {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+
+.kids-overview-card-body {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.kids-status-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #2e7d32;
+}
+
+.kids-status-pending {
+  color: #0288d1;
+}
+
+.kids-status-empty {
+  color: #9e9e9e;
+  font-weight: normal;
+}
+
+/* Add Chore Modal */
+.add-chore-modal {
+  max-width: 520px;
+}
+
+.chore-person-select,
+.chore-presets,
+.chore-due-section {
+  margin-bottom: 16px;
+}
+
+.chore-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.chore-person-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.chore-person-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1.5px solid #e0e9e3;
+  border-radius: 12px;
+  background: white;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.chore-person-chip.active {
+  border-color: var(--green);
+  background: #f0f7f3;
+}
+
+.chore-chip-text strong {
+  display: block;
+  font-size: 13px;
+}
+
+.chore-chip-text small {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.chore-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chore-preset-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid #d0e0d5;
+  background: #f4f8f5;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: var(--ink);
+}
+
+.chore-preset-btn:hover {
+  background: #e2f0e6;
+  border-color: var(--green);
+}
+
+.chore-due-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chore-due-pill {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 20px;
+  border: 1px solid #d0e0d5;
+  background: white;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chore-due-pill.active {
+  background: var(--green);
+  color: white;
+  border-color: var(--green);
+}
+
 
 
 

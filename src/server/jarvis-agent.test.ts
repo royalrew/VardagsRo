@@ -7,8 +7,26 @@ const dependencies = vi.hoisted(() => ({
     events: [
       { id: "event-doc-1", title: "Tandläkartid", startsAt: "2026-09-15T10:00:00.000Z", documentId: "doc-1" },
     ],
-    people: [{ id: "person-1", name: "Jimmy", aliases: ["Pappa"] }],
-    tasks: [],
+    people: [
+      { id: "person-1", name: "Jimmy", aliases: ["Pappa"], personType: "adult" },
+      { id: "person-alma", name: "Alma", aliases: ["Lillasyster"], personType: "child" },
+      { id: "person-shureym", name: "Shureym", aliases: ["Mellanbror"], personType: "child" },
+      { id: "person-cuzeyr", name: "Cuzeyr", aliases: ["Storebror"], personType: "child" },
+    ],
+    tasks: [
+      {
+        id: "task-alma-1",
+        personId: "person-alma",
+        title: "Dammsuga lilla vardagsrummet",
+        completedAt: null,
+      },
+      {
+        id: "task-cuzeyr-1",
+        personId: "person-cuzeyr",
+        title: "Torka köksbänkar",
+        completedAt: "2026-09-01T15:00:00.000Z",
+      },
+    ],
     documents: [
       {
         id: "doc-1",
@@ -47,6 +65,8 @@ const dependencies = vi.hoisted(() => ({
   loadProject100NutritionDay: vi.fn(async () => ({
     eaten: { proteinG: 115, carbsG: 200, fatG: 50, kcal: 1800 },
     target: { overrideGrams: null, lowGrams: 160, highGrams: 200 },
+    meals: [{ id: "m-1", title: "Keso & bär", proteinG: 30, carbsG: 20, fatG: 5, kcal: 240 }],
+    batches: [{ id: "b-1", name: "Köttfärssås", portionsLeft: 3 }],
   })),
   logProject100Meal: vi.fn(async () => ({ id: "meal-101", title: "Proteinshake", proteinG: 35 })),
   createProject100TrainingSession: vi.fn(async (_actor, input) => ({
@@ -62,8 +82,18 @@ const dependencies = vi.hoisted(() => ({
       title: "Benpass",
       activityType: "strength_gym",
       status: "planned",
-      sessionDate: "2026-08-30",
-      exercises: [],
+      sessionDate: new Date().toISOString().slice(0, 10),
+      exercises: [{ id: "ex-1", exerciseId: "e-1", name: "Knäböj", position: 0, notes: null, sets: [] }],
+    },
+  ]),
+  loadProject100TrainingTemplates: vi.fn(async () => [
+    {
+      id: "tmpl-1",
+      name: "Överkropp A",
+      activityType: "strength_home",
+      description: "Bröst och rygg",
+      createdAt: "2026-08-26T18:00:00.000Z",
+      exercises: [{ id: "ex-1", exerciseId: "e-1", name: "Armhävningar", position: 0, notes: null, sets: [] }],
     },
   ]),
   updateProject100TrainingSession: vi.fn(async () => ({
@@ -101,6 +131,7 @@ vi.mock("@/server/project100-nutrition", () => ({
 vi.mock("@/server/project100-training", () => ({
   createProject100TrainingSession: dependencies.createProject100TrainingSession,
   loadProject100TrainingSessions: dependencies.loadProject100TrainingSessions,
+  loadProject100TrainingTemplates: dependencies.loadProject100TrainingTemplates,
   updateProject100TrainingSession: dependencies.updateProject100TrainingSession,
 }));
 vi.mock("@/server/project100-content", () => ({
@@ -325,5 +356,81 @@ describe("jarvis-agent", () => {
     expect(res.executedActions).toContain("create_task");
     expect(res.text).toContain("Storhandla");
     expect(res.text).toContain("fredag");
+  });
+
+  it("handles daily training check ('🏋️‍♂️ Dagens Träning' / 'Vad ska jag träna idag?')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "🏋️‍♂️ Dagens Träning",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadProject100TrainingSessions).toHaveBeenCalled();
+    expect(res.executedActions).toContain("get_training_status");
+    expect(res.text).toContain("Benpass");
+  });
+
+  it("handles nutrition and protein check ('🥩 Protein & Mat')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "🥩 Protein & Mat",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadProject100NutritionDay).toHaveBeenCalled();
+    expect(res.executedActions).toContain("get_nutrition_status");
+    expect(res.text).toContain("Dagens Kost & Protein");
+    expect(res.text).toContain("115g");
+  });
+
+  it("handles family schedule check ('📅 Familjens Schema')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "📅 Familjens Schema",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadDashboard).toHaveBeenCalled();
+    expect(res.executedActions).toContain("check_schedule");
+  });
+
+  it("handles kids chores query ('Vem städar vad?' / 'Barnens städområden')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Vem städar vad?",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadDashboard).toHaveBeenCalled();
+    expect(res.text).toContain("Lilla vardagsrummet");
+    expect(res.text).toContain("Stora vardagsrummet");
+    expect(res.text).toContain("Köket");
+  });
+
+  it("handles question if kids are finished with their chores ('Är barnen färdiga med sina ansvarsområden?')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Är barnen färdiga med sina ansvarsområden?",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadDashboard).toHaveBeenCalled();
+    expect(res.executedActions).toContain("check_kids_chores_status");
+    expect(res.text).toContain("Alma");
+    expect(res.text).toContain("Cuzeyr");
+    expect(res.text).toContain("Shureym");
+  });
+
+  it("handles single child chore question ('Är Alma klar med sitt städområde?')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Är Alma klar med sitt städområde?",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadDashboard).toHaveBeenCalled();
+    expect(res.executedActions).toContain("check_kids_chores_status");
+    expect(res.text).toContain("Alma");
+    expect(res.text).toContain("Lilla vardagsrummet");
   });
 });

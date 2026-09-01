@@ -16,6 +16,7 @@ import { capitalize, formatClock, formatLongDate, isSameLocalDay } from "@/lib/d
 import { eventConcernsPerson, familyScopePerson, personForEvent } from "@/lib/family-scope";
 import type { DashboardData, FamilyEvent, FamilyTask } from "@/lib/types";
 import { Avatar, EmptyState, EventRow } from "@/components/ui";
+import { KidsChoresNotice } from "@/components/KidsChoresNotice";
 import { TaskBoard } from "@/components/TaskBoard";
 
 export function HomeView({
@@ -26,6 +27,7 @@ export function HomeView({
   onEventClick,
   onToggleTask,
   onOpenDocument,
+  onOpenAddChore,
 }: {
   data: DashboardData;
   onAsk: (question: string) => void;
@@ -34,6 +36,7 @@ export function HomeView({
   onEventClick: (event: FamilyEvent) => void;
   onToggleTask: (task: FamilyTask, completed: boolean) => Promise<boolean>;
   onOpenDocument: (documentId: string) => void;
+  onOpenAddChore?: () => void;
 }) {
   const [question, setQuestion] = useState("");
   const now = useMemo(() => new Date(), []);
@@ -74,6 +77,14 @@ export function HomeView({
           <Plus size={18} aria-hidden="true" /> Lägg till
         </button>
       </section>
+
+      <KidsChoresNotice
+        currentPerson={currentPerson}
+        people={data.people}
+        tasks={data.tasks}
+        onToggleTask={onToggleTask}
+        onOpenAddChore={onOpenAddChore ?? onAdd}
+      />
 
       <section className="ask-hero" aria-labelledby="ask-heading">
         <div className="ask-orb" aria-hidden="true">

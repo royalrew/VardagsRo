@@ -17,6 +17,7 @@ import { openAIConfig } from "@/server/config";
 import { loadDashboard, saveManualTask } from "@/server/database";
 import { assertProject100Adult } from "@/server/project100";
 import { loadProject100BodyJourney, saveProject100BodyEntry } from "@/server/project100-body";
+import { getCleaningAreaForPerson } from "@/lib/kids-chores";
 import { createProject100ContentProject } from "@/server/project100-content";
 import { logJarvisCapabilityGap } from "@/server/jarvis-gaps";
 import { loadProject100Journal, saveProject100JournalEntry } from "@/server/project100-journal";
@@ -28,6 +29,7 @@ import {
 import {
   createProject100TrainingSession,
   loadProject100TrainingSessions,
+  loadProject100TrainingTemplates,
   updateProject100TrainingSession,
 } from "@/server/project100-training";
 import { sanitizePII } from "@/server/pii-sanitizer";
@@ -420,6 +422,54 @@ const JARVIS_TOOLS: OpenAI.ChatCompletionTool[] = [
           },
         },
         required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_training_status",
+      description: "Hämta dagens träningsstatus, inplanerade pass, genomförda pass, tillgängliga passmallar och träningsfönster.",
+      parameters: {
+        type: "object",
+        properties: {
+          date: {
+            type: "string",
+            description: "Valfritt datum i format YYYY-MM-DD (standard är idag).",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_nutrition_status",
+      description: "Hämta dagens koststatus, loggat protein, proteinmål, loggade måltider och tillgängliga matlådor.",
+      parameters: {
+        type: "object",
+        properties: {
+          date: {
+            type: "string",
+            description: "Valfritt datum i format YYYY-MM-DD (standard är idag).",
+          },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "check_kids_chores_status",
+      description: "Kontrollera status på barnens städområden och uppgifter (om Alma, Shureym eller Cuzeyr är färdiga med sina städområden/uppgifter eller vad som återstår).",
+      parameters: {
+        type: "object",
+        properties: {
+          person_name: {
+            type: "string",
+            description: "Valfritt namn på specifikt barn (t.ex. 'Alma', 'Shureym', 'Cuzeyr') eller tomt för alla barn.",
+          },
+        },
       },
     },
   },
@@ -1023,6 +1073,192 @@ export async function processJarvisAgentMessage(
       });
     }
 
+    if (name === "get_training_status") {
+      const targetDate = args.date ? String(args.date) : today;
+      const [sessions, templates, dashboard] = await Promise.all([
+        loadProject100TrainingSessions(actor),
+        loadProject100TrainingTemplates(actor),
+        loadDashboard(actor),
+      ]);
+
+      const todaySessions = sessions.filter((s) => s.sessionDate === targetDate);
+      const completed = todaySessions.filter((s) => s.status === "completed");
+      const planned = todaySessions.filter(
+        (s) => s.status === "planned" || s.status === "in_progress",
+      );
+
+      const workEvents = dashboard.events.filter(
+        (e) => e.startsAt.startsWith(targetDate) && e.category === "work",
+      );
+      let workScheduleSummary = "Du är ledig från jobbet idag.";
+      if (workEvents.length > 0) {
+        const times = workEvents.map(
+          (w) => `${w.startsAt.slice(11, 16)}–${w.endsAt.slice(11, 16)}`,
+        );
+        workScheduleSummary = `Du jobbar idag (${times.join(", ")}).`;
+      }
+
+      if (completed.length > 0) {
+        const compList = completed
+          .map(
+            (c) =>
+              `• "${c.title}" (${c.durationSeconds ? Math.round(c.durationSeconds / 60) : 45} min${c.effort ? `, RPE ${c.effort}` : ""})`,
+          )
+          .join("\n");
+        return JSON.stringify({
+          success: true,
+          status: "completed",
+          targetDate,
+          completedCount: completed.length,
+          summary: `Du har redan genomfört träningspass idag:\n${compList}\n\n${workScheduleSummary} Bra kört!`,
+        });
+      }
+
+      if (planned.length > 0) {
+        const planList = planned
+          .map((p) => `• "${p.title}" (${p.exercises.length} övningar)`)
+          .join("\n");
+        return JSON.stringify({
+          success: true,
+          status: "planned",
+          targetDate,
+          plannedCount: planned.length,
+          summary: `Dagens inplanerade träningspass:\n${planList}\n\n${workScheduleSummary}\nSäg till när du kört klart så klarmarkerar jag det, eller logga via snabbspåret!`,
+        });
+      }
+
+      const tmplList =
+        templates.length > 0
+          ? `\nDina sparade mallar:\n${templates.map((t) => `• ${t.name} (${t.exercises.length} övningar)`).join("\n")}`
+          : "";
+
+      return JSON.stringify({
+        success: true,
+        status: "none",
+        targetDate,
+        summary: `Du har inget inplanerat träningspass för idag (${targetDate}).\n${workScheduleSummary}${tmplList}\n\nVill du köra ett pass från dina mallar eller ett spontant pass? Säg bara till (t.ex. "Logga 30 min hemmapass" eller "Körde Överkropp A") så hjälper jag dig!`,
+      });
+    }
+
+    if (name === "get_nutrition_status") {
+      const targetDate = args.date ? String(args.date) : today;
+      const nutrition = await loadProject100NutritionDay(actor, targetDate);
+      const eatenProtein = Math.round(nutrition.eaten.proteinG);
+      const targetProtein =
+        nutrition.target.overrideGrams ?? nutrition.target.lowGrams ?? 160;
+      const targetHigh = nutrition.target.highGrams ?? 200;
+      const remainingG = Math.max(0, targetProtein - eatenProtein);
+
+      const meals = nutrition.meals || [];
+      const batches = nutrition.batches || [];
+
+      const mealsList =
+        meals.length > 0
+          ? meals
+              .map((m) => `• ${m.title} (+${Math.round(m.proteinG ?? 0)}g protein)`)
+              .join("\n")
+          : "Inga måltider loggade än idag.";
+
+      const batchesWithPortions = batches.filter(
+        (b) => Number(b.portionsLeft) > 0,
+      );
+      const batchList =
+        batchesWithPortions.length > 0
+          ? batchesWithPortions
+              .map((b) => `• ${b.name}: ${b.portionsLeft} portioner kvar`)
+              .join("\n")
+          : "Inga färdiga matlådor i frysen.";
+
+      return JSON.stringify({
+        success: true,
+        targetDate,
+        eatenProteinG: eatenProtein,
+        targetProteinG: targetProtein,
+        remainingG,
+        summary: `🥩 *Dagens Kost & Protein (${targetDate}):*\n• Ätit hittills: *${eatenProtein}g* protein av mål *${targetProtein}–${targetHigh}g* (${remainingG > 0 ? `${remainingG}g kvar` : "Målet uppnått! 🎉"})\n\n🍱 *Loggade måltider:*\n${mealsList}\n\n❄️ *Matlådor i frysen:*\n${batchList}`,
+      });
+    }
+
+    if (name === "check_kids_chores_status") {
+      const dashboard = await loadDashboard(actor);
+      const targetPersonName = args.person_name
+        ? String(args.person_name).trim().toLowerCase()
+        : null;
+
+      const kids = dashboard.people.filter(
+        (p) => p.personType === "child" || getCleaningAreaForPerson(p) !== null,
+      );
+
+      const relevantKids = targetPersonName
+        ? kids.filter(
+            (k) =>
+              k.name.toLowerCase().includes(targetPersonName) ||
+              (k.aliases || []).some((a) =>
+                a.toLowerCase().includes(targetPersonName),
+              ),
+          )
+        : kids;
+
+      if (relevantKids.length === 0 && targetPersonName) {
+        return JSON.stringify({
+          success: false,
+          summary: `Hittade inget barn som matchar "${args.person_name}". Barnens områden är Alma (Lilla vardagsrummet), Shureym (Stora vardagsrummet) och Cuzeyr (Köket).`,
+        });
+      }
+
+      const summaries = relevantKids.map((kid) => {
+        const area = getCleaningAreaForPerson(kid);
+        const kidTasks = dashboard.tasks.filter((t) => t.personId === kid.id);
+        const openTasks = kidTasks.filter((t) => !t.completedAt);
+        const completedTasks = kidTasks.filter((t) => Boolean(t.completedAt));
+        const allDone = kidTasks.length > 0 && openTasks.length === 0;
+
+        return {
+          kid,
+          area,
+          total: kidTasks.length,
+          open: openTasks,
+          completed: completedTasks,
+          allDone,
+        };
+      });
+
+      const lines = summaries.map((s) => {
+        const areaStr = s.area ? `${s.area.icon} ${s.area.area}` : "sina uppgifter";
+        if (s.total === 0) {
+          return `• **${s.kid.name}** (${areaStr}): Inga städuppgifter inlagda just nu.`;
+        }
+        if (s.allDone) {
+          return `• **${s.kid.name}** (${areaStr}): **Färdig!** 🎉 Alla ${s.completed.length} uppgifter är klara.`;
+        }
+        const openTitles = s.open.map((t) => `"${t.title}"`).join(", ");
+        return `• **${s.kid.name}** (${areaStr}): **Inte klar** (${s.open.length} kvar: ${openTitles}).`;
+      });
+
+      const allKidsDone =
+        summaries.length > 0 &&
+        summaries.every((s) => s.total > 0 && s.allDone);
+      const header =
+        summaries.length === 1
+          ? `Status för ${summaries[0].kid.name}:`
+          : allKidsDone
+            ? "🎉 Alla barn är helt färdiga med sina städområden!"
+            : "Här är statusen för barnens städområden och uppgifter:";
+
+      return JSON.stringify({
+        success: true,
+        allKidsDone,
+        summaries: summaries.map((s) => ({
+          name: s.kid.name,
+          area: s.area?.area,
+          openCount: s.open.length,
+          completedCount: s.completed.length,
+          isDone: s.allDone,
+        })),
+        summary: `${header}\n\n${lines.join("\n")}`,
+      });
+    }
+
     if (name === "log_missing_capability") {
       const missingFeature = String(args.missing_feature || text);
       const categoryHint = args.category_hint ? String(args.category_hint) : undefined;
@@ -1151,6 +1387,71 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
     return {
       text: `${getGreeting(callerName, now)} Hur kan jag hjälpa dig?`,
       executedActions: [],
+    };
+  }
+
+  // Training & Workout status check ("Dagens Träning", "Dagens Pass", "Vad ska jag träna idag?")
+  const isTrainingQuery =
+    /(?:dagens\s*träning|dagens\s*pass|träningspass|vad\s*ska\s*jag\s*träna|vad\s*har\s*jag\s*för\s*pass|ska\s*jag\s*träna|träning\s*idag|pass\s*idag|mitt\s*träningspass|hur\s*ser\s*träningen\s*ut)/i.test(
+      lower,
+    ) || /^(träning|pass|träningsstatus)$/i.test(lower.trim());
+
+  if (isTrainingQuery) {
+    const toolResStr = await executeTool("get_training_status", { date: today });
+    const toolRes = JSON.parse(toolResStr);
+    return {
+      text: `${getGreeting(callerName, now)} ${toolRes.summary}`,
+      executedActions,
+    };
+  }
+
+  // Nutrition & Protein status check ("Protein & Mat", "Mat & Protein", "Hur mycket protein har jag ätit?")
+  const isNutritionQuery =
+    /(?:protein\s*&\s*mat|mat\s*&\s*protein|dagens\s*protein|dagens\s*mat|hur\s*mycket\s*protein|proteinmål|vad\s*finns\s*det\s*för\s*matlådor|matlådor\s*i\s*frysen|kost\s*idag|mat\s*idag)/i.test(
+      lower,
+    ) || /^(kost|protein|mat|matlådor)$/i.test(lower.trim());
+
+  if (isNutritionQuery) {
+    const toolResStr = await executeTool("get_nutrition_status", { date: today });
+    const toolRes = JSON.parse(toolResStr);
+    return {
+      text: `${getGreeting(callerName, now)}\n\n${toolRes.summary}`,
+      executedActions,
+    };
+  }
+
+  // Family schedule check ("Familjens Schema", "Dagens Schema", "Vad gör familjen idag?")
+  const isScheduleQuery =
+    /(?:familjens\s*schema|familjeschema|dagens\s*schema|schema\s*idag|vad\s*gör\s*familjen|vad\s*händer\s*idag|hur\s*ser\s*schemat\s*ut)/i.test(
+      lower,
+    ) || /^(schema|kalender)$/i.test(lower.trim());
+
+  if (isScheduleQuery) {
+    const toolResStr = await executeTool("check_schedule", { date: today });
+    const toolRes = JSON.parse(toolResStr);
+    return {
+      text: `${getGreeting(callerName, now)} ${toolRes.summary}`,
+      executedActions,
+    };
+  }
+
+  // Kids Chores & Cleaning Areas check ("Är barnen färdiga med sina ansvarsområden?", "Har barnen städat?", "Är Alma klar?")
+  const isChoresQuery =
+    /(?:är\s+(?:barnen|alma|shureym|cuzeyr)\s+(?:klara|färdiga|klar|färdig)|har\s+(?:barnen|alma|shureym|cuzeyr)\s+städat|hur\s+går\s+det\s+för\s+barnen|hur\s+går\s+det\s+med\s+(?:städningen|barnens\s+städning|städ)|vem\s+är\s+klar|städat\s+klart|städat\s+färdigt|städstatus|städområde|städområden|ansvarsområde|ansvarsområden)/i.test(
+      lower,
+    ) || /(?:vem\s*städar\s*vad|vad\s*ska\s*(?:alma|shureym|cuzeyr|barnen)\s*städa|barnens\s*uppgifter)/i.test(lower);
+
+  if (isChoresQuery) {
+    let personName: string | undefined = undefined;
+    if (/alma/i.test(lower)) personName = "Alma";
+    else if (/shureym/i.test(lower)) personName = "Shureym";
+    else if (/cuzeyr/i.test(lower)) personName = "Cuzeyr";
+
+    const toolResStr = await executeTool("check_kids_chores_status", { person_name: personName });
+    const toolRes = JSON.parse(toolResStr);
+    return {
+      text: `${getGreeting(callerName, now)} ${toolRes.summary}`,
+      executedActions,
     };
   }
 

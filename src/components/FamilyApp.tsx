@@ -21,6 +21,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AddChoreModal } from "@/components/AddChoreModal";
 import { AddDocumentModal } from "@/components/AddDocumentModal";
 import { AskView } from "@/components/AskView";
 import { BrandMark } from "@/components/BrandMark";
@@ -83,6 +84,7 @@ export function FamilyApp({
   const [data, setData] = useState(() => normalizeDashboardData(initialData));
   const [activeView, setActiveView] = useState<View>("home");
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [addChoreOpen, setAddChoreOpen] = useState(false);
   const [familySettingsOpen, setFamilySettingsOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [debugReport, setDebugReport] = useState<DiagnosticsReport | null>(null);
@@ -297,6 +299,60 @@ export function FamilyApp({
       tasks: current.tasks.map((item) => (item.id === updatedTask.id ? updatedTask : item)),
     }));
     showToast(completed ? "Uppgiften är klar" : "Uppgiften är öppen igen");
+    return true;
+  }
+
+  async function handleSaveChore(input: {
+    personId: string;
+    title: string;
+    notes: string | null;
+    dueAt: string | null;
+    kind: "other";
+  }): Promise<boolean> {
+    if (data.dataMode === "database") {
+      try {
+        const response = await fetch("/api/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        });
+        const body = (await response.json()) as { task?: FamilyTask; error?: string };
+        if (!response.ok || !body.task) {
+          throw new Error(body.error ?? "Kunde inte spara städuppgiften.");
+        }
+        setData((current) => ({
+          ...current,
+          tasks: [body.task!, ...current.tasks],
+        }));
+        const targetPerson = data.people.find((p) => p.id === input.personId);
+        showToast(`Städuppgift tillagd för ${targetPerson?.name ?? "barnet"}`);
+        return true;
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Kunde inte spara städuppgiften");
+        return false;
+      }
+    }
+
+    const localTask: FamilyTask = {
+      id: `local-task-${Date.now()}`,
+      householdId: data.householdId,
+      personId: input.personId,
+      documentId: null,
+      title: input.title,
+      kind: input.kind,
+      dueAt: input.dueAt,
+      completedAt: null,
+      notes: input.notes,
+      reviewStatus: "confirmed",
+      confidence: 1,
+      sourceExcerpt: null,
+    };
+    setData((current) => ({
+      ...current,
+      tasks: [localTask, ...current.tasks],
+    }));
+    const targetPerson = data.people.find((p) => p.id === input.personId);
+    showToast(`Städuppgift tillagd för ${targetPerson?.name ?? "barnet"}`);
     return true;
   }
 
@@ -749,6 +805,7 @@ export function FamilyApp({
             onEventClick={setSelectedEvent}
             onToggleTask={handleTaskToggle}
             onOpenDocument={openDocumentById}
+            onOpenAddChore={() => setAddChoreOpen(true)}
           />
         );
     }
@@ -887,6 +944,12 @@ export function FamilyApp({
         timezone={data.timezone}
         onClose={() => setUploadOpen(false)}
         onSaved={handleDocumentSaved}
+      />
+      <AddChoreModal
+        open={addChoreOpen}
+        people={data.people}
+        onClose={() => setAddChoreOpen(false)}
+        onSave={handleSaveChore}
       />
       <ChangePasswordModal
         open={passwordOpen}
