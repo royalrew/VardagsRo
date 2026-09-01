@@ -1533,12 +1533,173 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
     };
   }
 
-  // Pure greeting
-  if (/^(hej|tjena|hallå|god kväll|god morgon|god dag|läget)(\s+jarvis)?[!.]?$/i.test(lower)) {
+  // 1. Polite & Conversational Greetings
+  if (/^(tack|tack så mycket|tack snälla|tackar|grymt|bra jobbat|kanon|perfekt|toppen|tack för hjälpen)[\s!?.…]*$/i.test(lower)) {
     return {
-      text: `${getGreeting(callerName, now)} Hur kan jag hjälpa dig?`,
+      text: `Det var så lite så, ${callerName}! Säg bara till om det är något mer jag ska fixa. 💪`,
       executedActions: [],
     };
+  }
+
+  if (/^(god\s*natt|gonatt|sov\s*gott)[\s!?.…]*$/i.test(lower)) {
+    return {
+      text: `God natt ${callerName}! 🌙 Sov gott så tar vi nya tag imorgon!`,
+      executedActions: [],
+    };
+  }
+
+  if (/^(hur\s*är\s*läget|läget|hur\s*mår\s*du|hur\s*står\s*det\s*till)[\s!?.…]*$/i.test(lower)) {
+    return {
+      text: `Bara bra tack, ${callerName}! 🦾 Redo att hålla koll på familjens schema, Projekt 100-träningen och barnens städområden. Hur är läget med dig?`,
+      executedActions: [],
+    };
+  }
+
+  if (/^(vem\s*är\s*du|vad\s*kan\s*du\s*göra|vad\s*kan\s*jag\s*fråga|hjälp|funktioner|kommandon)[\s!?.…]*$/i.test(lower)) {
+    return {
+      text: `${getGreeting(callerName, now)} Jag är Jarvis, er digitala familje- och livskollega! 🤖✨\n\nHär är exempel på vad du kan fråga eller be mig om:\n\n📅 **Schema & Arbetstider:**\n• "När börjar jag imorgon?"\n• "När jobbar Hanni på fredag?"\n• "Vad händer i helgen?"\n\n🎯 **Aktiviteter & Dagsplan:**\n• "Vad ska vi göra idag?"\n• "Hur ser morgondagen ut?"\n\n🍽️ **Middag & Kost:**\n• "Vad ska vi äta idag?" / "Middagstips"\n• "Protein & Mat" / "Logga 30g protein"\n\n🏋️‍♂️ **Projekt 100 Träning & Kropp:**\n• "Vad ska jag träna idag?"\n• "Vägde 84.5 kg"\n• "Sprang 5 km på 28 min"\n\n🧹 **Barnen & Städning:**\n• "Vem städar vad?"\n• "Är barnen klara med sina ansvarsområden?"\n• "Har barnen några läxor?"\n\n🔔 **Smarta Påminnelser:**\n• "Påminn mig att handla på fredag efter jobbet"\n\n📌 **Minnesbank & Dokument:**\n• "Vad står i kallelsen från tandläkaren?"\n• "Kom ihåg att koden till förrådet är 1234"`,
+      executedActions: [],
+    };
+  }
+
+  // Pure greeting
+  if (/^(hej|tjena|hallå|god kväll|god morgon|god dag|morsning|tja|hejsan)(\s+jarvis)?[\s!?.…]*$/i.test(lower)) {
+    return {
+      text: `${getGreeting(callerName, now)} Hur kan jag hjälpa dig? Du kan fråga om schemat, träningen, middagstips eller be mig lägga in en påminnelse!`,
+      executedActions: [],
+    };
+  }
+
+  // "Vad ska vi göra idag?" / "Vad ska vi hitta på?" / "Aktiviteter idag"
+  if (/(?:vad\s*ska\s*vi\s*(?:göra|hitta\s*på)|aktiviteter\s*idag|tips\s*på\s*aktiviteter|vad\s*gör\s*vi\s*idag)/i.test(lower)) {
+    const dashboard = await loadDashboard(actor);
+    executedActions.push("check_schedule");
+    const todayEvents = dashboard.events.filter(
+      (e) => calendarDateInTimeZone(e.startsAt, DEFAULT_TIME_ZONE) === today,
+    );
+    const workEvents = todayEvents.filter((e) => e.category === "work");
+    const familyEvents = todayEvents.filter((e) => e.category !== "work");
+    const openTasks = dashboard.tasks.filter((t) => !t.completedAt);
+
+    const shiftLines = workEvents.map((w) => {
+      const p = dashboard.people.find((x) => x.id === w.personId);
+      return `• ${p ? p.name : "Jobb"}: ${clockValueInTimeZone(w.startsAt, DEFAULT_TIME_ZONE)}–${clockValueInTimeZone(w.endsAt, DEFAULT_TIME_ZONE)}`;
+    });
+
+    const eventLines = familyEvents.map((e) => {
+      const p = dashboard.people.find((x) => x.id === e.personId);
+      const time = e.allDay ? "Hela dagen" : `${clockValueInTimeZone(e.startsAt, DEFAULT_TIME_ZONE)}–${clockValueInTimeZone(e.endsAt, DEFAULT_TIME_ZONE)}`;
+      return `• ${e.title}${p ? ` (${p.name})` : ""} kl. ${time}`;
+    });
+
+    let summary = `${getGreeting(callerName, now)} Här är dagens översikt och plan:\n`;
+    if (shiftLines.length > 0) {
+      summary += `\n💼 **Arbetspass idag:**\n${shiftLines.join("\n")}`;
+    } else {
+      summary += `\n💼 **Jobb:** Ni är lediga från jobbet idag! 🌟`;
+    }
+
+    if (eventLines.length > 0) {
+      summary += `\n\n🎉 **Aktiviteter & Inbokat:**\n${eventLines.join("\n")}`;
+    }
+
+    if (openTasks.length > 0) {
+      summary += `\n\n📝 **Att göra (${openTasks.length} kvar):**\n` + openTasks.slice(0, 3).map((t) => `• ${t.title}`).join("\n");
+      if (openTasks.length > 3) summary += `\n...och ${openTasks.length - 3} till.`;
+    }
+
+    if (familyEvents.length === 0 && openTasks.length === 0) {
+      summary += `\n\n🌿 **Tips:** Schemat är öppet! Perfekt läge för en skön familjepromenad, ett träningspass eller en lugn kväll tillsammans.`;
+    }
+
+    return { text: summary, executedActions };
+  }
+
+  // "Vad ska vi äta idag?" / "Middagstips" / "Vad ska vi laga för mat?"
+  if (/(?:vad\s*ska\s*vi\s*(?:äta|laga)|middagstips|tips\s*på\s*middag|tips\s*på\s*mat|vad\s*blir\s*det\s*för\s*mat|matförslag)/i.test(lower)) {
+    let nutritionSummary = "";
+    try {
+      const nutDay = await loadProject100NutritionDay(actor, today);
+      if (nutDay.batches && nutDay.batches.length > 0) {
+        const available = nutDay.batches.filter((b) => b.portionsLeft > 0);
+        if (available.length > 0) {
+          const batchList = available
+            .map((b) => `• ${b.name} (${b.portionsLeft} portioner i frysen)`)
+            .join("\n");
+          nutritionSummary = `\n\n🍱 **Färdiga matlådor i frysen:**\n${batchList}`;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    const dinnerIdeas = [
+      "🍗 **Kycklingfajitas / Kycklingwok:** Snabbstekt kycklingfilé med paprika, lök, ris och guacamole/kvargdip.",
+      "🥩 **Köttfärssås / Biffar:** Nötfärs med krossade tomater, vitlök, bönpasta eller råris samt en krispig grönsallad.",
+      "🐟 **Ugnsbakad lax:** Laxfilé med kokt potatis, ärtor och romsås eller citronyoghurt.",
+      "🍳 **Matig Omelett / Pytt:** Omelett med kalkon/skinka, spenat, tomat och keso.",
+    ];
+
+    const chosenIdeas = dinnerIdeas.slice(0, 3).join("\n\n");
+    const reply = `${getGreeting(callerName, now)} Här kommer lite goda och proteinrika middagsförslag som passar hela familjen och Projekt 100:${nutritionSummary}\n\n💡 **Förslag:**\n${chosenIdeas}\n\nVill du att jag lägger in något av detta på inköpslistan eller som en påminnelse?`;
+    executedActions.push("get_nutrition_status");
+    return { text: reply, executedActions };
+  }
+
+  // "Har barnen några läxor?" / "Vad ska barnen ta med sig?" / "Skolsaker"
+  if (/(?:läxa|läxor|ta\s*med|packa|packning|gympapåse|idrottskläder|skolsaker|skoluppgift)/i.test(lower)) {
+    const dashboard = await loadDashboard(actor);
+    executedActions.push("check_schedule");
+    const schoolTasks = dashboard.tasks.filter(
+      (t) => !t.completedAt && (t.kind === "homework" || t.kind === "bring" || t.kind === "preparation" || t.kind === "form"),
+    );
+
+    if (schoolTasks.length === 0) {
+      return {
+        text: `${getGreeting(callerName, now)} Det finns inga inlagda läxor eller ta-med-saker till skolan just nu. Allt är grönt! 🎒✨`,
+        executedActions,
+      };
+    }
+
+    const taskList = schoolTasks.map((t) => {
+      const person = dashboard.people.find((p) => p.id === t.personId);
+      const due = t.dueAt ? ` (till ${t.dueAt.slice(0, 10)})` : "";
+      return `• ${person ? `${person.name}: ` : ""}${t.title}${due}`;
+    }).join("\n");
+
+    return {
+      text: `${getGreeting(callerName, now)} Här är vad som är inlagt för skolan/packning:\n\n${taskList}`,
+      executedActions,
+    };
+  }
+
+  // "Vad händer i helgen?" / "Helgplaner" / "Hur ser helgen ut?"
+  if (/(?:vad\s*händer\s*i\s*helgen|helgens\s*schema|helgplaner|hur\s*ser\s*helgen\s*ut|i\s*helgen)/i.test(lower)) {
+    const dashboard = await loadDashboard(actor);
+    executedActions.push("check_schedule");
+    const todayStr = calendarDateInTimeZone(now, DEFAULT_TIME_ZONE);
+    const refParts = new Date(`${todayStr}T12:00:00Z`);
+    const dayOfWeek = refParts.getUTCDay();
+    const diffToSat = (6 - dayOfWeek + 7) % 7;
+    const satDate = addCalendarDateDays(todayStr, diffToSat === 0 && dayOfWeek !== 6 ? 7 : diffToSat);
+    const sunDate = addCalendarDateDays(satDate, 1);
+
+    const satEvents = dashboard.events.filter((e) => calendarDateInTimeZone(e.startsAt, DEFAULT_TIME_ZONE) === satDate);
+    const sunEvents = dashboard.events.filter((e) => calendarDateInTimeZone(e.startsAt, DEFAULT_TIME_ZONE) === sunDate);
+
+    const formatEventLine = (e: (typeof dashboard.events)[0]) => {
+      const p = dashboard.people.find((x) => x.id === e.personId);
+      const time = e.allDay ? "Hela dagen" : `${clockValueInTimeZone(e.startsAt, DEFAULT_TIME_ZONE)}–${clockValueInTimeZone(e.endsAt, DEFAULT_TIME_ZONE)}`;
+      return `  • ${e.title}${p ? ` (${p.name})` : ""} kl. ${time}`;
+    };
+
+    let reply = `${getGreeting(callerName, now)} Här är en överblick för helgen:\n\n📅 **Lördag (${satDate}):**\n`;
+    reply += satEvents.length > 0 ? satEvents.map(formatEventLine).join("\n") : "  • Inget inbokat (ledig dag) ☀️";
+
+    reply += `\n\n📅 **Söndag (${sunDate}):**\n`;
+    reply += sunEvents.length > 0 ? sunEvents.map(formatEventLine).join("\n") : "  • Inget inbokat (ledig dag) ☀️";
+
+    return { text: reply, executedActions };
   }
 
   // Training & Workout status check ("Dagens Träning", "Dagens Pass", "Vad ska jag träna idag?")

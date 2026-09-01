@@ -532,4 +532,83 @@ describe("jarvis-agent", () => {
     expect(res.executedActions).toContain("check_schedule");
     expect(res.text).toContain("Imorgon börjar Hanni kl. 14:00 och jobbar till kl. 21:15");
   });
+
+  it("handles conversational greeting ('Hej')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Hej",
+      { personName: "Jimmy" },
+    );
+
+    expect(res.text).toContain("Hur kan jag hjälpa dig?");
+  });
+
+  it("handles status check ('Hur är läget?')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Hur är läget?",
+      { personName: "Jimmy" },
+    );
+
+    expect(res.text).toContain("Bara bra tack");
+  });
+
+  it("handles polite gratitude ('Tack!')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Tack så mycket!",
+      { personName: "Jimmy" },
+    );
+
+    expect(res.text).toContain("Det var så lite så");
+  });
+
+  it("handles capability guide ('Vem är du?')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Vem är du?",
+      { personName: "Jimmy" },
+    );
+
+    expect(res.text).toContain("Jag är Jarvis");
+    expect(res.text).toContain("Schema & Arbetstider");
+    expect(res.text).toContain("Projekt 100 Träning");
+  });
+
+  it("handles daily activity planning ('Vad ska vi göra idag?')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Vad ska vi göra idag?",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadDashboard).toHaveBeenCalled();
+    expect(res.executedActions).toContain("check_schedule");
+    expect(res.text).toContain("dagens översikt och plan");
+  });
+
+  it("handles dinner and meal inspiration ('Vad ska vi äta idag?')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Vad ska vi äta idag?",
+      { personName: "Jimmy" },
+    );
+
+    expect(res.executedActions).toContain("get_nutrition_status");
+    expect(res.text).toContain("middagsförslag");
+  });
+
+  it("handles weekend overview ('Vad händer i helgen?')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Vad händer i helgen?",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadDashboard).toHaveBeenCalled();
+    expect(res.executedActions).toContain("check_schedule");
+    expect(res.text).toContain("överblick för helgen");
+    expect(res.text).toContain("Lördag");
+    expect(res.text).toContain("Söndag");
+  });
 });
