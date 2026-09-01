@@ -23,6 +23,7 @@ import type {
 } from "@/lib/types";
 
 type TaskFilter = "open" | "completed";
+type ScopeFilter = "all" | "mine";
 
 const taskKindMeta: Record<
   TaskKind,
@@ -40,25 +41,39 @@ export function TaskBoard({
   tasks,
   people,
   documents,
+  currentPerson,
   onToggle,
   onOpenDocument,
 }: {
   tasks: FamilyTask[];
   people: FamilyPerson[];
   documents: FamilyDocument[];
+  currentPerson?: FamilyPerson;
   onToggle: (task: FamilyTask, completed: boolean) => Promise<boolean>;
   onOpenDocument: (documentId: string) => void;
 }) {
+  const isChild = currentPerson?.personType === "child";
   const [filter, setFilter] = useState<TaskFilter>("open");
+  const [scope, setScope] = useState<ScopeFilter>(isChild ? "mine" : "all");
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
-  const openCount = tasks.filter((task) => !task.completedAt).length;
-  const completedCount = tasks.length - openCount;
+
+  const scopedTasks = useMemo(() => {
+    if (scope === "mine" && currentPerson) {
+      return tasks.filter(
+        (t) => t.personId === currentPerson.id || t.personId === null,
+      );
+    }
+    return tasks;
+  }, [tasks, scope, currentPerson]);
+
+  const openCount = scopedTasks.filter((task) => !task.completedAt).length;
+  const completedCount = scopedTasks.length - openCount;
   const visibleTasks = useMemo(
     () =>
-      tasks
+      scopedTasks
         .filter((task) => (filter === "open" ? !task.completedAt : Boolean(task.completedAt)))
         .sort(compareTasks),
-    [filter, tasks],
+    [filter, scopedTasks],
   );
 
   async function toggleTask(task: FamilyTask) {
@@ -81,29 +96,57 @@ export function TaskBoard({
           <div>
             <span className="section-kicker">Att göra</span>
             <h2 id="task-board-heading">
-              {openCount ? `${openCount} ${openCount === 1 ? "sak" : "saker"} kvar` : "Allt är klart"}
+              {openCount
+                ? `${openCount} ${openCount === 1 ? "sak" : "saker"} kvar`
+                : "Allt är klart"}
             </h2>
           </div>
         </div>
-        <div className="task-filter" role="tablist" aria-label="Visa uppgifter">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={filter === "open"}
-            className={filter === "open" ? "active" : ""}
-            onClick={() => setFilter("open")}
-          >
-            Kvar <span>{openCount}</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={filter === "completed"}
-            className={filter === "completed" ? "active" : ""}
-            onClick={() => setFilter("completed")}
-          >
-            Klart <span>{completedCount}</span>
-          </button>
+
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {isChild && (
+            <div className="task-filter" role="tablist" aria-label="Filtrera person">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={scope === "mine"}
+                className={scope === "mine" ? "active" : ""}
+                onClick={() => setScope("mine")}
+              >
+                Mina
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={scope === "all"}
+                className={scope === "all" ? "active" : ""}
+                onClick={() => setScope("all")}
+              >
+                Alla
+              </button>
+            </div>
+          )}
+
+          <div className="task-filter" role="tablist" aria-label="Visa uppgifter">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filter === "open"}
+              className={filter === "open" ? "active" : ""}
+              onClick={() => setFilter("open")}
+            >
+              Kvar <span>{openCount}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filter === "completed"}
+              className={filter === "completed" ? "active" : ""}
+              onClick={() => setFilter("completed")}
+            >
+              Klart <span>{completedCount}</span>
+            </button>
+          </div>
         </div>
       </header>
 

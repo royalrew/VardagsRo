@@ -302,39 +302,53 @@ export function FamilyApp({
     return true;
   }
 
-  async function handleSaveChore(input: {
-    personId: string;
-    title: string;
-    notes: string | null;
-    dueAt: string | null;
-    kind: "other";
-  }): Promise<boolean> {
+  async function handleSaveChores(
+    inputs: Array<{
+      personId: string;
+      title: string;
+      notes: string | null;
+      dueAt: string | null;
+      kind: "other";
+    }>,
+  ): Promise<boolean> {
+    if (inputs.length === 0) return true;
+
     if (data.dataMode === "database") {
       try {
-        const response = await fetch("/api/tasks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(input),
-        });
-        const body = (await response.json()) as { task?: FamilyTask; error?: string };
-        if (!response.ok || !body.task) {
-          throw new Error(body.error ?? "Kunde inte spara städuppgiften.");
-        }
+        const results = await Promise.all(
+          inputs.map(async (input) => {
+            const response = await fetch("/api/tasks", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(input),
+            });
+            const body = (await response.json()) as { task?: FamilyTask; error?: string };
+            if (!response.ok || !body.task) {
+              throw new Error(body.error ?? "Kunde inte spara städuppgiften.");
+            }
+            return body.task;
+          }),
+        );
+
         setData((current) => ({
           ...current,
-          tasks: [body.task!, ...current.tasks],
+          tasks: [...results, ...current.tasks],
         }));
-        const targetPerson = data.people.find((p) => p.id === input.personId);
-        showToast(`Städuppgift tillagd för ${targetPerson?.name ?? "barnet"}`);
+        const targetPerson = data.people.find((p) => p.id === inputs[0].personId);
+        showToast(
+          inputs.length === 1
+            ? `Städuppgift tillagd för ${targetPerson?.name ?? "barnet"}`
+            : `${inputs.length} städuppgifter tillagda för ${targetPerson?.name ?? "barnet"}`,
+        );
         return true;
       } catch (err) {
-        showToast(err instanceof Error ? err.message : "Kunde inte spara städuppgiften");
+        showToast(err instanceof Error ? err.message : "Kunde inte spara städuppgifterna");
         return false;
       }
     }
 
-    const localTask: FamilyTask = {
-      id: `local-task-${Date.now()}`,
+    const localTasks: FamilyTask[] = inputs.map((input, index) => ({
+      id: `local-task-${Date.now()}-${index}`,
       householdId: data.householdId,
       personId: input.personId,
       documentId: null,
@@ -346,13 +360,17 @@ export function FamilyApp({
       reviewStatus: "confirmed",
       confidence: 1,
       sourceExcerpt: null,
-    };
+    }));
     setData((current) => ({
       ...current,
-      tasks: [localTask, ...current.tasks],
+      tasks: [...localTasks, ...current.tasks],
     }));
-    const targetPerson = data.people.find((p) => p.id === input.personId);
-    showToast(`Städuppgift tillagd för ${targetPerson?.name ?? "barnet"}`);
+    const targetPerson = data.people.find((p) => p.id === inputs[0].personId);
+    showToast(
+      inputs.length === 1
+        ? `Städuppgift tillagd för ${targetPerson?.name ?? "barnet"}`
+        : `${inputs.length} städuppgifter tillagda för ${targetPerson?.name ?? "barnet"}`,
+    );
     return true;
   }
 
@@ -949,7 +967,7 @@ export function FamilyApp({
         open={addChoreOpen}
         people={data.people}
         onClose={() => setAddChoreOpen(false)}
-        onSave={handleSaveChore}
+        onSave={handleSaveChores}
       />
       <ChangePasswordModal
         open={passwordOpen}

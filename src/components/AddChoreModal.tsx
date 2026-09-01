@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Plus, Sparkles, X } from "lucide-react";
+import { Check, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Avatar } from "@/components/ui";
@@ -8,7 +8,15 @@ import {
   getCleaningAreaForPerson,
   KIDS_CLEANING_AREAS,
 } from "@/lib/kids-chores";
-import type { FamilyPerson, FamilyTask } from "@/lib/types";
+import type { FamilyPerson } from "@/lib/types";
+
+export interface ChoreItemInput {
+  personId: string;
+  title: string;
+  notes: string | null;
+  dueAt: string | null;
+  kind: "other";
+}
 
 export function AddChoreModal({
   open,
@@ -19,13 +27,7 @@ export function AddChoreModal({
   open: boolean;
   people: FamilyPerson[];
   onClose: () => void;
-  onSave: (task: {
-    personId: string;
-    title: string;
-    notes: string | null;
-    dueAt: string | null;
-    kind: "other";
-  }) => Promise<boolean>;
+  onSave: (tasks: ChoreItemInput[]) => Promise<boolean>;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const kids = useMemo(
@@ -39,7 +41,8 @@ export function AddChoreModal({
   const [selectedPersonId, setSelectedPersonId] = useState<string>(
     () => kids[0]?.id || people[0]?.id || "",
   );
-  const [title, setTitle] = useState("");
+  const [selectedChores, setSelectedChores] = useState<string[]>([]);
+  const [customInput, setCustomInput] = useState("");
   const [notes, setNotes] = useState("");
   const [dueOption, setDueOption] = useState<"today" | "tomorrow" | "weekend" | "none">("today");
   const [busy, setBusy] = useState(false);
@@ -53,6 +56,16 @@ export function AddChoreModal({
       setSelectedPersonId(kids[0].id);
     }
   }, [kids, people, selectedPersonId]);
+
+  // Reset selected chores when opening or switching child
+  useEffect(() => {
+    if (!open) {
+      setSelectedChores([]);
+      setCustomInput("");
+      setNotes("");
+      setError(null);
+    }
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -88,12 +101,40 @@ export function AddChoreModal({
     return null;
   }
 
+  function togglePreset(preset: string) {
+    setSelectedChores((current) =>
+      current.includes(preset)
+        ? current.filter((item) => item !== preset)
+        : [...current, preset],
+    );
+    setError(null);
+  }
+
+  function addCustomChore() {
+    const trimmed = customInput.trim();
+    if (!trimmed) return;
+    if (!selectedChores.includes(trimmed)) {
+      setSelectedChores((current) => [...current, trimmed]);
+    }
+    setCustomInput("");
+    setError(null);
+  }
+
+  function removeChore(titleToRemove: string) {
+    setSelectedChores((current) => current.filter((item) => item !== titleToRemove));
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (busy) return;
-    const trimmedTitle = title.trim();
-    if (!trimmedTitle) {
-      setError("Skriv vad som ska göras.");
+
+    const allTitlesToSave = [...selectedChores];
+    if (customInput.trim() && !allTitlesToSave.includes(customInput.trim())) {
+      allTitlesToSave.push(customInput.trim());
+    }
+
+    if (allTitlesToSave.length === 0) {
+      setError("Välj minst en förvald syssla eller skriv en egen uppgift.");
       return;
     }
     if (!selectedPersonId) {
@@ -101,22 +142,26 @@ export function AddChoreModal({
       return;
     }
 
+    const dueAt = calculateDueDate(dueOption);
+    const tasksToSave: ChoreItemInput[] = allTitlesToSave.map((title) => ({
+      personId: selectedPersonId,
+      title,
+      notes: notes.trim() || null,
+      dueAt,
+      kind: "other",
+    }));
+
     setBusy(true);
     setError(null);
     try {
-      const ok = await onSave({
-        personId: selectedPersonId,
-        title: trimmedTitle,
-        notes: notes.trim() || null,
-        dueAt: calculateDueDate(dueOption),
-        kind: "other",
-      });
+      const ok = await onSave(tasksToSave);
       if (ok) {
-        setTitle("");
+        setSelectedChores([]);
+        setCustomInput("");
         setNotes("");
         onClose();
       } else {
-        setError("Kunde inte spara uppgiften.");
+        setError("Kunde inte spara uppgifterna.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ett fel uppstod.");
@@ -124,6 +169,8 @@ export function AddChoreModal({
       setBusy(false);
     }
   }
+
+  const totalSelected = selectedChores.length + (customInput.trim() ? 1 : 0);
 
   return (
     <div
@@ -144,7 +191,7 @@ export function AddChoreModal({
           <div className="modal-header">
             <div>
               <p className="eyebrow"><Sparkles size={14} /> Barnens Städområden</p>
-              <h2 id="add-chore-title">Lägg till städuppgift</h2>
+              <h2 id="add-chore-title">Lägg till städuppgifter</h2>
             </div>
             <button
               type="button"
@@ -185,37 +232,85 @@ export function AddChoreModal({
             </div>
           </div>
 
-          {/* Preset Chips */}
+          {/* Presets - Multi Select */}
           {cleaningArea && (
             <div className="chore-presets">
-              <span className="chore-label">Färdiga förslag för {cleaningArea.area}:</span>
+              <span className="chore-label">
+                Klicka för att välja sysslor för {cleaningArea.area} (du kan välja flera):
+              </span>
               <div className="chore-preset-chips">
-                {cleaningArea.presetTasks.map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    className="chore-preset-btn"
-                    onClick={() => setTitle(preset)}
-                  >
-                    {preset}
-                  </button>
-                ))}
+                {cleaningArea.presetTasks.map((preset) => {
+                  const isChecked = selectedChores.includes(preset);
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      className={`chore-preset-btn ${isChecked ? "chore-preset-active" : ""}`}
+                      onClick={() => togglePreset(preset)}
+                    >
+                      {isChecked ? <Check size={14} /> : <Plus size={14} />} {preset}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Title Input */}
-          <label className="login-field">
-            <span>Uppgift</span>
-            <input
-              type="text"
-              placeholder={cleaningArea ? `t.ex. Dammsuga ${cleaningArea.area.toLowerCase()}` : "Vad ska göras?"}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              disabled={busy}
-              required
-            />
-          </label>
+          {/* Custom Input */}
+          <div className="chore-custom-section">
+            <span className="chore-label">Eller skriv egen uppgift</span>
+            <div className="chore-custom-row">
+              <input
+                type="text"
+                placeholder={
+                  cleaningArea
+                    ? `t.ex. Rensa skrivbordet i ${cleaningArea.area.toLowerCase()}`
+                    : "Skriv vad som ska göras…"
+                }
+                value={customInput}
+                onChange={(e) => setCustomInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addCustomChore();
+                  }
+                }}
+                disabled={busy}
+              />
+              <button
+                type="button"
+                className="button button-soft chore-add-btn"
+                onClick={addCustomChore}
+                disabled={!customInput.trim()}
+              >
+                <Plus size={16} /> Lägg till
+              </button>
+            </div>
+          </div>
+
+          {/* Selected Chores List */}
+          {selectedChores.length > 0 && (
+            <div className="chore-selected-box">
+              <span className="chore-label">
+                Valda uppgifter att spara ({selectedChores.length}):
+              </span>
+              <ul className="chore-selected-list">
+                {selectedChores.map((item) => (
+                  <li key={item} className="chore-selected-item">
+                    <span>• {item}</span>
+                    <button
+                      type="button"
+                      className="chore-item-remove"
+                      onClick={() => removeChore(item)}
+                      title="Ta bort"
+                    >
+                      <X size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Due Options */}
           <div className="chore-due-section">
@@ -254,10 +349,10 @@ export function AddChoreModal({
 
           {/* Extra Notes */}
           <label className="login-field">
-            <span>Extra anteckning (valfritt)</span>
+            <span>Gemensam anteckning (valfritt)</span>
             <input
               type="text"
-              placeholder="t.ex. Kom ihåg under soffan"
+              placeholder="t.ex. Kom ihåg under soffan och bakom dörren"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               disabled={busy}
@@ -279,8 +374,17 @@ export function AddChoreModal({
             >
               Avbryt
             </button>
-            <button type="submit" className="login-submit" disabled={busy || !title.trim()}>
-              <Plus size={16} /> {busy ? "Sparar…" : "Spara städuppgift"}
+            <button
+              type="submit"
+              className="login-submit"
+              disabled={busy || totalSelected === 0}
+            >
+              <Plus size={16} />{" "}
+              {busy
+                ? "Sparar…"
+                : totalSelected > 1
+                  ? `Spara ${totalSelected} städuppgifter`
+                  : "Spara städuppgift"}
             </button>
           </div>
         </form>

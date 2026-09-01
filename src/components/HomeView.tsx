@@ -12,7 +12,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { capitalize, formatClock, formatLongDate, isSameLocalDay } from "@/lib/dates";
+import { capitalize, formatClock, formatLongDate, formatTimeRange, isSameLocalDay } from "@/lib/dates";
 import { eventConcernsPerson, familyScopePerson, personForEvent } from "@/lib/family-scope";
 import type { DashboardData, FamilyEvent, FamilyTask } from "@/lib/types";
 import { Avatar, EmptyState, EventRow } from "@/components/ui";
@@ -57,6 +57,7 @@ export function HomeView({
   }, [data.events, now]);
   const reviewDocuments = data.documents.filter((document) => document.status === "needs_review");
   const currentPerson = data.people.find((person) => person.id === data.currentPersonId) ?? data.people[0];
+  const isChild = currentPerson?.personType === "child";
 
   function submitQuestion(event: React.FormEvent) {
     event.preventDefault();
@@ -65,17 +66,27 @@ export function HomeView({
     onAsk(value);
   }
 
+  const suggestionChips = isChild
+    ? ["Vad händer idag?", "Vad ska jag städa?", "När slutar mamma/pappa jobbet?"]
+    : ["Vad händer i helgen?", "Jobbar pappa på söndag?", "Vad behöver kollas?"];
+
   return (
     <div className="home-view view-enter">
       <section className="welcome-row">
         <div>
           <p className="eyebrow">{capitalize(formatLongDate(now))}</p>
           <h1>Hej, {currentPerson?.name}!</h1>
-          <p className="welcome-subtitle">Här är familjens dag, samlad och klar.</p>
+          <p className="welcome-subtitle">
+            {isChild
+              ? "Här ser du vad som händer idag och dina uppgifter ⭐"
+              : "Här är familjens dag, samlad och klar."}
+          </p>
         </div>
-        <button className="button button-primary desktop-add" onClick={onAdd}>
-          <Plus size={18} aria-hidden="true" /> Lägg till
-        </button>
+        {!isChild && (
+          <button className="button button-primary desktop-add" onClick={onAdd}>
+            <Plus size={18} aria-hidden="true" /> Lägg till
+          </button>
+        )}
       </section>
 
       <KidsChoresNotice
@@ -103,20 +114,22 @@ export function HomeView({
             id="home-question"
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Jobbar pappa på söndag när jag har fotboll?"
+            placeholder={
+              isChild
+                ? "När kommer pappa hem?"
+                : "Jobbar pappa på söndag när jag har fotboll?"
+            }
           />
           <button type="submit" aria-label="Skicka frågan" disabled={!question.trim()}>
             <Send size={18} />
           </button>
         </form>
         <div className="question-chips" aria-label="Förslag på frågor">
-          {["Vad händer i helgen?", "Jobbar pappa på söndag?", "Vad behöver kollas?"].map(
-            (suggestion) => (
-              <button key={suggestion} onClick={() => onAsk(suggestion)}>
-                {suggestion}
-              </button>
-            ),
-          )}
+          {suggestionChips.map((suggestion) => (
+            <button key={suggestion} onClick={() => onAsk(suggestion)}>
+              {suggestion}
+            </button>
+          ))}
         </div>
       </section>
 
@@ -138,7 +151,11 @@ export function HomeView({
                 const person = personForEvent(data.people, event, familyScopePerson(data.familyName, data.householdId));
                 return (
                   <div className="timeline-item" key={event.id}>
-                    <time>{formatClock(event.startsAt)}</time>
+                    <time>
+                      {event.allDay
+                        ? "Hela dagen"
+                        : `${formatClock(event.startsAt)}–${formatClock(event.endsAt)}`}
+                    </time>
                     <span className="timeline-track" aria-hidden="true">
                       <i style={{ background: person.color }} />
                       {index < todayEvents.length - 1 ? <b /> : null}
@@ -146,7 +163,7 @@ export function HomeView({
                     <button className="timeline-content" onClick={() => onEventClick(event)}>
                       <span>
                         <strong>{event.title}</strong>
-                        <small>{event.location ?? person.name}</small>
+                        <small>{event.location ? `${event.location} · ${person.name}` : person.name}</small>
                       </span>
                       <Avatar person={person} size="small" />
                     </button>
@@ -159,9 +176,11 @@ export function HomeView({
               title="Inget inlagt idag"
               text="När familjen lägger till tider syns de här."
               action={
-                <button className="button button-soft" onClick={onAdd}>
-                  <Plus size={16} /> Lägg till något
-                </button>
+                !isChild ? (
+                  <button className="button button-soft" onClick={onAdd}>
+                    <Plus size={16} /> Lägg till något
+                  </button>
+                ) : undefined
               }
             />
           )}
@@ -182,7 +201,11 @@ export function HomeView({
                   <Avatar person={person} showStatus />
                   <span>
                     <strong>{person.name}</strong>
-                    <small>{next ? `${formatClock(next.startsAt)} · ${next.title}` : "Inget inlagt idag"}</small>
+                    <small>
+                      {next
+                        ? `${formatTimeRange(next.startsAt, next.endsAt, next.allDay)} · ${next.title}`
+                        : "Inget inlagt idag"}
+                    </small>
                   </span>
                 </div>
               );
@@ -195,6 +218,7 @@ export function HomeView({
         tasks={data.tasks}
         people={data.people}
         documents={data.documents}
+        currentPerson={currentPerson}
         onToggle={onToggleTask}
         onOpenDocument={onOpenDocument}
       />
@@ -226,38 +250,40 @@ export function HomeView({
           </div>
         </section>
 
-        <section className="card review-card">
-          <header className="section-header compact-header">
-            <div>
-              <span className="section-kicker">Behöver kollas</span>
-              <h2>{reviewDocuments.length ? "Hjälp oss kontrollera" : "Allt ser bra ut"}</h2>
-            </div>
+        {!isChild && (
+          <section className="card review-card">
+            <header className="section-header compact-header">
+              <div>
+                <span className="section-kicker">Behöver kollas</span>
+                <h2>{reviewDocuments.length ? "Hjälp oss kontrollera" : "Allt ser bra ut"}</h2>
+              </div>
+              {reviewDocuments.length ? (
+                <span className="count-badge">{reviewDocuments.length}</span>
+              ) : (
+                <CheckCircle2 size={22} className="success-icon" aria-hidden="true" />
+              )}
+            </header>
+
             {reviewDocuments.length ? (
-              <span className="count-badge">{reviewDocuments.length}</span>
+              <button className="review-document" onClick={() => onNavigate("documents")}>
+                <span className="document-mini-icon">
+                  <ScanLine size={20} />
+                </span>
+                <span>
+                  <strong>{reviewDocuments[0].title}</strong>
+                  <small>{reviewDocuments[0].summary}</small>
+                </span>
+                <CircleAlert size={18} className="warning-icon" />
+              </button>
             ) : (
-              <CheckCircle2 size={22} className="success-icon" aria-hidden="true" />
+              <p className="calm-copy">Alla uppladdade tider är kontrollerade.</p>
             )}
-          </header>
 
-          {reviewDocuments.length ? (
-            <button className="review-document" onClick={() => onNavigate("documents")}>
-              <span className="document-mini-icon">
-                <ScanLine size={20} />
-              </span>
-              <span>
-                <strong>{reviewDocuments[0].title}</strong>
-                <small>{reviewDocuments[0].summary}</small>
-              </span>
-              <CircleAlert size={18} className="warning-icon" />
+            <button className="card-link" onClick={() => onNavigate("documents")}>
+              Visa dokument <ArrowRight size={16} />
             </button>
-          ) : (
-            <p className="calm-copy">Alla uppladdade tider är kontrollerade.</p>
-          )}
-
-          <button className="card-link" onClick={() => onNavigate("documents")}>
-            Visa dokument <ArrowRight size={16} />
-          </button>
-        </section>
+          </section>
+        )}
       </div>
     </div>
   );
