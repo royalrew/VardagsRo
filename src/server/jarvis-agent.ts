@@ -72,6 +72,95 @@ export interface JarvisAgentResult {
   executedActions: string[];
 }
 
+const SWEDISH_WEEKDAYS: Record<string, number> = {
+  söndag: 0,
+  måndag: 1,
+  tisdag: 2,
+  onsdag: 3,
+  torsdag: 4,
+  fredag: 5,
+  lördag: 6,
+};
+
+const SWEDISH_MONTHS: Record<string, string> = {
+  januari: "01",
+  februari: "02",
+  mars: "03",
+  april: "04",
+  maj: "05",
+  juni: "06",
+  juli: "07",
+  augusti: "08",
+  september: "09",
+  oktober: "10",
+  november: "11",
+  december: "12",
+};
+
+export function resolveSwedishTargetDate(
+  text: string,
+  referenceDate: Date = new Date(),
+): { targetDate: string; dateLabel: string } {
+  const lower = text.toLowerCase();
+  const todayStr = calendarDateInTimeZone(referenceDate, DEFAULT_TIME_ZONE);
+  const refParts = new Date(`${todayStr}T12:00:00Z`);
+  const refDayOfWeek = refParts.getUTCDay();
+
+  if (/\bi\s*övermorgon\b/i.test(lower)) {
+    return {
+      targetDate: addCalendarDateDays(todayStr, 2),
+      dateLabel: "i övermorgon",
+    };
+  }
+
+  if (/\bimorgon\b|\bi\s*morgon\b|\bimorn\b|\bi\s*morn\b|\bmorgondagen\b/i.test(lower)) {
+    return {
+      targetDate: addCalendarDateDays(todayStr, 1),
+      dateLabel: "imorgon",
+    };
+  }
+
+  if (/\bidag\b|\bi\s*dag\b|\bikväll\b|\bi\s*kväll\b/i.test(lower)) {
+    return {
+      targetDate: todayStr,
+      dateLabel: "idag",
+    };
+  }
+
+  // Weekdays: måndag..söndag
+  for (const [name, dayNum] of Object.entries(SWEDISH_WEEKDAYS)) {
+    const regex = new RegExp(`\\b(?:på\\s+)?${name}\\b`, "i");
+    if (regex.test(lower)) {
+      let diff = (dayNum - refDayOfWeek + 7) % 7;
+      if (diff === 0) diff = 7;
+      return {
+        targetDate: addCalendarDateDays(todayStr, diff),
+        dateLabel: `på ${name}`,
+      };
+    }
+  }
+
+  // Explicit date: "den 15 september" / "15 sep"
+  const dateMatch = lower.match(/\b(?:den\s+)?(\d{1,2})[e|a]?\s+([a-zåäö]+)/i);
+  if (dateMatch) {
+    const day = dateMatch[1].padStart(2, "0");
+    const monthKey = dateMatch[2].toLowerCase();
+    const month = SWEDISH_MONTHS[monthKey];
+    if (month) {
+      const year = referenceDate.getFullYear();
+      return {
+        targetDate: `${year}-${month}-${day}`,
+        dateLabel: `den ${Number(day)} ${monthKey}`,
+      };
+    }
+  }
+
+  return {
+    targetDate: todayStr,
+    dateLabel: "idag",
+  };
+}
+
 const JARVIS_TOOLS: OpenAI.ChatCompletionTool[] = [
   {
     type: "function",
@@ -1482,19 +1571,190 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
     };
   }
 
-  // Family schedule check ("Familjens Schema", "Dagens Schema", "Vad gör familjen idag?")
-  const isScheduleQuery =
-    /(?:familjens\s*schema|familjeschema|dagens\s*schema|schema\s*idag|vad\s*gör\s*familjen|vad\s*händer\s*idag|hur\s*ser\s*schemat\s*ut)/i.test(
+  // Swedish Work Shift & Daily Schedule Query Handler:
+  // "När börjar jag imorgon?", "När jobbar jag imorgon?", "När slutar jag imorgon?",
+  // "Jobbar jag imorgon?", "Hur jobbar jag imorgon?", "Vilka tider jobbar jag på fredag?",
+  // "När börjar Hanni imorgon?", "När jobbar Hanni idag?", "När slutar Hanni?", "Jobbar Hanni imorgon?",
+  // "Vad händer imorgon?", "Vad gör familjen imorgon?", "Schema imorgon", "Hur ser morgondagen ut?",
+  // "Är jag ledig imorgon?", "Är jag ledig på fredag?", "Är Hanni ledig imorgon?"
+  const isWorkOrScheduleQuestion =
+    /(?:när\s+börjar|vilken\s+tid\s+börjar|när\s+startar|när\s+jobbar|hur\s+jobbar|vilka\s+tider\s+jobbar|vilka\s+tider\s+har|vad\s+jobbar|jobbar\s+(?:jag|hanni|mamma|pappa|alma|shureym|cuzeyr|vi)|är\s+(?:jag|hanni|mamma|pappa)\s+ledig|när\s+slutar|vilken\s+tid\s+slutar|när\s+är\s+(?:jag|hanni)\s+(?:klar|färdig)|när\s+kommer\s+(?:jag|hanni|mamma|pappa)\s+hem|arbetspass|jobbpass|jobbtider|vad\s+händer\s+(?:idag|imorgon|på\s+[a-zåäö]+)|vad\s+gör\s+(?:vi|familjen)\s*(?:idag|imorgon)?|schema\s+(?:idag|imorgon|på\s+[a-zåäö]+)|hur\s+ser\s+(?:morgondagen|dagen|schemat)\s+ut|familjens\s*schema|familjeschema|dagens\s*schema|schema\s*idag)/i.test(
       lower,
-    ) || /^(schema|kalender)$/i.test(lower.trim());
+    ) ||
+    ((/^(schema|kalender)$/i.test(lower.trim()) || /(?:jobbar|börjar|slutar|ledig)/i.test(lower)) &&
+      /(?:idag|i\s*dag|imorgon|i\s*morgon|imorn|i\s*morn|i\s*övermorgon|på\s+måndag|på\s+tisdag|på\s+onsdag|på\s+torsdag|på\s+fredag|på\s+lördag|på\s+söndag|måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|den\s+\d+|\d{1,2}\/\d{1,2})/i.test(
+        lower,
+      ));
 
-  if (isScheduleQuery) {
-    const toolResStr = await executeTool("check_schedule", { date: today });
-    const toolRes = JSON.parse(toolResStr);
-    return {
-      text: `${getGreeting(callerName, now)} ${toolRes.summary}`,
-      executedActions,
-    };
+  if (isWorkOrScheduleQuestion) {
+    const { targetDate, dateLabel } = resolveSwedishTargetDate(text, now);
+    const dashboard = await loadDashboard(actor);
+    executedActions.push("check_schedule");
+
+    // 1. Resolve Target Person
+    let targetPerson = dashboard.people.find((p) => p.id === actor.personId);
+    let isExplicitOtherPerson = false;
+
+    if (/(?:hanni|mamma|frun)\b/i.test(lower)) {
+      const found = dashboard.people.find(
+        (p) =>
+          p.name.toLowerCase().includes("hanni") ||
+          p.aliases.some((a) => a.toLowerCase().includes("hanni")),
+      );
+      if (found) {
+        targetPerson = found;
+        isExplicitOtherPerson = found.id !== actor.personId;
+      }
+    } else if (/\balma\b/i.test(lower)) {
+      const found = dashboard.people.find((p) => p.name.toLowerCase().includes("alma"));
+      if (found) {
+        targetPerson = found;
+        isExplicitOtherPerson = found.id !== actor.personId;
+      }
+    } else if (/\bshureym\b/i.test(lower)) {
+      const found = dashboard.people.find((p) => p.name.toLowerCase().includes("shureym"));
+      if (found) {
+        targetPerson = found;
+        isExplicitOtherPerson = found.id !== actor.personId;
+      }
+    } else if (/\bcuzeyr\b/i.test(lower)) {
+      const found = dashboard.people.find((p) => p.name.toLowerCase().includes("cuzeyr"));
+      if (found) {
+        targetPerson = found;
+        isExplicitOtherPerson = found.id !== actor.personId;
+      }
+    } else if (/(?:jimmy|pappa)\b/i.test(lower)) {
+      const found = dashboard.people.find(
+        (p) =>
+          p.name.toLowerCase().includes("jimmy") ||
+          p.aliases.some((a) => a.toLowerCase().includes("pappa")),
+      );
+      if (found) {
+        targetPerson = found;
+        isExplicitOtherPerson = found.id !== actor.personId;
+      }
+    }
+
+    const isSelf = !isExplicitOtherPerson && (targetPerson?.id === actor.personId || !targetPerson);
+    const targetPersonName = targetPerson?.name || "du";
+    const pronoun = targetPerson?.name === "Hanni" ? "hon" : "han";
+    const capDateLabel = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
+
+    // 2. Resolve events on target date
+    const allDayEvents = dashboard.events.filter(
+      (e) => calendarDateInTimeZone(e.startsAt, DEFAULT_TIME_ZONE) === targetDate,
+    );
+    const personWorkEvents = allDayEvents.filter(
+      (e) => e.category === "work" && (targetPerson ? eventConcernsPerson(e, targetPerson.id) : true),
+    );
+    const otherDayEvents = allDayEvents.filter((e) => e.category !== "work");
+
+    // Optional task creation chained into message (e.g. "Kolla om jag jobbar ... och lägg in ...")
+    let taskSummary = "";
+    const taskMatch = text.match(/(?:och\s+)?(?:lägga in|lägg in|påminn|skapa)(?:\s+att|\s+om|\s+in)?\s+(.+)$/i);
+    if (taskMatch) {
+      const taskTitle = taskMatch[1]
+        .replace(/^(?:jag\s+vill\s+|vi\s+måste\s+|vi\s+ska\s+|att\s+jag\s+vill\s+|att\s+|om\s+att\s+|om\s+)/i, "")
+        .replace(/[?.!]+$/, "")
+        .trim();
+      const capitalized = taskTitle.charAt(0).toUpperCase() + taskTitle.slice(1);
+      await executeTool("create_task", {
+        title: capitalized,
+        due_date: targetDate,
+      });
+      taskSummary = ` Jag har även lagt in en påminnelse om att "${capitalized}" till ${dateLabel}.`;
+    }
+
+    // 3. Build appropriate response based on intent
+    const isStartQuery = /(?:när\s+börjar|vilken\s+tid\s+börjar|när\s+startar)/i.test(lower);
+    const isEndQuery = /(?:när\s+slutar|vilken\s+tid\s+slutar|när\s+är\s+.*(?:klar|färdig)|när\s+kommer\s+.*hem)/i.test(lower);
+    const isFreeQuery = /(?:är\s+.*ledig|ledig\s+från\s+jobbet)/i.test(lower);
+
+    if (isStartQuery) {
+      if (personWorkEvents.length > 0) {
+        const w = personWorkEvents[0];
+        const startTime = clockValueInTimeZone(w.startsAt, DEFAULT_TIME_ZONE);
+        const endTime = clockValueInTimeZone(w.endsAt, DEFAULT_TIME_ZONE);
+        const shiftTitle = w.title ? ` (${w.title})` : "";
+        const reply = isSelf
+          ? `${getGreeting(callerName, now)} ${capDateLabel} börjar du kl. ${startTime} och jobbar till kl. ${endTime}${shiftTitle}.${taskSummary}`
+          : `${getGreeting(callerName, now)} ${capDateLabel} börjar ${targetPersonName} kl. ${startTime} och jobbar till kl. ${endTime}${shiftTitle}.${taskSummary}`;
+        return { text: reply, executedActions };
+      } else {
+        const reply = isSelf
+          ? `${getGreeting(callerName, now)} Du har inget inlagt arbetspass ${dateLabel}, så du är ledig från jobbet!${taskSummary}`
+          : `${getGreeting(callerName, now)} ${targetPersonName} har inget inlagt arbetspass ${dateLabel}, så ${pronoun} är ledig från jobbet.${taskSummary}`;
+        return { text: reply, executedActions };
+      }
+    }
+
+    if (isEndQuery) {
+      if (personWorkEvents.length > 0) {
+        const w = personWorkEvents[0];
+        const startTime = clockValueInTimeZone(w.startsAt, DEFAULT_TIME_ZONE);
+        const endTime = clockValueInTimeZone(w.endsAt, DEFAULT_TIME_ZONE);
+        const shiftTitle = w.title ? ` (${w.title})` : "";
+        const reply = isSelf
+          ? `${getGreeting(callerName, now)} ${capDateLabel} slutar du kl. ${endTime} (arbetspass ${startTime}–${endTime}${shiftTitle}).${taskSummary}`
+          : `${getGreeting(callerName, now)} ${capDateLabel} slutar ${targetPersonName} kl. ${endTime} (arbetspass ${startTime}–${endTime}${shiftTitle}).${taskSummary}`;
+        return { text: reply, executedActions };
+      } else {
+        const reply = isSelf
+          ? `${getGreeting(callerName, now)} Du har inget inlagt arbetspass ${dateLabel}, så du är ledig från jobbet!${taskSummary}`
+          : `${getGreeting(callerName, now)} ${targetPersonName} har inget inlagt arbetspass ${dateLabel}, så ${pronoun} är ledig från jobbet.${taskSummary}`;
+        return { text: reply, executedActions };
+      }
+    }
+
+    if (isFreeQuery) {
+      if (personWorkEvents.length === 0) {
+        const reply = isSelf
+          ? `${getGreeting(callerName, now)} Ja, du har inget inlagt arbetspass ${dateLabel}, så du är ledig från jobbet!${taskSummary}`
+          : `${getGreeting(callerName, now)} Ja, ${targetPersonName} har inget inlagt arbetspass ${dateLabel}, så ${pronoun} är ledig från jobbet.${taskSummary}`;
+        return { text: reply, executedActions };
+      } else {
+        const times = personWorkEvents.map(
+          (w) => `${clockValueInTimeZone(w.startsAt, DEFAULT_TIME_ZONE)}–${clockValueInTimeZone(w.endsAt, DEFAULT_TIME_ZONE)}`,
+        ).join(", ");
+        const reply = isSelf
+          ? `${getGreeting(callerName, now)} Nej, ${dateLabel} jobbar du ${times}.${taskSummary}`
+          : `${getGreeting(callerName, now)} Nej, ${dateLabel} jobbar ${targetPersonName} ${times}.${taskSummary}`;
+        return { text: reply, executedActions };
+      }
+    }
+
+    // General work or daily schedule question
+    if (personWorkEvents.length > 0) {
+      const times = personWorkEvents.map(
+        (w) => `${clockValueInTimeZone(w.startsAt, DEFAULT_TIME_ZONE)}–${clockValueInTimeZone(w.endsAt, DEFAULT_TIME_ZONE)}`,
+      ).join(", ");
+      let otherNote = "";
+      if (otherDayEvents.length > 0) {
+        otherNote = `\n\nÖvrigt ${dateLabel}:\n` + otherDayEvents.map((e) => {
+          const person = dashboard.people.find((p) => p.id === e.personId);
+          const t = e.allDay ? "Hela dagen" : `${clockValueInTimeZone(e.startsAt, DEFAULT_TIME_ZONE)}–${clockValueInTimeZone(e.endsAt, DEFAULT_TIME_ZONE)}`;
+          return `• ${e.title}${person ? ` (${person.name})` : ""} kl. ${t}`;
+        }).join("\n");
+      }
+      const reply = isSelf
+        ? `${getGreeting(callerName, now)} ${capDateLabel} jobbar du ${times}.${otherNote}${taskSummary}`
+        : `${getGreeting(callerName, now)} ${capDateLabel} jobbar ${targetPersonName} ${times}.${otherNote}${taskSummary}`;
+      return { text: reply, executedActions };
+    }
+
+    // Free day
+    let otherNote = "";
+    if (otherDayEvents.length > 0) {
+      otherNote = `\n\nInbokat ${dateLabel}:\n` + otherDayEvents.map((e) => {
+        const person = dashboard.people.find((p) => p.id === e.personId);
+        const t = e.allDay ? "Hela dagen" : `${clockValueInTimeZone(e.startsAt, DEFAULT_TIME_ZONE)}–${clockValueInTimeZone(e.endsAt, DEFAULT_TIME_ZONE)}`;
+        return `• ${e.title}${person ? ` (${person.name})` : ""} kl. ${t}`;
+      }).join("\n");
+    }
+    const reply = isSelf
+      ? `${getGreeting(callerName, now)} Du har inget inlagt arbetspass ${dateLabel} (ledig från jobbet).${otherNote}${taskSummary}`
+      : `${getGreeting(callerName, now)} ${targetPersonName} har inget inlagt arbetspass ${dateLabel}.${otherNote}${taskSummary}`;
+    return { text: reply, executedActions };
   }
 
   // Kids Chores & Cleaning Areas check ("Är barnen färdiga med sina ansvarsområden?", "Har barnen städat?", "Är Alma klar?")
@@ -1529,55 +1789,6 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
     });
     return {
       text: `${getGreeting(callerName, now)} ${res.text}`,
-      executedActions,
-    };
-  }
-
-  // Combined: "Kolla om jag jobbar ... och lägg in ..."
-  const scheduleMatch = lower.match(/jobbar.*?(?:den\s+)?(\d{1,2})[e|a]?\s+([a-zåäö]+)/i);
-
-  if (scheduleMatch) {
-    const day = scheduleMatch[1].padStart(2, "0");
-    const monthNames: Record<string, string> = {
-      januari: "01",
-      februari: "02",
-      mars: "03",
-      april: "04",
-      maj: "05",
-      juni: "06",
-      juli: "07",
-      augusti: "08",
-      september: "09",
-      oktober: "10",
-      november: "11",
-      december: "12",
-    };
-    const monthStr = scheduleMatch[2].toLowerCase();
-    const month = monthNames[monthStr] || "09";
-    const year = now.getFullYear();
-    const targetDate = `${year}-${month}-${day}`;
-
-    // 1. Check schedule
-    await executeTool("check_schedule", { date: targetDate });
-
-    // 2. Create task if requested
-    let taskSummary = "";
-    const taskMatch = text.match(/(?:och\s+)?(?:lägga in|lägg in|påminn|skapa)(?:\s+att|\s+om|\s+in)?\s+(.+)$/i);
-    if (taskMatch) {
-      const taskTitle = taskMatch[1]
-        .replace(/^(?:jag\s+vill\s+|vi\s+måste\s+|vi\s+ska\s+|att\s+jag\s+vill\s+|att\s+|om\s+att\s+|om\s+)/i, "")
-        .replace(/[?.!]+$/, "")
-        .trim();
-      const capitalized = taskTitle.charAt(0).toUpperCase() + taskTitle.slice(1);
-      await executeTool("create_task", {
-        title: capitalized,
-        due_date: targetDate,
-      });
-      taskSummary = ` Jag har även lagt in en påminnelse om att "${capitalized}" till den ${Number(day)} ${monthStr}.`;
-    }
-
-    return {
-      text: `${getGreeting(callerName, now)} Den ${Number(day)} ${monthStr} är du ledig på kvällen (inget arbetspass inlagt).${taskSummary}`,
       executedActions,
     };
   }

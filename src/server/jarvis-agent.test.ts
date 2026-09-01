@@ -7,8 +7,10 @@ const dependencies = vi.hoisted(() => ({
   loadDashboard: vi.fn(async () => ({
     events: [
       { id: "event-doc-1", title: "Tandläkartid", startsAt: "2026-09-15T10:00:00.000Z", documentId: "doc-1" },
-      { id: "event-work-jimmy", title: "Jobb", startsAt: "2026-09-01T05:00:00.000Z", endsAt: "2026-09-01T14:00:00.000Z", personId: "person-1", category: "work" },
-      { id: "event-work-hanni", title: "Jobb", startsAt: "2026-09-01T12:00:00.000Z", endsAt: "2026-09-01T19:15:00.000Z", personId: "person-hanni", category: "work" },
+      { id: "event-work-jimmy-today", title: "Jobb", startsAt: "2026-09-01T05:00:00.000Z", endsAt: "2026-09-01T14:00:00.000Z", personId: "person-1", category: "work" },
+      { id: "event-work-hanni-today", title: "Jobb", startsAt: "2026-09-01T12:00:00.000Z", endsAt: "2026-09-01T19:15:00.000Z", personId: "person-hanni", category: "work" },
+      { id: "event-work-jimmy-tomorrow", title: "Jobb", startsAt: "2026-09-02T05:00:00.000Z", endsAt: "2026-09-02T14:00:00.000Z", personId: "person-1", category: "work" },
+      { id: "event-work-hanni-tomorrow", title: "Jobb", startsAt: "2026-09-02T12:00:00.000Z", endsAt: "2026-09-02T19:15:00.000Z", personId: "person-hanni", category: "work" },
     ],
     people: [
       { id: "person-1", name: "Jimmy", aliases: ["Pappa"], personType: "adult" },
@@ -461,5 +463,73 @@ describe("jarvis-agent", () => {
 
     expect(res.executedActions).not.toContain("search_memory");
     expect(res.executedActions).not.toContain("save_memory");
+  });
+
+  it("handles start time query ('När börjar jag imorgon?')", async () => {
+    const jimmyActor: ActorContext = {
+      ...TEST_ACTOR,
+      personId: "person-1",
+    };
+
+    const res = await processJarvisAgentMessage(
+      jimmyActor,
+      "När börjar jag imorgon?",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadDashboard).toHaveBeenCalled();
+    expect(res.executedActions).toContain("check_schedule");
+    expect(res.text).toContain("Imorgon börjar du kl. 07:00 och jobbar till kl. 16:00");
+  });
+
+  it("handles work shift query ('När jobbar jag imorgon?')", async () => {
+    const jimmyActor: ActorContext = {
+      ...TEST_ACTOR,
+      personId: "person-1",
+    };
+
+    const res = await processJarvisAgentMessage(
+      jimmyActor,
+      "När jobbar jag imorgon?",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadDashboard).toHaveBeenCalled();
+    expect(res.executedActions).toContain("check_schedule");
+    expect(res.text).toContain("Imorgon jobbar du 07:00–16:00");
+  });
+
+  it("handles end time query ('När slutar jag imorgon?')", async () => {
+    const jimmyActor: ActorContext = {
+      ...TEST_ACTOR,
+      personId: "person-1",
+    };
+
+    const res = await processJarvisAgentMessage(
+      jimmyActor,
+      "När slutar jag imorgon?",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadDashboard).toHaveBeenCalled();
+    expect(res.executedActions).toContain("check_schedule");
+    expect(res.text).toContain("Imorgon slutar du kl. 16:00");
+  });
+
+  it("handles other family member work shift query ('När börjar Hanni imorgon?')", async () => {
+    const jimmyActor: ActorContext = {
+      ...TEST_ACTOR,
+      personId: "person-1",
+    };
+
+    const res = await processJarvisAgentMessage(
+      jimmyActor,
+      "När börjar Hanni imorgon?",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadDashboard).toHaveBeenCalled();
+    expect(res.executedActions).toContain("check_schedule");
+    expect(res.text).toContain("Imorgon börjar Hanni kl. 14:00 och jobbar till kl. 21:15");
   });
 });
