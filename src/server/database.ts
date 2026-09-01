@@ -1246,6 +1246,55 @@ export async function updateTaskCompletion(
   });
 }
 
+export interface TaskUpdateInput {
+  title?: string;
+  dueAt?: string | null;
+  completedAt?: string | null;
+  notes?: string | null;
+  personId?: string | null;
+}
+
+export async function updateManualTask(
+  actor: ActorContext,
+  id: string,
+  input: TaskUpdateInput,
+): Promise<FamilyTask | null> {
+  const sql = await readyClient();
+  return await sql.begin(async (tx) => {
+    const existing = await tx<TaskRow[]>`
+      select * from family_tasks where id = ${id} and household_id = ${actor.householdId} limit 1
+    `;
+    if (!existing[0]) return null;
+
+    const title = input.title ?? existing[0].title;
+    const dueAt = input.dueAt !== undefined ? (input.dueAt ? new Date(input.dueAt).toISOString() : null) : existing[0].due_at;
+    const completedAt = input.completedAt !== undefined ? (input.completedAt ? new Date(input.completedAt).toISOString() : null) : existing[0].completed_at;
+    const notes = input.notes !== undefined ? input.notes : existing[0].notes;
+    const personId = input.personId !== undefined ? input.personId : existing[0].person_id;
+
+    const rows = await tx<TaskRow[]>`
+      update family_tasks
+      set title = ${title},
+          due_at = ${dueAt},
+          completed_at = ${completedAt},
+          notes = ${notes},
+          person_id = ${personId},
+          updated_at = now()
+      where id = ${id} and household_id = ${actor.householdId}
+      returning id, household_id, person_id, document_id, title, kind, due_at,
+                completed_at, notes, review_status, confidence, source_excerpt
+    `;
+    if (!rows[0]) return null;
+    await recordAudit(tx, actor, {
+      action: "task.update",
+      targetType: "task",
+      targetId: id,
+      metadata: { title, hasDueDate: dueAt !== null },
+    });
+    return mapTask(rows[0]);
+  });
+}
+
 export async function removeTask(actor: ActorContext, id: string): Promise<boolean> {
   const sql = await readyClient();
   return await sql.begin(async (tx) => {

@@ -16,8 +16,18 @@ import type { Project100MeasurementUnit } from "@/lib/project100-body";
 import type { Project100MealType } from "@/lib/project100-nutrition";
 import type { Project100ActivityType } from "@/lib/project100-training";
 import { openAIConfig } from "@/server/config";
-import { loadDashboard, saveManualTask } from "@/server/database";
+import {
+  loadDashboard,
+  readyClient,
+  removeEvent,
+  removeTask,
+  saveManualEvent,
+  saveManualTask,
+  updateManualEvent,
+  updateManualTask,
+} from "@/server/database";
 import { assertProject100Adult } from "@/server/project100";
+import { deleteProject100Memory } from "@/server/project100-jarvis";
 import { loadProject100BodyJourney, saveProject100BodyEntry } from "@/server/project100-body";
 import { getCleaningAreaForPerson } from "@/lib/kids-chores";
 import { createProject100ContentProject } from "@/server/project100-content";
@@ -106,6 +116,20 @@ export function resolveSwedishTargetDate(
   const refParts = new Date(`${todayStr}T12:00:00Z`);
   const refDayOfWeek = refParts.getUTCDay();
 
+  if (/\bi\s*förrgår\b|\biförrgår\b/i.test(lower)) {
+    return {
+      targetDate: addCalendarDateDays(todayStr, -2),
+      dateLabel: "i förrgår",
+    };
+  }
+
+  if (/\bigår\b|\bi\s*går\b|\bgårdagen\b/i.test(lower)) {
+    return {
+      targetDate: addCalendarDateDays(todayStr, -1),
+      dateLabel: "igår",
+    };
+  }
+
   if (/\bi\s*övermorgon\b/i.test(lower)) {
     return {
       targetDate: addCalendarDateDays(todayStr, 2),
@@ -127,7 +151,20 @@ export function resolveSwedishTargetDate(
     };
   }
 
-  // Weekdays: måndag..söndag
+  // Past weekdays: "i måndags", "i tisdags", "i fredags"
+  for (const [name, dayNum] of Object.entries(SWEDISH_WEEKDAYS)) {
+    const regex = new RegExp(`\\bi\\s+${name.slice(0, -2)}ags\\b|\\bi\\s+${name}s\\b`, "i");
+    if (regex.test(lower)) {
+      let diff = (refDayOfWeek - dayNum + 7) % 7;
+      if (diff === 0) diff = 7;
+      return {
+        targetDate: addCalendarDateDays(todayStr, -diff),
+        dateLabel: `i ${name.slice(0, -2)}ags`,
+      };
+    }
+  }
+
+  // Upcoming weekdays: "på måndag", "måndag"
   for (const [name, dayNum] of Object.entries(SWEDISH_WEEKDAYS)) {
     const regex = new RegExp(`\\b(?:på\\s+)?${name}\\b`, "i");
     if (regex.test(lower)) {
@@ -140,12 +177,12 @@ export function resolveSwedishTargetDate(
     }
   }
 
-  // Explicit date: "den 15 september" / "15 sep"
-  const dateMatch = lower.match(/\b(?:den\s+)?(\d{1,2})[e|a]?\s+([a-zåäö]+)/i);
+  // Explicit date: "den 1a september" / "den 1:a september" / "1 september" / "15:e okt"
+  const dateMatch = lower.match(/\b(?:den\s+)?(\d{1,2})(?::?[e|a])?\s+([a-zåäö]+)/i);
   if (dateMatch) {
     const day = dateMatch[1].padStart(2, "0");
     const monthKey = dateMatch[2].toLowerCase();
-    const month = SWEDISH_MONTHS[monthKey];
+    const month = SWEDISH_MONTHS[monthKey] || Object.entries(SWEDISH_MONTHS).find(([k]) => monthKey.startsWith(k.slice(0, 3)))?.[1];
     if (month) {
       const year = referenceDate.getFullYear();
       return {
@@ -561,6 +598,120 @@ const JARVIS_TOOLS: OpenAI.ChatCompletionTool[] = [
             description: "Valfritt namn på specifikt barn (t.ex. 'Alma', 'Shureym', 'Cuzeyr') eller tomt för alla barn.",
           },
         },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_day_history",
+      description: "Hämta en fullständig historisk sammanfattning för ett visst datum (vad användaren gjorde, arbetspass, genomförda träningspass, loggad mat/protein, avklarade uppgifter, vikt och dagboksanteckningar).",
+      parameters: {
+        type: "object",
+        properties: {
+          date: {
+            type: "string",
+            description: "Datum i formatet YYYY-MM-DD (t.ex. '2026-09-01').",
+          },
+        },
+        required: ["date"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_event",
+      description: "Skapa en ny kalenderhändelse, möte, kalas, match eller aktivitet i familjekalendern.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: {
+            type: "string",
+            description: "Händelsens titel (t.ex. 'Kalas hos mormor', 'Fotbollsmatch Alma').",
+          },
+          date: {
+            type: "string",
+            description: "Datum i formatet YYYY-MM-DD.",
+          },
+          start_time: {
+            type: "string",
+            description: "Valfri starttid i format HH:MM (t.ex. '14:00').",
+          },
+          end_time: {
+            type: "string",
+            description: "Valfri sluttid i format HH:MM (t.ex. '16:00').",
+          },
+          person_name: {
+            type: "string",
+            description: "Valfritt namn på vem händelsen gäller (t.ex. 'Alma', 'Jimmy', 'Hanni') eller tomt för hela familjen.",
+          },
+          location: {
+            type: "string",
+            description: "Valfri plats.",
+          },
+        },
+        required: ["title", "date"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_item",
+      description: "Ändra eller flytta en befintlig uppgift, påminnelse eller kalenderhändelse (t.ex. ändra datum, tid, titel eller klarmarkera).",
+      parameters: {
+        type: "object",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["task", "event"],
+            description: "Typ av objekt att ändra: 'task' (uppgift/påminnelse) eller 'event' (kalenderhändelse).",
+          },
+          query: {
+            type: "string",
+            description: "Sökord för att hitta uppgiften eller händelsen som ska ändras (t.ex. 'mjölk', 'tandläkare', 'kalas').",
+          },
+          new_title: {
+            type: "string",
+            description: "Ny titel om den ska ändras.",
+          },
+          new_date: {
+            type: "string",
+            description: "Nytt datum i format YYYY-MM-DD.",
+          },
+          new_time: {
+            type: "string",
+            description: "Ny tid i format HH:MM.",
+          },
+          completed: {
+            type: "boolean",
+            description: "Om uppgiften ska markeras som klar (true) eller öppen (false).",
+          },
+        },
+        required: ["type", "query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_item",
+      description: "Ta bort eller radera en uppgift, påminnelse, kalenderhändelse eller minne.",
+      parameters: {
+        type: "object",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["task", "event", "memory"],
+            description: "Typ av objekt att ta bort: 'task' (uppgift), 'event' (kalenderhändelse), 'memory' (minnesanteckning).",
+          },
+          query: {
+            type: "string",
+            description: "Sökord för att hitta det som ska tas bort (t.ex. 'handla mjölk', 'kalas', 'portkod').",
+          },
+        },
+        required: ["type", "query"],
       },
     },
   },
@@ -1410,6 +1561,300 @@ export async function processJarvisAgentMessage(
       });
     }
 
+    if (name === "get_day_history") {
+      const targetDate = String(args.date || today);
+      const [dashboard, sessions, journal, body] = await Promise.all([
+        loadDashboard(actor),
+        loadProject100TrainingSessions(actor),
+        loadProject100Journal(actor),
+        loadProject100BodyJourney(actor),
+      ]);
+
+      let nutritionDay = null;
+      try {
+        nutritionDay = await loadProject100NutritionDay(actor, targetDate);
+      } catch {
+        // ignore
+      }
+
+      const dayEvents = dashboard.events.filter(
+        (e) => calendarDateInTimeZone(e.startsAt, DEFAULT_TIME_ZONE) === targetDate,
+      );
+      const workEvents = dayEvents.filter((e) => e.category === "work");
+      const familyEvents = dayEvents.filter((e) => e.category !== "work");
+
+      const daySessions = sessions.filter((s) => s.sessionDate === targetDate);
+      const completedSessions = daySessions.filter((s) => s.status === "completed");
+
+      const completedTasks = dashboard.tasks.filter((t) => {
+        if (!t.completedAt) return false;
+        return calendarDateInTimeZone(t.completedAt, DEFAULT_TIME_ZONE) === targetDate;
+      });
+
+      const dayJournal = journal?.entries?.find((j) => j.writtenOn === targetDate);
+      const weightEntry =
+        body?.weightHistory?.find((b) => b.measuredOn === targetDate) ??
+        body?.entries?.find((e) => e.measuredOn === targetDate)?.measurements.find((m) => m.metric === "weight");
+
+      const summaryParts: string[] = [`📅 **Sammanfattning för ${targetDate}:**`];
+
+      // Work
+      if (workEvents.length > 0) {
+        const wLines = workEvents.map((w) => {
+          const p = dashboard.people.find((x) => x.id === w.personId);
+          return `• ${p ? p.name : "Jobb"}: ${clockValueInTimeZone(w.startsAt, DEFAULT_TIME_ZONE)}–${clockValueInTimeZone(w.endsAt, DEFAULT_TIME_ZONE)}`;
+        });
+        summaryParts.push(`💼 **Arbetspass:**\n${wLines.join("\n")}`);
+      } else {
+        summaryParts.push(`💼 **Jobb:** Ledig från jobbet.`);
+      }
+
+      // Events
+      if (familyEvents.length > 0) {
+        const eLines = familyEvents.map((e) => {
+          const p = dashboard.people.find((x) => x.id === e.personId);
+          const t = e.allDay ? "Hela dagen" : `${clockValueInTimeZone(e.startsAt, DEFAULT_TIME_ZONE)}–${clockValueInTimeZone(e.endsAt, DEFAULT_TIME_ZONE)}`;
+          return `• ${e.title}${p ? ` (${p.name})` : ""} kl. ${t}`;
+        });
+        summaryParts.push(`🎉 **Händelser & Aktiviteter:**\n${eLines.join("\n")}`);
+      }
+
+      // Training
+      if (completedSessions.length > 0) {
+        const sLines = completedSessions.map(
+          (s) => `• "${s.title}" (${s.durationSeconds ? Math.round(s.durationSeconds / 60) : 45} min${s.effort ? `, RPE ${s.effort}` : ""})`,
+        );
+        summaryParts.push(`🏋️‍♂️ **Träning:**\n${sLines.join("\n")}`);
+      } else {
+        summaryParts.push(`🏋️‍♂️ **Träning:** Inget genomfört pass registrerat.`);
+      }
+
+      // Nutrition
+      if (nutritionDay && nutritionDay.eaten && nutritionDay.eaten.proteinG > 0) {
+        const targetLow = nutritionDay.target?.overrideGrams ?? nutritionDay.target?.lowGrams ?? 160;
+        summaryParts.push(
+          `🥩 **Kost & Protein:** ${nutritionDay.eaten.proteinG}g protein (av mål ${targetLow}g)${nutritionDay.meals?.length ? ` över ${nutritionDay.meals.length} måltid(er)` : ""}.`,
+        );
+      }
+
+      // Weight
+      if (weightEntry) {
+        summaryParts.push(`⚖️ **Vikt:** ${weightEntry.value} kg`);
+      }
+
+      // Tasks completed
+      if (completedTasks.length > 0) {
+        const tLines = completedTasks.map((t) => {
+          const p = dashboard.people.find((x) => x.id === t.personId);
+          return `• ${t.title}${p ? ` (${p.name})` : ""}`;
+        });
+        summaryParts.push(`✅ **Avklarade uppgifter:**\n${tLines.join("\n")}`);
+      }
+
+      // Journal
+      if (dayJournal && dayJournal.body) {
+        summaryParts.push(`📖 **Dagbok:** "${dayJournal.body}"`);
+      }
+
+      return JSON.stringify({
+        success: true,
+        date: targetDate,
+        summary: summaryParts.join("\n\n"),
+      });
+    }
+
+    if (name === "create_event") {
+      const title = String(args.title || "Ny händelse");
+      const targetDate = String(args.date || today);
+      const startTime = args.start_time ? String(args.start_time).trim() : null;
+      const endTime = args.end_time ? String(args.end_time).trim() : null;
+      const personName = args.person_name ? String(args.person_name).trim().toLowerCase() : null;
+      const location = args.location ? String(args.location).trim() : null;
+
+      const dashboard = await loadDashboard(actor);
+      let personId: string | null = null;
+      if (personName) {
+        const p = dashboard.people.find(
+          (x) =>
+            x.name.toLowerCase().includes(personName) ||
+            (x.aliases || []).some((a) => a.toLowerCase().includes(personName)),
+        );
+        if (p) personId = p.id;
+      }
+
+      const allDay = !startTime;
+      const startIso = startTime
+        ? new Date(`${targetDate}T${startTime}:00Z`).toISOString()
+        : `${targetDate}T00:00:00.000Z`;
+      const endIso = endTime
+        ? new Date(`${targetDate}T${endTime}:00Z`).toISOString()
+        : startTime
+          ? new Date(new Date(startIso).getTime() + 60 * 60 * 1000).toISOString()
+          : `${targetDate}T23:59:59.000Z`;
+
+      const created = await saveManualEvent(actor, {
+        title,
+        category: "family",
+        startsAt: startIso,
+        endsAt: endIso,
+        allDay,
+        location,
+        notes: null,
+        personId,
+      });
+
+      return JSON.stringify({
+        success: true,
+        eventId: created.id,
+        title: created.title,
+        summary: `Kalenderhändelse skapad: "${created.title}" den ${targetDate}${startTime ? ` kl. ${startTime}` : ""}.`,
+      });
+    }
+
+    if (name === "update_item") {
+      const type = String(args.type || "task");
+      const query = String(args.query || "").toLowerCase();
+      const newTitle = args.new_title ? String(args.new_title) : undefined;
+      const newDate = args.new_date ? String(args.new_date) : undefined;
+      const newTime = args.new_time ? String(args.new_time) : undefined;
+      const completed = typeof args.completed === "boolean" ? args.completed : undefined;
+
+      const dashboard = await loadDashboard(actor);
+
+      if (type === "task") {
+        const matchedTask = dashboard.tasks.find((t) =>
+          t.title.toLowerCase().includes(query) || (t.notes && t.notes.toLowerCase().includes(query)),
+        );
+        if (!matchedTask) {
+          return JSON.stringify({
+            success: false,
+            summary: `Hittade ingen uppgift som matchar "${query}".`,
+          });
+        }
+
+        let dueAt = matchedTask.dueAt;
+        if (newDate) {
+          dueAt = newTime ? `${newDate}T${newTime}:00.000Z` : `${newDate}T12:00:00.000Z`;
+        }
+
+        const updated = await updateManualTask(actor, matchedTask.id, {
+          title: newTitle || matchedTask.title,
+          dueAt,
+          completedAt: completed === true ? new Date().toISOString() : completed === false ? null : matchedTask.completedAt,
+        });
+
+        return JSON.stringify({
+          success: true,
+          taskId: updated?.id || matchedTask.id,
+          summary: `Uppdaterade uppgiften: "${updated?.title || matchedTask.title}"${newDate ? ` till ${newDate}` : ""}${completed !== undefined ? (completed ? " (markerad som klar)" : " (öppnad igen)") : ""}.`,
+        });
+      }
+
+      if (type === "event") {
+        const matchedEvent = dashboard.events.find((e) =>
+          e.title.toLowerCase().includes(query) || (e.location && e.location.toLowerCase().includes(query)),
+        );
+        if (!matchedEvent) {
+          return JSON.stringify({
+            success: false,
+            summary: `Hittade ingen kalenderhändelse som matchar "${query}".`,
+          });
+        }
+
+        let startsAt = matchedEvent.startsAt;
+        let endsAt = matchedEvent.endsAt;
+        if (newDate) {
+          const timeStr = newTime || clockValueInTimeZone(matchedEvent.startsAt, DEFAULT_TIME_ZONE);
+          startsAt = `${newDate}T${timeStr}:00.000Z`;
+          endsAt = `${newDate}T${timeStr}:00.000Z`;
+        }
+
+        const updated = await updateManualEvent(actor, matchedEvent.id, {
+          title: newTitle || matchedEvent.title,
+          category: matchedEvent.category,
+          startsAt,
+          endsAt,
+          allDay: matchedEvent.allDay,
+          location: matchedEvent.location,
+          notes: matchedEvent.notes,
+          personId: matchedEvent.personId,
+        });
+
+        return JSON.stringify({
+          success: true,
+          eventId: updated?.id,
+          summary: `Uppdaterade händelsen: "${updated?.title || matchedEvent.title}"${newDate ? ` till ${newDate}` : ""}.`,
+        });
+      }
+    }
+
+    if (name === "delete_item") {
+      const type = String(args.type || "task");
+      const query = String(args.query || "").toLowerCase();
+      const dashboard = await loadDashboard(actor);
+
+      if (type === "task") {
+        const matchedTask = dashboard.tasks.find((t) =>
+          t.title.toLowerCase().includes(query) || (t.notes && t.notes.toLowerCase().includes(query)),
+        );
+        if (!matchedTask) {
+          return JSON.stringify({
+            success: false,
+            summary: `Hittade ingen uppgift som matchar "${query}".`,
+          });
+        }
+        await removeTask(actor, matchedTask.id);
+        return JSON.stringify({
+          success: true,
+          summary: `Tog bort uppgiften: "${matchedTask.title}".`,
+        });
+      }
+
+      if (type === "event") {
+        const matchedEvent = dashboard.events.find((e) =>
+          e.title.toLowerCase().includes(query) || (e.location && e.location.toLowerCase().includes(query)),
+        );
+        if (!matchedEvent) {
+          return JSON.stringify({
+            success: false,
+            summary: `Hittade ingen kalenderhändelse som matchar "${query}".`,
+          });
+        }
+        await removeEvent(actor, matchedEvent.id);
+        return JSON.stringify({
+          success: true,
+          summary: `Tog bort kalenderhändelsen: "${matchedEvent.title}".`,
+        });
+      }
+
+      if (type === "memory") {
+        if (actor.role !== "owner" && actor.role !== "adult" && actor.personType !== "adult") {
+          return JSON.stringify({
+            success: false,
+            summary: "Endast föräldrar kan hantera minnesanteckningar.",
+          });
+        }
+        const sql = await readyClient();
+        const rows = await sql<{ id: string; content: string }[]>`
+          select id, content from project100_memories
+          where user_id = ${actor.userId} and is_active = true
+            and lower(content) like ${"%" + query + "%"}
+          limit 1
+        `;
+        if (!rows[0]) {
+          return JSON.stringify({
+            success: false,
+            summary: `Hittade inget minne som matchar "${query}".`,
+          });
+        }
+        await deleteProject100Memory(actor, rows[0].id);
+        return JSON.stringify({
+          success: true,
+          summary: `Tog bort minnet: "${rows[0].content}".`,
+        });
+      }
+    }
+
     if (name === "log_missing_capability") {
       const missingFeature = String(args.missing_feature || text);
       const categoryHint = args.category_hint ? String(args.category_hint) : undefined;
@@ -1700,6 +2145,118 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
     reply += sunEvents.length > 0 ? sunEvents.map(formatEventLine).join("\n") : "  • Inget inbokat (ledig dag) ☀️";
 
     return { text: reply, executedActions };
+  }
+
+  // 1. Day history query: "Vad gjorde jag den 1a september?", "Vad gjorde vi igår?", "Vad hände den 28 augusti?"
+  const isDayHistoryQuery = /(?:vad\s*gjorde\s*(?:jag|vi)|vad\s*hände\s*(?:den|i|igår|i\s*förrgår)|hur\s*såg\s*(?:dagen|gårdagen)\s*ut|hur\s*gick\s*det\s*(?:den|i|igår)|sammanfatta\s*(?:den|igår|gårdagen))/i.test(lower);
+  if (isDayHistoryQuery) {
+    const { targetDate } = resolveSwedishTargetDate(lower, now);
+    const resStr = await executeTool("get_day_history", { date: targetDate });
+    const res = JSON.parse(resStr);
+    return {
+      text: `${getGreeting(callerName, now)}\n\n${res.summary}`,
+      executedActions,
+    };
+  }
+
+  // 2. Delete command: "Ta bort uppgiften köpa mjölk", "Ta bort mötet imorgon", "Ta bort minnet om portkoden"
+  const deleteMatch = lower.match(/^(?:ta\s*bort|radera|rensa|ta\s*väck)\s+(.+)$/i);
+  if (deleteMatch) {
+    const queryTarget = deleteMatch[1].trim();
+    let type: "task" | "event" | "memory" = "task";
+    let cleanQuery = queryTarget;
+
+    if (/(?:minne|minnet|minnesanteckning|koden|lösenord)/i.test(queryTarget)) {
+      type = "memory";
+      cleanQuery = queryTarget.replace(/^(?:minnet?\s*(?:om|att)?|koden?\s*(?:till)?)\s*/i, "").trim();
+    } else if (/(?:händelse|händelsen|möte|mötet|kalas|kalaset|pass|passet)/i.test(queryTarget)) {
+      type = "event";
+      cleanQuery = queryTarget.replace(/^(?:händelse(?:n)?|möte(?:t)?|kalas(?:et)?|pass(?:et)?)\s*/i, "").trim();
+    } else {
+      cleanQuery = queryTarget.replace(/^(?:uppgift(?:en)?|att\s*göra|påminnelse(?:n)?)\s*(?:om\s*att|att)?\s*/i, "").trim();
+    }
+
+    const resStr = await executeTool("delete_item", { type, query: cleanQuery || queryTarget });
+    const res = JSON.parse(resStr);
+    return {
+      text: `${getGreeting(callerName, now)} ${res.summary}`,
+      executedActions,
+    };
+  }
+
+  // 3. Update / Move command: "Ändra påminnelsen om att handla till på lördag", "Flytta kalaset till kl 15:00"
+  const updateMatch = lower.match(/^(?:ändra|flytta|uppdatera|skjut\s*upp)\s+(.+)$/i);
+  if (updateMatch) {
+    const fullInstruction = updateMatch[1].trim();
+    const { targetDate } = resolveSwedishTargetDate(fullInstruction, now);
+    const timeMatch = fullInstruction.match(/(?:kl(?:ockan)?\.?\s*)?(\d{1,2}[:.]\d{2})/i);
+    const newTime = timeMatch ? timeMatch[1].replace(".", ":").padStart(5, "0") : undefined;
+
+    const tillIndex = fullInstruction.search(/\s+till\s+/i);
+    const query = tillIndex > 0 ? fullInstruction.slice(0, tillIndex).trim() : fullInstruction;
+    const cleanQuery = query.replace(/^(?:uppgift(?:en)?|påminnelse(?:n)?|händelse(?:n)?|möte(?:t)?|kalas(?:et)?)\s*(?:om\s*att|att)?\s*/i, "").trim();
+
+    const type: "task" | "event" = /(?:händelse|möte|kalas)/i.test(fullInstruction) ? "event" : "task";
+    const resStr = await executeTool("update_item", {
+      type,
+      query: cleanQuery || query,
+      new_date: targetDate !== today ? targetDate : undefined,
+      new_time: newTime,
+    });
+    const res = JSON.parse(resStr);
+    return {
+      text: `${getGreeting(callerName, now)} ${res.summary}`,
+      executedActions,
+    };
+  }
+
+  // 4. Add command: "Lägg till kalas på söndag kl 14:00", "Lägg till att köpa fotbollsskor till Shureym"
+  const addMatch = lower.match(/^(?:lägg\s*till|skapa|boka|lägg\s*in)\s+(.+)$/i);
+  if (addMatch) {
+    const fullContent = addMatch[1].trim();
+
+    // Is it an event?
+    const isEvent =
+      /(?:kalas|match|träning\s*med|möte|tandläkare|läkare|middag\s*hos|fest|utflykt|biokväll)/i.test(fullContent) ||
+      /(?:kl(?:ockan)?\.?\s*\d{1,2}[:.]\d{2})/i.test(fullContent);
+
+    if (isEvent) {
+      const { targetDate } = resolveSwedishTargetDate(fullContent, now);
+      const timeMatch = fullContent.match(/(?:kl(?:ockan)?\.?\s*)?(\d{1,2}[:.]\d{2})/i);
+      const startTime = timeMatch ? timeMatch[1].replace(".", ":").padStart(5, "0") : undefined;
+      const cleanTitle = fullContent
+        .replace(/\s+(?:den\s+\d{1,2}[e|a]?\s+[a-zåäö]+|på\s+[a-zåäö]+|imorgon|idag|i\s*övermorgon)/gi, "")
+        .replace(/\s*(?:kl(?:ockan)?\.?\s*\d{1,2}[:.]\d{2})/gi, "")
+        .trim();
+
+      const resStr = await executeTool("create_event", {
+        title: cleanTitle || fullContent,
+        date: targetDate,
+        start_time: startTime,
+      });
+      const res = JSON.parse(resStr);
+      return {
+        text: `${getGreeting(callerName, now)} ${res.summary}`,
+        executedActions,
+      };
+    }
+
+    // Default: Create task / reminder
+    const { targetDate } = resolveSwedishTargetDate(fullContent, now);
+    const cleanTitle = fullContent
+      .replace(/^(?:att\s*|en\s*uppgift\s*(?:om\s*att|att)?\s*)/i, "")
+      .replace(/\s+(?:till\s+)?(?:den\s+\d{1,2}[e|a]?\s+[a-zåäö]+|på\s+[a-zåäö]+|imorgon|idag|i\s*övermorgon)$/gi, "")
+      .trim();
+
+    const resStr = await executeTool("create_task", {
+      title: cleanTitle || fullContent,
+      due_date: targetDate !== today ? targetDate : undefined,
+    });
+    const res = JSON.parse(resStr);
+    return {
+      text: `${getGreeting(callerName, now)} ${res.summary}`,
+      executedActions,
+    };
   }
 
   // Training & Workout status check ("Dagens Träning", "Dagens Pass", "Vad ska jag träna idag?")

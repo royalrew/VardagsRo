@@ -57,6 +57,29 @@ const dependencies = vi.hoisted(() => ({
     title: input.title,
     dueAt: input.dueAt,
   })),
+  saveManualEvent: vi.fn(async (_actor, input) => ({
+    id: "event-101",
+    title: input.title,
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+    category: input.category,
+  })),
+  updateManualTask: vi.fn(async (_actor, id, input) => ({
+    id,
+    title: input.title || "Uppgift",
+    dueAt: input.dueAt,
+    completedAt: input.completedAt,
+  })),
+  updateManualEvent: vi.fn(async (_actor, id, input) => ({
+    id,
+    title: input.title || "Händelse",
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+  })),
+  removeTask: vi.fn(async () => true),
+  removeEvent: vi.fn(async () => true),
+  readyClient: vi.fn(async () => vi.fn()),
+  deleteProject100Memory: vi.fn(async () => true),
   saveProject100JournalEntry: vi.fn(),
   loadProject100Journal: vi.fn(async () => ({ entries: [], totalEntries: 0, excludedCount: 0 })),
   loadProject100BodyJourney: vi.fn(async (_actor, filter) => ({
@@ -121,6 +144,15 @@ const dependencies = vi.hoisted(() => ({
 vi.mock("@/server/database", () => ({
   loadDashboard: dependencies.loadDashboard,
   saveManualTask: dependencies.saveManualTask,
+  saveManualEvent: dependencies.saveManualEvent,
+  updateManualTask: dependencies.updateManualTask,
+  updateManualEvent: dependencies.updateManualEvent,
+  removeTask: dependencies.removeTask,
+  removeEvent: dependencies.removeEvent,
+  readyClient: dependencies.readyClient,
+}));
+vi.mock("@/server/project100-jarvis", () => ({
+  deleteProject100Memory: dependencies.deleteProject100Memory,
 }));
 vi.mock("@/server/project100-journal", () => ({
   loadProject100Journal: dependencies.loadProject100Journal,
@@ -610,5 +642,56 @@ describe("jarvis-agent", () => {
     expect(res.text).toContain("överblick för helgen");
     expect(res.text).toContain("Lördag");
     expect(res.text).toContain("Söndag");
+  });
+
+  it("handles historical day queries ('Vad gjorde jag den 1a september?')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Vad gjorde jag den 1a september?",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.loadDashboard).toHaveBeenCalled();
+    expect(res.executedActions).toContain("get_day_history");
+    expect(res.text).toContain("Sammanfattning för 2026-09-01");
+    expect(res.text).toContain("Arbetspass");
+    expect(res.text).toContain("Kost & Protein");
+  });
+
+  it("handles adding calendar events ('Lägg till kalas på söndag kl 14:00')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Lägg till kalas på söndag kl 14:00",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.saveManualEvent).toHaveBeenCalled();
+    expect(res.executedActions).toContain("create_event");
+    expect(res.text).toContain("Kalenderhändelse skapad");
+    expect(res.text).toContain("kalas");
+  });
+
+  it("handles updating tasks/reminders ('Ändra påminnelsen om att handla till på lördag')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Ändra Torka köksbänkar till på lördag",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.updateManualTask).toHaveBeenCalled();
+    expect(res.executedActions).toContain("update_item");
+    expect(res.text).toContain("Uppdaterade uppgiften");
+  });
+
+  it("handles deleting tasks/events ('Ta bort uppgiften Torka köksbänkar')", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Ta bort uppgiften Torka köksbänkar",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.removeTask).toHaveBeenCalled();
+    expect(res.executedActions).toContain("delete_item");
+    expect(res.text).toContain("Tog bort uppgiften");
   });
 });
