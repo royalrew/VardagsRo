@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { ActorContext } from "@/server/authorization-types";
 import { TEST_ACTOR } from "../../test/actor-fixture";
 
 const dependencies = vi.hoisted(() => ({
@@ -432,5 +433,22 @@ describe("jarvis-agent", () => {
     expect(res.executedActions).toContain("check_kids_chores_status");
     expect(res.text).toContain("Alma");
     expect(res.text).toContain("Lilla vardagsrummet");
+  });
+
+  it("blocks child / viewer from accessing adult memory notes", async () => {
+    const childActor: ActorContext = {
+      ...TEST_ACTOR,
+      role: "viewer",
+      personId: "person-cuzeyr",
+    };
+
+    const res = await processJarvisAgentMessage(
+      childActor,
+      "Minne: vad är koden?",
+      { personName: "Cuzeyr" },
+    );
+
+    expect(res.executedActions).not.toContain("search_memory");
+    expect(res.executedActions).not.toContain("save_memory");
   });
 });

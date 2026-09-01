@@ -631,7 +631,18 @@ export async function processJarvisAgentMessage(
       });
     }
 
+    const isAdult =
+      actor.role === "owner" ||
+      actor.role === "adult" ||
+      actor.personType === "adult";
+
     if (name === "save_memory") {
+      if (!isAdult) {
+        return JSON.stringify({
+          success: false,
+          summary: "Minnesanteckningar är personliga och endast tillgängliga för föräldrarna.",
+        });
+      }
       const category = (args.category as Project100MemoryCategory) || "general";
       const content = String(args.content || "");
       const res = await handleMemoryTextIntent(
@@ -649,6 +660,12 @@ export async function processJarvisAgentMessage(
     }
 
     if (name === "search_memory") {
+      if (!isAdult) {
+        return JSON.stringify({
+          success: false,
+          summary: "Minnesanteckningar är personliga och endast tillgängliga för föräldrarna.",
+        });
+      }
       const query = String(args.query || "");
       const res = await handleMemoryTextIntent(actor, query, options.channel || "web");
       return JSON.stringify({
@@ -662,6 +679,15 @@ export async function processJarvisAgentMessage(
       const personName = args.person_name ? String(args.person_name).toLowerCase() : "";
       const dashboard = await loadDashboard(actor);
 
+      // If the user is a child (viewer), only allow searching documents that belong to a child or the whole family
+      const allowedDocuments = isAdult
+        ? dashboard.documents
+        : dashboard.documents.filter((d) => {
+            if (!d.personId) return true;
+            const docPerson = dashboard.people.find((p) => p.id === d.personId);
+            return docPerson?.personType === "child";
+          });
+
       const searchTerms = query
         .toLowerCase()
         .replace(/kallelsen?|från|om|i|på|ett|en|det|vad|står|finns/g, "")
@@ -669,7 +695,7 @@ export async function processJarvisAgentMessage(
         .split(/\s+/)
         .filter((t) => t.length >= 2);
 
-      const matchingDocs = dashboard.documents.filter((doc) => {
+      const matchingDocs = allowedDocuments.filter((doc) => {
         const textToMatch = [doc.title, doc.summary, doc.filename, doc.periodLabel].join(" ").toLowerCase();
         const matchesQuery =
           searchTerms.length === 0
@@ -1520,13 +1546,19 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
     };
   }
 
-  // Single memory store / query
-  const memCommand = parseMemoryCommand(text);
-  if (memCommand.type !== "none") {
-    const memRes = await handleMemoryTextIntent(actor, text, options.channel || "web");
-    if (memRes.handled) {
-      executedActions.push(memCommand.type === "store" ? "save_memory" : "search_memory");
-      return { text: memRes.replyText, executedActions };
+  // Single memory store / query (adults only)
+  if (
+    actor.role === "owner" ||
+    actor.role === "adult" ||
+    actor.personType === "adult"
+  ) {
+    const memCommand = parseMemoryCommand(text);
+    if (memCommand.type !== "none") {
+      const memRes = await handleMemoryTextIntent(actor, text, options.channel || "web");
+      if (memRes.handled) {
+        executedActions.push(memCommand.type === "store" ? "save_memory" : "search_memory");
+        return { text: memRes.replyText, executedActions };
+      }
     }
   }
 
