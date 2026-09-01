@@ -7,9 +7,12 @@ const dependencies = vi.hoisted(() => ({
   loadDashboard: vi.fn(async () => ({
     events: [
       { id: "event-doc-1", title: "Tandläkartid", startsAt: "2026-09-15T10:00:00.000Z", documentId: "doc-1" },
+      { id: "event-work-jimmy", title: "Jobb", startsAt: "2026-09-01T05:00:00.000Z", endsAt: "2026-09-01T14:00:00.000Z", personId: "person-1", category: "work" },
+      { id: "event-work-hanni", title: "Jobb", startsAt: "2026-09-01T12:00:00.000Z", endsAt: "2026-09-01T19:15:00.000Z", personId: "person-hanni", category: "work" },
     ],
     people: [
       { id: "person-1", name: "Jimmy", aliases: ["Pappa"], personType: "adult" },
+      { id: "person-hanni", name: "Hanni", aliases: ["Mamma"], personType: "adult" },
       { id: "person-alma", name: "Alma", aliases: ["Lillasyster"], personType: "child" },
       { id: "person-shureym", name: "Shureym", aliases: ["Mellanbror"], personType: "child" },
       { id: "person-cuzeyr", name: "Cuzeyr", aliases: ["Storebror"], personType: "child" },
@@ -360,8 +363,13 @@ describe("jarvis-agent", () => {
   });
 
   it("handles daily training check ('🏋️‍♂️ Dagens Träning' / 'Vad ska jag träna idag?')", async () => {
+    const jimmyActor: ActorContext = {
+      ...TEST_ACTOR,
+      personId: "person-1",
+    };
+
     const res = await processJarvisAgentMessage(
-      TEST_ACTOR,
+      jimmyActor,
       "🏋️‍♂️ Dagens Träning",
       { personName: "Jimmy" },
     );
@@ -369,6 +377,9 @@ describe("jarvis-agent", () => {
     expect(dependencies.loadProject100TrainingSessions).toHaveBeenCalled();
     expect(res.executedActions).toContain("get_training_status");
     expect(res.text).toContain("Benpass");
+    expect(res.text).toContain("07:00–16:00");
+    expect(res.text).not.toContain("14:00–21:15");
+    expect(res.text).not.toContain("05:00");
   });
 
   it("handles nutrition and protein check ('🥩 Protein & Mat')", async () => {

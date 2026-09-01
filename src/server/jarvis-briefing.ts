@@ -85,7 +85,7 @@ export async function generateMorningBriefing(
 
   // 1. Work shifts (distinguishing caller vs other family members)
   const dayEvents = dashboard.events.filter((e) => {
-    const eventDate = e.startsAt.slice(0, 10);
+    const eventDate = calendarDateInTimeZone(e.startsAt, DEFAULT_TIME_ZONE);
     return eventDate === targetDate;
   });
 

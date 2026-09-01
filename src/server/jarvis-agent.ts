@@ -5,7 +5,9 @@ import {
   calendarDateInTimeZone,
   clockValueInTimeZone,
   DEFAULT_TIME_ZONE,
+  minuteOfDayInTimeZone,
 } from "@/lib/dates";
+import { eventConcernsPerson } from "@/lib/family-scope";
 import {
   type Project100MemoryCategory,
 } from "@/lib/project100-jarvis";
@@ -556,37 +558,66 @@ export async function processJarvisAgentMessage(
     if (name === "check_schedule") {
       const date = String(args.date || today);
       const dashboard = await loadDashboard(actor);
-      const eventsOnDate = dashboard.events.filter((e) => e.startsAt.startsWith(date));
+      const targetPersonName = args.person_name
+        ? String(args.person_name).trim().toLowerCase()
+        : null;
+
+      const eventsOnDate = dashboard.events.filter(
+        (e) => calendarDateInTimeZone(e.startsAt, DEFAULT_TIME_ZONE) === date,
+      );
 
       if (eventsOnDate.length === 0) {
         return JSON.stringify({
           date,
           status: "free",
           eventsCount: 0,
-          summary: `Inga inlagda händelser eller arbetspass den ${date}. Användaren är ledig.`,
+          summary: `Inga inlagda händelser eller arbetspass den ${date}.`,
         });
       }
 
-      const workEvents = eventsOnDate.filter((e) => e.category === "work");
-      const isEvening = eventsOnDate.some((e) => {
-        const timePart = e.startsAt.slice(11, 16);
-        return timePart >= "15:00";
+      let relevantEvents = eventsOnDate;
+      if (targetPersonName) {
+        const matched = dashboard.people.find(
+          (p) =>
+            p.name.toLowerCase().includes(targetPersonName) ||
+            p.aliases.some((a) => a.toLowerCase().includes(targetPersonName)),
+        );
+        if (matched) {
+          relevantEvents = eventsOnDate.filter((e) =>
+            eventConcernsPerson(e, matched.id),
+          );
+        }
+      }
+
+      const workEvents = relevantEvents.filter((e) => e.category === "work");
+      const isEvening = workEvents.some((e) => {
+        const startMinute = minuteOfDayInTimeZone(e.startsAt, DEFAULT_TIME_ZONE);
+        return startMinute >= 15 * 60;
+      });
+
+      const formattedEvents = relevantEvents.map((e) => {
+        const person = dashboard.people.find((p) => p.id === e.personId);
+        const timeStr = e.allDay
+          ? "Hela dagen"
+          : `${clockValueInTimeZone(e.startsAt, DEFAULT_TIME_ZONE)}–${clockValueInTimeZone(e.endsAt, DEFAULT_TIME_ZONE)}`;
+        return `${e.title}${person ? ` (${person.name})` : ""} kl. ${timeStr}`;
       });
 
       return JSON.stringify({
         date,
         status: workEvents.length > 0 ? "working" : "has_events",
-        eventsCount: eventsOnDate.length,
+        eventsCount: relevantEvents.length,
         isEveningShift: isEvening,
-        events: eventsOnDate.map((e) => ({
+        events: relevantEvents.map((e) => ({
           title: e.title,
           category: e.category,
           startsAt: e.startsAt,
           endsAt: e.endsAt,
+          formattedTime: e.allDay
+            ? "Hela dagen"
+            : `${clockValueInTimeZone(e.startsAt, DEFAULT_TIME_ZONE)}–${clockValueInTimeZone(e.endsAt, DEFAULT_TIME_ZONE)}`,
         })),
-        summary: `Hittade ${eventsOnDate.length} händelse(r) den ${date}: ${eventsOnDate
-          .map((e) => `${e.title} (${e.startsAt.slice(11, 16)}–${e.endsAt.slice(11, 16)})`)
-          .join(", ")}`,
+        summary: `Hittade ${relevantEvents.length} händelse(r) den ${date}: ${formattedEvents.join(", ")}`,
       });
     }
 
@@ -1113,13 +1144,18 @@ export async function processJarvisAgentMessage(
         (s) => s.status === "planned" || s.status === "in_progress",
       );
 
+      // ONLY check work shifts for the CURRENT ACTOR (Jimmy), not all other family members
       const workEvents = dashboard.events.filter(
-        (e) => e.startsAt.startsWith(targetDate) && e.category === "work",
+        (e) =>
+          calendarDateInTimeZone(e.startsAt, DEFAULT_TIME_ZONE) === targetDate &&
+          e.category === "work" &&
+          (actor.personId ? eventConcernsPerson(e, actor.personId) : true),
       );
       let workScheduleSummary = "Du är ledig från jobbet idag.";
       if (workEvents.length > 0) {
         const times = workEvents.map(
-          (w) => `${w.startsAt.slice(11, 16)}–${w.endsAt.slice(11, 16)}`,
+          (w) =>
+            `${clockValueInTimeZone(w.startsAt, DEFAULT_TIME_ZONE)}–${clockValueInTimeZone(w.endsAt, DEFAULT_TIME_ZONE)}`,
         );
         workScheduleSummary = `Du jobbar idag (${times.join(", ")}).`;
       }
