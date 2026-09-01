@@ -99,6 +99,19 @@ export function FamilySettingsModal({
 
   async function createLogin() {
     if (!loginFor || busy) return;
+
+    const trimmedEmail = loginEmail.trim().toLowerCase();
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setLoginError("Ange en giltig e-postadress (t.ex. namn@gmail.com).");
+      return;
+    }
+    if (loginPassword.length < 12) {
+      setLoginError(
+        `Lösenordet måste vara minst 12 tecken (du har skrivit ${loginPassword.length} tecken).`,
+      );
+      return;
+    }
+
     setBusy(true);
     setLoginError("");
     try {
@@ -107,17 +120,19 @@ export function FamilySettingsModal({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           personId: loginFor.id,
-          email: loginEmail.trim(),
+          email: trimmedEmail,
           password: loginPassword,
           role: loginRole,
         }),
       });
-      const body = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(body.error ?? "Inloggningen kunde inte skapas.");
+      const body = (await response.json()) as { error?: string; details?: string };
+      if (!response.ok) {
+        throw new Error(body.details || body.error || "Inloggningen kunde inte skapas.");
+      }
 
       setLogins((current) => [
         ...(current ?? []),
-        { personId: loginFor.id, email: loginEmail.trim(), role: loginRole },
+        { personId: loginFor.id, email: trimmedEmail, role: loginRole },
       ]);
       setLoginFor(null);
       setLoginEmail("");
@@ -498,16 +513,21 @@ export function FamilySettingsModal({
                     <input
                       type="email"
                       autoComplete="off"
+                      placeholder="t.ex. cuzeyr@gmail.com"
                       value={loginEmail}
                       onChange={(event) => setLoginEmail(event.target.value)}
                       disabled={busy}
                     />
                   </label>
                   <label className="login-field">
-                    <span>Lösenord att säga vidare</span>
+                    <span>
+                      Lösenord att säga vidare (minst 12 tecken
+                      {loginPassword.length > 0 ? ` · ${loginPassword.length} tecken` : ""})
+                    </span>
                     <input
                       type="text"
                       autoComplete="off"
+                      placeholder="t.ex. VälkommenCuzeyr2026!"
                       value={loginPassword}
                       onChange={(event) => setLoginPassword(event.target.value)}
                       disabled={busy}
