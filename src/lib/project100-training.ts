@@ -92,8 +92,15 @@ export interface Project100TrainingTemplate {
   exercises: Project100TrainingTemplateExercise[];
 }
 
+import type {
+  Project100BenchmarkEvaluation,
+  RunningAnalytics,
+} from "@/lib/project100-benchmarks";
+
 export interface Project100TrainingSummary {
   completedThisWeek: number;
+  completedWorkoutsThisWeek: number;
+  completedRecoveryThisWeek: number;
   planned: number;
   durationMinutesThisWeek: number;
   distanceKmThisWeek: number;
@@ -105,6 +112,8 @@ export interface Project100TrainingView {
   sessions: Project100TrainingSession[];
   templates: Project100TrainingTemplate[];
   summary: Project100TrainingSummary;
+  benchmarks?: Project100BenchmarkEvaluation[];
+  runningAnalytics?: RunningAnalytics;
 }
 
 export const PROJECT100_ACTIVITY_LABELS: Record<Project100ActivityType, string> = {
@@ -147,6 +156,9 @@ export function buildProject100TrainingSummary(
       session.sessionDate < weekEnd,
   );
 
+  const completedWorkouts = completed.filter((s) => s.activityType !== "mobility");
+  const completedRecovery = completed.filter((s) => s.activityType === "mobility");
+
   const durationSeconds = completed.reduce(
     (total, session) =>
       total + (session.durationSeconds ?? actualMetricTotal(session, "durationSeconds")),
@@ -177,6 +189,8 @@ export function buildProject100TrainingSummary(
 
   return {
     completedThisWeek: completed.length,
+    completedWorkoutsThisWeek: completedWorkouts.length,
+    completedRecoveryThisWeek: completedRecovery.length,
     planned: sessions.filter((session) => session.status === "planned").length,
     durationMinutesThisWeek: Math.round(durationSeconds / 60),
     distanceKmThisWeek: Math.round((distanceMeters / 1000) * 10) / 10,

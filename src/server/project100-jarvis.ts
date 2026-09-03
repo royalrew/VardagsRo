@@ -14,6 +14,7 @@ import {
   type Project100MessageProposal,
   type Project100MessageSource,
 } from "@/lib/project100-jarvis";
+import { evaluateProject100Benchmarks } from "@/lib/project100-benchmarks";
 import { recordAudit } from "@/server/audit";
 import type { ActorContext } from "@/server/authorization-types";
 import { openAIConfig } from "@/server/config";
@@ -22,6 +23,7 @@ import { AppError } from "@/server/errors";
 import { processJarvisAgentMessage } from "@/server/jarvis-agent";
 import { assertProject100Adult } from "@/server/project100";
 import { handleMemoryTextIntent } from "@/server/project100-memory-assistant";
+import { loadProject100TrainingSessions } from "@/server/project100-training";
 import type {
   CreateConversationInput,
   CreateMemoryInput,
@@ -213,6 +215,16 @@ export async function loadProject100JarvisContext(
       title: b.title,
       portionsRemaining: Number(b.portions_remaining),
       proteinPerPortionG: asNumber(b.protein_per_portion_g) ?? 0,
+    })),
+    benchmarks: evaluateProject100Benchmarks(
+      await loadProject100TrainingSessions(actor).catch(() => []),
+    ).map((b) => ({
+      id: b.id,
+      name: b.name,
+      pb: b.formattedBest ?? "—",
+      level: b.currentLevel,
+      nextLevel: b.nextLevel,
+      remaining: b.formattedRemaining,
     })),
     activeMemories: memoryRows.map((m) => ({
       id: m.id,

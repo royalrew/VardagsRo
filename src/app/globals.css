@@ -8895,6 +8895,294 @@ button.event-row:hover {
   color: #e53935;
 }
 
+/* Projekt 100 · Benchmarks & Running Engine */
+.p100-button-run {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+.p100-button-run:hover {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: #38bdf8;
+}
+
+.p100-program-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1px solid rgba(200, 244, 93, 0.25);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(200, 244, 93, 0.06), rgba(18, 24, 20, 0.8));
+  margin-bottom: 18px;
+}
+.p100-program-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.p100-program-banner-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: rgba(200, 244, 93, 0.12);
+  color: var(--p100-accent);
+  place-items: center;
+}
+.p100-program-banner-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.p100-program-banner h3 {
+  margin: 0 0 2px;
+  font-size: 0.92rem;
+  color: #fff;
+  font-weight: 700;
+}
+.p100-program-banner p {
+  margin: 0;
+  font-size: 0.68rem;
+  color: #8d9992;
+  line-height: 1.4;
+}
+.p100-program-status {
+  margin-top: 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--p100-accent);
+}
+
+.p100-benchmarks-panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--p100-line);
+  border-radius: 14px;
+  background: var(--p100-panel);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.p100-benchmarks-panel > header {
+  display: flex;
+  min-height: 58px;
+  padding: 14px 19px;
+  border-bottom: 1px solid var(--p100-line);
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.p100-benchmarks-panel > header > div > span {
+  color: var(--p100-accent);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.p100-benchmarks-panel > header h2 {
+  margin: 2px 0 0;
+  font-size: 0.95rem;
+  letter-spacing: -0.02em;
+}
+
+.p100-benchmarks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.p100-benchmark-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.016);
+  border: 1px solid var(--p100-line);
+  gap: 10px;
+  transition: all 0.15s ease;
+}
+.p100-benchmark-card:hover {
+  border-color: rgba(200, 244, 93, 0.2);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.p100-benchmark-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.p100-benchmark-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.p100-benchmark-category {
+  font-size: 0.52rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #68736c;
+}
+.p100-benchmark-title-wrap strong {
+  font-size: 0.88rem;
+  color: #cbd3cd;
+}
+
+.p100-benchmark-level-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(200, 244, 93, 0.1);
+  color: var(--p100-accent);
+  border: 1px solid rgba(200, 244, 93, 0.25);
+}
+
+.p100-benchmark-values {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.p100-benchmark-pb-val {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.03em;
+}
+.p100-benchmark-pb-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #68736c;
+  text-transform: uppercase;
+}
+
+.p100-benchmark-next-target {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--p100-line);
+}
+.p100-benchmark-next-target small {
+  font-size: 0.56rem;
+  color: #8a968f;
+  font-weight: 600;
+}
+.p100-benchmark-next-target strong {
+  font-size: 0.72rem;
+  color: #cbd3cd;
+}
+.p100-benchmark-remaining {
+  color: var(--p100-accent);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+/* Running Quick Log Modal Specifics */
+.running-badge {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+}
+.run-inputs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.input-with-unit {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-with-unit .form-input {
+  padding-right: 48px;
+}
+.input-unit {
+  position: absolute;
+  right: 12px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #68736c;
+  display: flex;
+  align-items: center;
+}
+
+.run-pace-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+.pace-icon-wrap {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  place-items: center;
+}
+.pace-copy {
+  display: flex;
+  flex-direction: column;
+}
+.pace-label {
+  font-size: 0.56rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #38bdf8;
+  letter-spacing: 0.08em;
+}
+.pace-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.quick-title-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.title-chip {
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--p100-line);
+  color: #8a968f;
+  font-size: 0.62rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.title-chip:hover {
+  color: #cbd3cd;
+  border-color: rgba(200, 244, 93, 0.3);
+}
+.title-chip.selected {
+  background: rgba(200, 244, 93, 0.12);
+  border-color: var(--p100-accent);
+  color: var(--p100-accent);
+  font-weight: 700;
+}
+
+
 
 
 

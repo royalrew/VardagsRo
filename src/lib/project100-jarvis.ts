@@ -122,6 +122,14 @@ export interface Project100JarvisContext {
     portionsRemaining: number;
     proteinPerPortionG: number;
   }[];
+  benchmarks?: {
+    id: string;
+    name: string;
+    pb: string;
+    level: string;
+    nextLevel: string | null;
+    remaining: string | null;
+  }[];
   activeMemories: Project100Memory[];
 }
 

@@ -174,9 +174,29 @@ describe("Projekt 100 training summary", () => {
     expect(summary.distanceKmThisWeek).toBe(0);
   });
 
+  it("separates completed workouts from mobility/recovery sessions", () => {
+    const sessions = [
+      session({ id: "w-1", sessionDate: "2026-08-24", activityType: "strength_home", status: "completed" }),
+      session({ id: "w-2", sessionDate: "2026-08-25", activityType: "running", status: "completed" }),
+      session({ id: "w-3", sessionDate: "2026-08-26", activityType: "strength_home", status: "completed" }),
+      session({ id: "r-1", sessionDate: "2026-08-27", activityType: "mobility", status: "completed" }),
+      session({ id: "w-4", sessionDate: "2026-08-28", activityType: "strength_home", status: "completed" }),
+      session({ id: "w-5", sessionDate: "2026-08-29", activityType: "running", status: "completed" }),
+      session({ id: "r-2", sessionDate: "2026-08-30", activityType: "mobility", status: "completed" }),
+    ];
+
+    const summary = buildProject100TrainingSummary(sessions, TODAY);
+
+    expect(summary.completedThisWeek).toBe(7);
+    expect(summary.completedWorkoutsThisWeek).toBe(5);
+    expect(summary.completedRecoveryThisWeek).toBe(2);
+  });
+
   it("reports an honest zero week instead of guessing", () => {
     expect(buildProject100TrainingSummary([], TODAY)).toEqual({
       completedThisWeek: 0,
+      completedWorkoutsThisWeek: 0,
+      completedRecoveryThisWeek: 0,
       planned: 0,
       durationMinutesThisWeek: 0,
       distanceKmThisWeek: 0,

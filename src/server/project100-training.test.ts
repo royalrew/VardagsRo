@@ -128,6 +128,7 @@ import {
   createProject100TrainingSession,
   createProject100TrainingTemplate,
   deleteProject100TrainingSession,
+  installStandard5DayProgram,
   loadProject100TrainingView,
   updateProject100TrainingSession,
 } from "@/server/project100-training";
@@ -465,5 +466,15 @@ describe("Carrying out a planned session", () => {
       updateProject100TrainingSession(CHILD, "session-owned", completion()),
     ).rejects.toMatchObject({ code: "PROJECT100_ADULT_ONLY" });
     expect(database.sql).not.toHaveBeenCalled();
+  });
+
+  it("installs standard 5+2 program and protects against child access", async () => {
+    await expect(installStandard5DayProgram(CHILD)).rejects.toMatchObject({
+      code: "PROJECT100_ADULT_ONLY",
+    });
+
+    const result = await installStandard5DayProgram(TEST_ACTOR);
+    expect(result).toBeDefined();
+    expect(result.templatesCreated + result.templatesReused).toBe(7);
   });
 });

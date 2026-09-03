@@ -5,9 +5,11 @@ import {
   Bike,
   CalendarClock,
   Check,
+  CheckCircle2,
   ChevronDown,
   Clock3,
   Dumbbell,
+  Flame,
   Footprints,
   Gauge,
   Leaf,
@@ -18,13 +20,21 @@ import {
   SkipForward,
   Sparkles,
   Trash2,
+  TrendingUp,
+  Trophy,
+  Wind,
   X,
   Zap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { RunningQuickLogModal } from "./RunningQuickLogModal";
 import { WorkoutQuickModal } from "./WorkoutQuickModal";
+import {
+  buildRunningAnalytics,
+  evaluateProject100Benchmarks,
+} from "@/lib/project100-benchmarks";
 import {
   PROJECT100_ACTIVITY_LABELS,
   PROJECT100_ACTIVITY_TYPES,
@@ -754,6 +764,9 @@ export function TrainingWorkspace({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<SessionFilter>("all");
   const [showQuickModal, setShowQuickModal] = useState(false);
+  const [showRunModal, setShowRunModal] = useState(false);
+  const [installingProgram, setInstallingProgram] = useState(false);
+  const [installStatus, setInstallStatus] = useState<string | null>(null);
   const [plan, setPlan] = useState<{
     session: Project100TrainingSession;
     mode: PlanMode;
@@ -764,6 +777,45 @@ export function TrainingWorkspace({
     () => buildProject100TrainingSummary(sessions, initialView.today),
     [sessions, initialView.today],
   );
+  const benchmarks = useMemo(
+    () => evaluateProject100Benchmarks(sessions),
+    [sessions],
+  );
+  const runningAnalytics = useMemo(
+    () => buildRunningAnalytics(sessions, initialView.today),
+    [sessions, initialView.today],
+  );
+
+  async function handleInstallProgram() {
+    setInstallingProgram(true);
+    setInstallStatus(null);
+    try {
+      const res = await fetch("/api/project100/training/program/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error ?? "Kunde inte installera programmet.");
+      }
+      const result = await res.json();
+      setInstallStatus(
+        `✅ Standardprogrammet 5+2 är nu installerat! (${result.plannedSessionsCreated} nya pass schemalagda för veckan).`,
+      );
+      router.refresh();
+      const freshViewRes = await fetch("/api/project100/training/sessions").catch(() => null);
+      if (freshViewRes?.ok) {
+        const data = await freshViewRes.json();
+        if (data.sessions) setSessions(data.sessions);
+      }
+    } catch (err: unknown) {
+      setInstallStatus(`❌ ${err instanceof Error ? err.message : "Ett fel uppstod"}`);
+    } finally {
+      setInstallingProgram(false);
+    }
+  }
+
   const visibleSessions = useMemo(() => {
     const search = query.trim().toLocaleLowerCase("sv-SE");
     return sessions.filter(
@@ -1003,10 +1055,17 @@ export function TrainingWorkspace({
         <div className="p100-head-actions">
           <button
             type="button"
+            className="p100-button p100-button-run"
+            onClick={() => setShowRunModal(true)}
+          >
+            <Wind /> Logga löpning
+          </button>
+          <button
+            type="button"
             className="p100-button p100-button-quick"
             onClick={() => setShowQuickModal(true)}
           >
-            <Zap /> Snabbavsluta pass
+            <Zap /> Snabbavsluta styrka
           </button>
           <button
             type="button"
@@ -1025,6 +1084,30 @@ export function TrainingWorkspace({
         </div>
       </header>
 
+      {/* Program installer banner if few templates or requested */}
+      <section className="p100-program-banner">
+        <div className="p100-program-banner-content">
+          <span className="p100-program-banner-icon">
+            <Trophy />
+          </span>
+          <div>
+            <h3>Projekt 100 Standardprogram (5+2)</h3>
+            <p>
+              5 träningspass (Överkropp, Lugn löpning, Ben + core, Helkropp/styrka, Löpning kvalitet) + 2 aktiva återhämtningspass.
+            </p>
+            {installStatus ? <div className="p100-program-status">{installStatus}</div> : null}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="p100-button-secondary"
+          onClick={handleInstallProgram}
+          disabled={installingProgram}
+        >
+          <Sparkles /> {installingProgram ? "Installerar..." : "Installera / Återställ 5+2"}
+        </button>
+      </section>
+
       <section className="p100-training-context">
         <span><CalendarClock /></span>
         <div><small>Planeringskontext från jobbschemat</small><strong>{nextWorkLabel ?? "Inget mer arbetspass inlagt den här veckan"}</strong></div>
@@ -1032,10 +1115,81 @@ export function TrainingWorkspace({
       </section>
 
       <section className="p100-training-metrics" aria-label="Veckans träning">
-        <article><span><Check /></span><div><small>Genomförda i veckan</small><strong>{summary.completedThisWeek}</strong></div></article>
-        <article><span><Clock3 /></span><div><small>Träningstid</small><strong>{summary.durationMinutesThisWeek} <i>min</i></strong></div></article>
-        <article><span><Gauge /></span><div><small>Träningsvolym</small><strong>{summary.volumeKgThisWeek.toLocaleString("sv-SE")} <i>kg</i></strong></div></article>
-        <article><span><Footprints /></span><div><small>Distans</small><strong>{summary.distanceKmThisWeek.toLocaleString("sv-SE")} <i>km</i></strong></div></article>
+        <article>
+          <span><Check /></span>
+          <div>
+            <small>Veckans aktivitet</small>
+            <strong>
+              {summary.completedWorkoutsThisWeek} <i style={{ fontSize: "0.75rem", color: "#cbd3cd" }}>träning</i> · {summary.completedRecoveryThisWeek} <i style={{ fontSize: "0.75rem", color: "#8d9992" }}>recovery</i>
+            </strong>
+          </div>
+        </article>
+        <article>
+          <span><Clock3 /></span>
+          <div>
+            <small>Träningstid</small>
+            <strong>{summary.durationMinutesThisWeek} <i>min</i></strong>
+          </div>
+        </article>
+        <article>
+          <span><Gauge /></span>
+          <div>
+            <small>Träningsvolym</small>
+            <strong>{summary.volumeKgThisWeek.toLocaleString("sv-SE")} <i>kg</i></strong>
+          </div>
+        </article>
+        <article>
+          <span><Footprints /></span>
+          <div>
+            <small>Löpdistans</small>
+            <strong>{summary.distanceKmThisWeek.toLocaleString("sv-SE")} <i>km</i></strong>
+          </div>
+        </article>
+      </section>
+
+      {/* Benchmarks & Progression Section */}
+      <section className="p100-benchmarks-panel">
+        <header>
+          <div>
+            <span>Progression & personbästa</span>
+            <h2>Mina nivåer & Benchmarks</h2>
+          </div>
+          <small>Härleds on-the-fly ur träningsloggen</small>
+        </header>
+        <div className="p100-benchmarks-grid">
+          {benchmarks.map((b) => (
+            <article key={b.id} className="p100-benchmark-card">
+              <div className="p100-benchmark-card-head">
+                <div className="p100-benchmark-title-wrap">
+                  <span className="p100-benchmark-category">
+                    {b.category === "running" ? "Löpning" : "Kroppsvikt"}
+                  </span>
+                  <strong>{b.name}</strong>
+                </div>
+                <span className="p100-benchmark-level-tag">
+                  <Trophy size={11} style={{ marginRight: 4 }} /> {b.currentLevel}
+                </span>
+              </div>
+
+              <div className="p100-benchmark-values">
+                <span className="p100-benchmark-pb-val">{b.formattedBest}</span>
+                <span className="p100-benchmark-pb-label">Personbästa</span>
+              </div>
+
+              <div className="p100-benchmark-next-target">
+                <small>Nästa mål:</small>
+                <strong>
+                  {b.nextLevel ? `${b.nextLevel} (${b.formattedNextRequirement})` : "Maxnivå uppnådd! 🏆"}
+                </strong>
+                {b.formattedRemaining ? (
+                  <span className="p100-benchmark-remaining">
+                    {b.category === "running" ? `${b.formattedRemaining} kvar till delmål` : `${b.formattedRemaining} kvar`}
+                  </span>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
       </section>
 
       <div className="p100-training-columns">
@@ -1126,6 +1280,15 @@ export function TrainingWorkspace({
         todayDate={initialView.today}
         onSaved={() => {
           setShowQuickModal(false);
+          router.refresh();
+        }}
+      />
+      <RunningQuickLogModal
+        isOpen={showRunModal}
+        onClose={() => setShowRunModal(false)}
+        todayDate={initialView.today}
+        onSaved={() => {
+          setShowRunModal(false);
           router.refresh();
         }}
       />

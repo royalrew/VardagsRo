@@ -2,7 +2,11 @@ import "server-only";
 
 import type postgres from "postgres";
 
-import { calendarDateInTimeZone, DEFAULT_TIME_ZONE } from "@/lib/dates";
+import { addCalendarDateDays, calendarDateInTimeZone, DEFAULT_TIME_ZONE, startOfCalendarWeek } from "@/lib/dates";
+import {
+  buildRunningAnalytics,
+  evaluateProject100Benchmarks,
+} from "@/lib/project100-benchmarks";
 import {
   buildProject100TrainingSummary,
   type Project100ActivityType,
@@ -342,11 +346,17 @@ export async function loadProject100TrainingView(
     loadProject100TrainingSessions(actor),
     loadProject100TrainingTemplates(actor),
   ]);
+  const summary = buildProject100TrainingSummary(sessions, today);
+  const benchmarks = evaluateProject100Benchmarks(sessions);
+  const runningAnalytics = buildRunningAnalytics(sessions, today);
+
   return {
     today,
     sessions,
     templates,
-    summary: buildProject100TrainingSummary(sessions, today),
+    summary,
+    benchmarks,
+    runningAnalytics,
   };
 }
 
@@ -709,4 +719,359 @@ export async function archiveProject100TrainingTemplate(
     });
     return true;
   });
+}
+
+export interface StandardProgramInstallResult {
+  templatesCreated: number;
+  templatesReused: number;
+  plannedSessionsCreated: number;
+  plannedSessionsSkipped: number;
+}
+
+const STANDARD_5PLUS2_PROGRAM = [
+  {
+    dayOffset: 0, // Måndag
+    name: "Överkropp",
+    activityType: "strength_home" as Project100ActivityType,
+    description: "Måndag: Överkropp & bål (Armhävningar, Pull-ups, Dips, Pike push-ups, Kroppsrodd, Planka)",
+    exercises: [
+      {
+        name: "Armhävningar",
+        sets: [
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 7 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 7 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Pull-ups",
+        sets: [
+          { reps: 5, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 5, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 4, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 4, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 9 },
+        ],
+      },
+      {
+        name: "Dips",
+        sets: [
+          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Pike push-ups",
+        sets: [
+          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Kroppsrodd",
+        sets: [
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 7 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Planka",
+        sets: [
+          { reps: null, weightKg: null, durationSeconds: 45, distanceMeters: null, rpe: 7 },
+          { reps: null, weightKg: null, durationSeconds: 45, distanceMeters: null, rpe: 8 },
+          { reps: null, weightKg: null, durationSeconds: 45, distanceMeters: null, rpe: 8 },
+        ],
+      },
+    ],
+  },
+  {
+    dayOffset: 1, // Tisdag
+    name: "Lugn löpning",
+    activityType: "running" as Project100ActivityType,
+    description: "Tisdag: 30 minuter lugn distanslöpning i prattempo",
+    exercises: [
+      {
+        name: "Löpning",
+        sets: [
+          { reps: null, weightKg: null, durationSeconds: 1800, distanceMeters: 5000, rpe: 6 },
+        ],
+      },
+    ],
+  },
+  {
+    dayOffset: 2, // Onsdag
+    name: "Ben + core",
+    activityType: "strength_home" as Project100ActivityType,
+    description: "Onsdag: Ben & bål (Knäböj, Bulgarian split squats, Utfall, Höftlyft, Tåhävningar, Dead bug, Sidoplanka)",
+    exercises: [
+      {
+        name: "Knäböj",
+        sets: [
+          { reps: 15, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 7 },
+          { reps: 15, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 7 },
+          { reps: 15, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 15, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Bulgarian split squat",
+        sets: [
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Utfall bakåt",
+        sets: [
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 7 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Enbens höftlyft",
+        sets: [
+          { reps: 12, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 7 },
+          { reps: 12, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 12, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Tåhävningar",
+        sets: [
+          { reps: 20, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 7 },
+          { reps: 20, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 20, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 20, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Dead bug",
+        sets: [
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 7 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Sidoplanka",
+        sets: [
+          { reps: null, weightKg: null, durationSeconds: 30, distanceMeters: null, rpe: 7 },
+          { reps: null, weightKg: null, durationSeconds: 30, distanceMeters: null, rpe: 8 },
+          { reps: null, weightKg: null, durationSeconds: 30, distanceMeters: null, rpe: 8 },
+        ],
+      },
+    ],
+  },
+  {
+    dayOffset: 3, // Torsdag
+    name: "Aktiv återhämtning torsdag",
+    activityType: "mobility" as Project100ActivityType,
+    description: "Torsdag: 15–30 min rörlighet, promenad, djupa squats och dead hang",
+    exercises: [
+      {
+        name: "Rörlighet & stretch",
+        sets: [
+          { reps: null, weightKg: null, durationSeconds: 1200, distanceMeters: null, rpe: 4 },
+        ],
+      },
+      {
+        name: "Dead hang",
+        sets: [
+          { reps: null, weightKg: null, durationSeconds: 30, distanceMeters: null, rpe: 6 },
+          { reps: null, weightKg: null, durationSeconds: 30, distanceMeters: null, rpe: 7 },
+        ],
+      },
+    ],
+  },
+  {
+    dayOffset: 4, // Fredag
+    name: "Helkropp/styrka",
+    activityType: "strength_home" as Project100ActivityType,
+    description: "Fredag: Helkroppsstyrka (Pull-ups, Armhävningar, Bulgarian split squat, Dips, Höftlyft, Hollow body hold, Dead hang)",
+    exercises: [
+      {
+        name: "Pull-ups",
+        sets: [
+          { reps: 5, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 5, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 4, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 4, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 9 },
+        ],
+      },
+      {
+        name: "Armhävningar",
+        sets: [
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 7 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Bulgarian split squat",
+        sets: [
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Dips",
+        sets: [
+          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Enbens höftlyft",
+        sets: [
+          { reps: 12, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 7 },
+          { reps: 12, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+          { reps: 12, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Hollow body hold",
+        sets: [
+          { reps: null, weightKg: null, durationSeconds: 30, distanceMeters: null, rpe: 7 },
+          { reps: null, weightKg: null, durationSeconds: 30, distanceMeters: null, rpe: 8 },
+          { reps: null, weightKg: null, durationSeconds: 30, distanceMeters: null, rpe: 8 },
+        ],
+      },
+      {
+        name: "Dead hang",
+        sets: [
+          { reps: null, weightKg: null, durationSeconds: 30, distanceMeters: null, rpe: 7 },
+          { reps: null, weightKg: null, durationSeconds: 30, distanceMeters: null, rpe: 8 },
+        ],
+      },
+    ],
+  },
+  {
+    dayOffset: 5, // Lördag
+    name: "Löpning kvalitet",
+    activityType: "running" as Project100ActivityType,
+    description: "Lördag: Intervaller (10 min uppvärmning, 4x2 min snabbt m. 2 min vila, 5–10 min nedjogg)",
+    exercises: [
+      {
+        name: "Löpning",
+        sets: [
+          { reps: null, weightKg: null, durationSeconds: 1800, distanceMeters: 5000, rpe: 8 },
+        ],
+      },
+    ],
+  },
+  {
+    dayOffset: 6, // Söndag
+    name: "Aktiv återhämtning söndag",
+    activityType: "mobility" as Project100ActivityType,
+    description: "Söndag: Promenad och 10–20 min rörlighet",
+    exercises: [
+      {
+        name: "Rörlighet & promenad",
+        sets: [
+          { reps: null, weightKg: null, durationSeconds: 900, distanceMeters: null, rpe: 3 },
+        ],
+      },
+    ],
+  },
+];
+
+export async function installStandard5DayProgram(
+  actor: ActorContext,
+): Promise<StandardProgramInstallResult> {
+  assertProject100Adult(actor);
+  const today = calendarDateInTimeZone(new Date(), DEFAULT_TIME_ZONE);
+  const weekStart = startOfCalendarWeek(today);
+
+  const [existingTemplates, existingSessions] = await Promise.all([
+    loadProject100TrainingTemplates(actor),
+    loadProject100TrainingSessions(actor),
+  ]);
+
+  let templatesCreated = 0;
+  let templatesReused = 0;
+  let plannedSessionsCreated = 0;
+  let plannedSessionsSkipped = 0;
+
+  const templateMap = new Map<string, string>(); // Program index -> templateId
+
+  // 1. Create or reuse templates
+  for (let i = 0; i < STANDARD_5PLUS2_PROGRAM.length; i++) {
+    const prog = STANDARD_5PLUS2_PROGRAM[i];
+    const match = existingTemplates.find(
+      (t) => t.name.toLowerCase() === prog.name.toLowerCase() && t.activityType === prog.activityType,
+    );
+
+    if (match) {
+      templateMap.set(prog.name, match.id);
+      templatesReused++;
+    } else {
+      const created = await createProject100TrainingTemplate(actor, {
+        name: prog.name,
+        activityType: prog.activityType,
+        description: prog.description,
+        exercises: prog.exercises.map((e) => ({
+          name: e.name,
+          notes: null,
+          sets: e.sets,
+        })),
+      });
+      templateMap.set(prog.name, created.id);
+      templatesCreated++;
+    }
+  }
+
+  // 2. Schedule week's sessions (Monday to Sunday)
+  for (let i = 0; i < STANDARD_5PLUS2_PROGRAM.length; i++) {
+    const prog = STANDARD_5PLUS2_PROGRAM[i];
+    const targetDate = addCalendarDateDays(weekStart, prog.dayOffset);
+    const templateId = templateMap.get(prog.name);
+
+    // Check if session already exists for this date and template/title
+    const hasExisting = existingSessions.some(
+      (s) =>
+        s.sessionDate === targetDate &&
+        (s.sourceTemplateId === templateId || s.title.toLowerCase() === prog.name.toLowerCase()),
+    );
+
+    if (hasExisting) {
+      plannedSessionsSkipped++;
+    } else {
+      await createProject100TrainingSession(actor, {
+        title: prog.name,
+        activityType: prog.activityType,
+        status: "planned",
+        sessionDate: targetDate,
+        templateId: templateId ?? null,
+        plannedStartAt: null,
+        plannedEndAt: null,
+        durationSeconds: null,
+        location: null,
+        effort: null,
+        bodyBefore: null,
+        bodyAfter: null,
+        notes: null,
+        exercises: prog.exercises.map((e) => ({
+          name: e.name,
+          notes: null,
+          sets: e.sets,
+        })),
+      });
+      plannedSessionsCreated++;
+    }
+  }
+
+  return {
+    templatesCreated,
+    templatesReused,
+    plannedSessionsCreated,
+    plannedSessionsSkipped,
+  };
 }
