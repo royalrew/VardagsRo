@@ -1241,6 +1241,34 @@ export async function processJarvisAgentMessage(
       const notes = args.notes ? String(args.notes) : null;
       const targetDate = args.date ? String(args.date) : today;
 
+      const exercises: Array<{
+        name: string;
+        notes: string | null;
+        sets: Array<{
+          reps: number | null;
+          weightKg: number | null;
+          durationSeconds: number | null;
+          distanceMeters: number | null;
+          rpe: number | null;
+        }>;
+      }> = [];
+
+      if (activityType === "running" || distanceKm) {
+        exercises.push({
+          name: "Löpning",
+          notes: null,
+          sets: [
+            {
+              reps: null,
+              weightKg: null,
+              durationSeconds: durationMinutes ? Math.round(durationMinutes * 60) : null,
+              distanceMeters: distanceKm ? Math.round(distanceKm * 1000) : null,
+              rpe: effort,
+            },
+          ],
+        });
+      }
+
       const created = await createProject100TrainingSession(actor, {
         title,
         activityType,
@@ -1260,7 +1288,7 @@ export async function processJarvisAgentMessage(
         ]
           .filter(Boolean)
           .join(" · ") || null,
-        exercises: [],
+        exercises,
       });
 
       return JSON.stringify({
