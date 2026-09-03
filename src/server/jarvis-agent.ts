@@ -14,6 +14,7 @@ import {
 import { parseMemoryCommand } from "@/lib/project100-memory-classifier";
 import type { Project100MeasurementUnit } from "@/lib/project100-body";
 import type { Project100MealType } from "@/lib/project100-nutrition";
+import { evaluateProject100Benchmarks } from "@/lib/project100-benchmarks";
 import type { Project100ActivityType } from "@/lib/project100-training";
 import { openAIConfig } from "@/server/config";
 import {
@@ -1251,9 +1252,9 @@ export async function processJarvisAgentMessage(
           distanceMeters: number | null;
           rpe: number | null;
         }>;
-      }> = [];
+      }> = Array.isArray(args.exercises) ? (args.exercises as any) : [];
 
-      if (activityType === "running" || distanceKm) {
+      if ((activityType === "running" || distanceKm) && exercises.length === 0) {
         exercises.push({
           name: "Löpning",
           notes: null,
@@ -2190,6 +2191,23 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
     return { text: focusReply, executedActions };
   }
 
+  // "Hur ligger jag till i mina benchmarks?" / "Mina rekord" / "Vilken nivå ligger jag på?"
+  if (/(?:benchmarks?|mina\s*rekord|vilken\s*nivå|hur\s*ligger\s*jag\s*till\s*(?:i|med)\s*(?:mina\s*)?(?:benchmarks?|styrka|löpning)|personbästa)/i.test(lower)) {
+    executedActions.push("check_benchmarks");
+    try {
+      const allSessions = await loadProject100TrainingSessions(actor);
+      const bList = evaluateProject100Benchmarks(allSessions);
+      let reply = `${getGreeting(callerName, now)} Här är dina aktuella benchmarks och nivåer:\n`;
+      for (const b of bList) {
+        const nextText = b.nextLevel ? ` → Nästa mål: ${b.nextLevel} (${b.formattedNextRequirement})` : " 🏆 Maxnivå!";
+        reply += `\n• **${b.name}:** PB ${b.formattedBest} · *${b.currentLevel}*${nextText}`;
+      }
+      return { text: reply, executedActions };
+    } catch {
+      // fallback
+    }
+  }
+
   // 1. Day history query: "Vad gjorde jag den 1a september?", "Vad gjorde vi igår?", "Vad hände den 28 augusti?"
   const isDayHistoryQuery = /(?:vad\s*gjorde\s*(?:jag|vi)|vad\s*hände\s*(?:den|i|igår|i\s*förrgår)|hur\s*såg\s*(?:dagen|gårdagen)\s*ut|hur\s*gick\s*det\s*(?:den|i|igår)|sammanfatta\s*(?:den|igår|gårdagen))/i.test(lower);
   if (isDayHistoryQuery) {
@@ -2630,15 +2648,33 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
   }
 
   // Spontaneous home workout / pushups
-  const homeMatch = text.match(/(?:gjorde|körde)\s*(\d+)\s*(?:armhävningar|knäböj|situps|chins|dips)/i);
+  const homeMatch = text.match(/(?:gjorde|körde)\s*(\d+)\s*(?:armhävningar|knäböj|situps|chins|pull-?ups|dips)/i);
   if (homeMatch) {
+    const count = parseInt(homeMatch[1], 10);
+    const exName = /armhäv/i.test(text)
+      ? "Armhävningar"
+      : /chins|pull/i.test(text)
+      ? "Pull-ups"
+      : /dips/i.test(text)
+      ? "Dips"
+      : /knäböj/i.test(text)
+      ? "Knäböj"
+      : "Styrkeövning";
+
     await executeTool("log_quick_workout", {
-      title: "Hemmapass",
+      title: `Hemmapass ${exName}`,
       activity_type: "strength_home",
       notes: text,
+      exercises: [
+        {
+          name: exName,
+          notes: null,
+          sets: [{ reps: count, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 }],
+        },
+      ],
     });
     return {
-      text: `${getGreeting(callerName, now)} Bra jobbat! Loggat hemmapass ("${text}") som genomfört.`,
+      text: `${getGreeting(callerName, now)} Bra jobbat! Loggat ${count} ${exName.toLowerCase()} som genomfört pass.`,
       executedActions,
     };
   }
