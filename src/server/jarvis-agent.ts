@@ -75,6 +75,7 @@ function getAgentClient(): { client: OpenAI; model: string } | null {
 export interface JarvisAgentOptions {
   channel?: "telegram" | "web";
   personName?: string;
+  conversationId?: string;
 }
 
 export interface JarvisAgentResult {
@@ -2144,6 +2145,21 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
     reply += sunEvents.length > 0 ? sunEvents.map(formatEventLine).join("\n") : "  • Inget inbokat (ledig dag) ☀️";
 
     return { text: reply, executedActions };
+  }
+
+  // "Vad är mitt nästa fokus?" / "Vad ska jag fokusera på?" / "Vad är mitt fokus?"
+  if (/(?:vad\s*är\s*(?:mitt|vårt)\s*(?:nästa\s*)?fokus|vad\s*ska\s*jag\s*fokusera\s*på|mitt\s*fokus|träningsfokus)/i.test(lower)) {
+    executedActions.push("get_focus_status");
+    let targetProtein = 160;
+    try {
+      const nutDay = await loadProject100NutritionDay(actor, today);
+      targetProtein = nutDay.target?.overrideGrams ?? nutDay.target?.lowGrams ?? 160;
+    } catch {
+      // ignore
+    }
+
+    const focusReply = `${getGreeting(callerName, now)} Ditt främsta fokus i Projekt 100 just nu:\n\n1. 🥩 **Protein:** Nå dagens proteinmål på minst ${targetProtein}g.\n2. 🏋️‍♂️ **Träning & Återhämtning:** Följ din träningsplan och hitta nästa träningsfönster kring jobbet.\n3. 💧 **Vardag & Sömn:** Håll vätskebalansen och sikta på god nattsömn!`;
+    return { text: focusReply, executedActions };
   }
 
   // 1. Day history query: "Vad gjorde jag den 1a september?", "Vad gjorde vi igår?", "Vad hände den 28 augusti?"

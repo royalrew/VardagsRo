@@ -348,6 +348,25 @@ const database = vi.hoisted(() => {
       return [{ id: values[0] }];
     }
 
+    if (text.includes("insert into jarvis_capability_gaps")) {
+      return [{
+        id: "gap-1",
+        user_id: values[0] as string,
+        raw_query: values[1] as string,
+        detected_intent: values[2] as string | null,
+        category_hint: values[3] as string | null,
+        channel: values[4] as string,
+        status: "pending",
+        notes: null,
+        created_at: "2026-08-30T12:00:00Z",
+        updated_at: "2026-08-30T12:00:00Z",
+      }];
+    }
+
+    if (text.includes("jarvis_capability_gaps")) {
+      return [];
+    }
+
     if (text.includes("family_audit_log") || text.includes("insert into app_audit_logs")) {
       return [{ id: "audit-1" }];
     }
@@ -371,7 +390,16 @@ const database = vi.hoisted(() => {
   return { calls, reset, sql, state };
 });
 
-vi.mock("@/server/database", () => ({ readyClient: async () => database.sql }));
+vi.mock("@/server/database", () => ({
+  readyClient: async () => database.sql,
+  loadDashboard: vi.fn(async () => ({
+    events: [],
+    people: [{ id: "person-1", name: "Jimmy", aliases: ["Pappa"], personType: "adult" }],
+    tasks: [],
+    documents: [],
+    folders: [],
+  })),
+}));
 vi.mock("@/server/config", () => ({
   databaseUrl: () => "postgresql://project100.test/database",
   demoFallbackAllowed: () => false,

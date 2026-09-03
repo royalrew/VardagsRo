@@ -3,15 +3,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActorContext } from "@/server/authorization-types";
 import { TEST_ACTOR } from "../../test/actor-fixture";
 
-const dependencies = vi.hoisted(() => ({
-  loadDashboard: vi.fn(async () => ({
-    events: [
-      { id: "event-doc-1", title: "Tandläkartid", startsAt: "2026-09-15T10:00:00.000Z", documentId: "doc-1" },
-      { id: "event-work-jimmy-today", title: "Jobb", startsAt: "2026-09-01T05:00:00.000Z", endsAt: "2026-09-01T14:00:00.000Z", personId: "person-1", category: "work" },
-      { id: "event-work-hanni-today", title: "Jobb", startsAt: "2026-09-01T12:00:00.000Z", endsAt: "2026-09-01T19:15:00.000Z", personId: "person-hanni", category: "work" },
-      { id: "event-work-jimmy-tomorrow", title: "Jobb", startsAt: "2026-09-02T05:00:00.000Z", endsAt: "2026-09-02T14:00:00.000Z", personId: "person-1", category: "work" },
-      { id: "event-work-hanni-tomorrow", title: "Jobb", startsAt: "2026-09-02T12:00:00.000Z", endsAt: "2026-09-02T19:15:00.000Z", personId: "person-hanni", category: "work" },
-    ],
+const dependencies = vi.hoisted(() => {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const tomorrowStr = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  return {
+    loadDashboard: vi.fn(async () => ({
+      events: [
+        { id: "event-doc-1", title: "Tandläkartid", startsAt: "2026-09-15T10:00:00.000Z", documentId: "doc-1" },
+        { id: "event-work-jimmy-sep1", title: "Jobb", startsAt: "2026-09-01T05:00:00.000Z", endsAt: "2026-09-01T14:00:00.000Z", personId: "person-1", category: "work" },
+        { id: "event-work-hanni-sep1", title: "Jobb", startsAt: "2026-09-01T12:00:00.000Z", endsAt: "2026-09-01T19:15:00.000Z", personId: "person-hanni", category: "work" },
+        { id: "event-work-jimmy-today", title: "Jobb", startsAt: `${todayStr}T05:00:00.000Z`, endsAt: `${todayStr}T14:00:00.000Z`, personId: "person-1", category: "work" },
+        { id: "event-work-hanni-today", title: "Jobb", startsAt: `${todayStr}T12:00:00.000Z`, endsAt: `${todayStr}T19:15:00.000Z`, personId: "person-hanni", category: "work" },
+        { id: "event-work-jimmy-tomorrow", title: "Jobb", startsAt: `${tomorrowStr}T05:00:00.000Z`, endsAt: `${tomorrowStr}T14:00:00.000Z`, personId: "person-1", category: "work" },
+        { id: "event-work-hanni-tomorrow", title: "Jobb", startsAt: `${tomorrowStr}T12:00:00.000Z`, endsAt: `${tomorrowStr}T19:15:00.000Z`, personId: "person-hanni", category: "work" },
+      ],
     people: [
       { id: "person-1", name: "Jimmy", aliases: ["Pappa"], personType: "adult" },
       { id: "person-hanni", name: "Hanni", aliases: ["Mamma"], personType: "adult" },
@@ -139,7 +145,7 @@ const dependencies = vi.hoisted(() => ({
     memoryId: "mem-101",
   })),
   openAIConfig: vi.fn(() => null), // Fallback mode in unit tests
-}));
+}; });
 
 vi.mock("@/server/database", () => ({
   loadDashboard: dependencies.loadDashboard,

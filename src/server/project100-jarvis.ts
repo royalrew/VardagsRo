@@ -17,8 +17,9 @@ import {
 import { recordAudit } from "@/server/audit";
 import type { ActorContext } from "@/server/authorization-types";
 import { openAIConfig } from "@/server/config";
-import { readyClient } from "@/server/database";
+import { loadDashboard, readyClient } from "@/server/database";
 import { AppError } from "@/server/errors";
+import { processJarvisAgentMessage } from "@/server/jarvis-agent";
 import { assertProject100Adult } from "@/server/project100";
 import { handleMemoryTextIntent } from "@/server/project100-memory-assistant";
 import type {
@@ -515,13 +516,19 @@ export async function sendProject100JarvisMessage(
     limit 20
   `;
 
-  // 3. Load full realtime context
+  // 3. Load context and caller info
   const context = await loadProject100JarvisContext(actor);
-  const systemPrompt = buildJarvisSystemPrompt(context);
+  const dashboard = await loadDashboard(actor);
+  const callerPerson = actor.personId ? dashboard.people.find((p) => p.id === actor.personId) : null;
 
-  // 4. Call AI or deterministic fallback
-  const ai = getOpenAI();
-  let assistantReplyText = "";
+  // 4. Run through unified Jarvis Agentic Engine
+  const agentResult = await processJarvisAgentMessage(actor, input.content, {
+    channel: "web",
+    personName: callerPerson?.name,
+    conversationId: convId,
+  });
+
+  const assistantReplyText = agentResult.text;
   const sources: Project100MessageSource[] = [];
   const proposals: Project100MessageProposal[] = [];
 
@@ -552,59 +559,6 @@ export async function sendProject100JarvisMessage(
       detail: `${context.currentWeightKg} kg`,
       date: context.today,
     });
-  }
-
-  // Check if message is an explicit memory command or fact query
-  let handledByMemory = false;
-  try {
-    const memoryRes = await handleMemoryTextIntent(actor, input.content, "web");
-    if (memoryRes.handled) {
-      assistantReplyText = memoryRes.replyText;
-      sources.push({
-        kind: "memory",
-        id: memoryRes.memoryId ?? "memory-bank",
-        title: "Minnesbanken",
-        detail: memoryRes.isStore ? "Nytt sparat minne" : "Hämtat ur minnesbanken",
-      });
-      handledByMemory = true;
-    }
-  } catch {
-    // Ignore and proceed with general assistant
-  }
-
-  if (!handledByMemory) {
-    if (ai) {
-      try {
-        const messagesPayload: OpenAI.ChatCompletionMessageParam[] = [
-          { role: "system", content: systemPrompt },
-          ...priorMsgRows.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          { role: "user", content: input.content },
-        ];
-
-        const completion = await ai.client.chat.completions.create({
-          model: ai.model,
-          messages: messagesPayload,
-          temperature: 0.2,
-          max_tokens: 1000,
-        });
-
-        assistantReplyText =
-          completion.choices[0]?.message?.content?.trim() ||
-          "Jag kunde inte formulera ett svar just nu.";
-      } catch {
-        assistantReplyText = `Jag analyserade din fråga om "${input.content}". Med din nuvarande vikt (${context.currentWeightKg ?? 85} kg) och ditt kommande schema rekommenderar jag att du håller proteinmålet (${context.proteinTargetG} g) och fokuserar på nästa träningsfönster.`;
-      }
-    } else {
-      // Deterministic fallback response in development/tests
-      assistantReplyText = `Utifrån din historik (vikt: ${context.currentWeightKg ?? "ej loggad"} kg, senaste pass: ${
-        context.recentSessions[0]?.title ?? "inga pass"
-      }) och ditt schema (${
-        context.upcomingWorkEvents[0]?.title ?? "inga arbetspass närmast"
-      }):\n\nFokusera på god återhämtning och att nå dagens proteinmål på ${context.proteinTargetG} g.`;
-    }
   }
 
   // 5. Persist user and assistant messages
