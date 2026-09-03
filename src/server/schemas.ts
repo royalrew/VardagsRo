@@ -179,6 +179,7 @@ const taskSchema: z.ZodType<FamilyTask> = z
     documentId: z.string().max(128).nullable(),
     title: z.string().max(200),
     kind: taskKindSchema,
+    recurrence: z.enum(["once", "daily"]),
     dueAt: isoDateTime.nullable(),
     completedAt: isoDateTime.nullable(),
     notes: z.string().max(1_000).nullable(),
@@ -307,6 +308,7 @@ export const manualTaskSchema = z
     personId: z.string().trim().min(1).max(128),
     title: z.string().trim().min(1).max(200),
     kind: taskKindSchema.default("other"),
+    recurrence: z.enum(["once", "daily"]).default("once"),
     dueAt: isoDateTime.nullable().default(null),
     notes: z.string().trim().min(1).max(1_000).nullable().default(null),
   })

@@ -1,4 +1,5 @@
 import type { FamilyPerson, FamilyTask } from "@/lib/types";
+import { calendarDateInTimeZone, DEFAULT_TIME_ZONE } from "@/lib/dates";
 
 export interface CleaningAreaDef {
   personName: string;
@@ -86,17 +87,50 @@ export interface KidChoreSummary {
   allDone: boolean;
 }
 
+/**
+ * A daily chore stores the latest completion instant. It is complete only on
+ * that household calendar date; at the next local midnight it becomes open
+ * again without deleting the previous timestamp or mutating data during a read.
+ */
+export function taskForCalendarDate(
+  task: FamilyTask,
+  referenceDate: string | number | Date = new Date(),
+  timeZone = DEFAULT_TIME_ZONE,
+): FamilyTask {
+  if (task.recurrence !== "daily" || !task.completedAt) return task;
+  const today = calendarDateInTimeZone(referenceDate, timeZone);
+  const completionDate = calendarDateInTimeZone(task.completedAt, timeZone);
+  return completionDate === today ? task : { ...task, completedAt: null };
+}
+
+function belongsOnChoreDay(
+  task: FamilyTask,
+  today: string,
+  timeZone: string,
+): boolean {
+  if (task.recurrence === "daily") {
+    return task.dueAt === null || calendarDateInTimeZone(task.dueAt, timeZone) <= today;
+  }
+  if (!task.completedAt) return true;
+  return calendarDateInTimeZone(task.completedAt, timeZone) === today;
+}
+
 export function getKidsChoresOverview(
   people: FamilyPerson[],
   tasks: FamilyTask[],
+  referenceDate: string | number | Date = new Date(),
+  timeZone = DEFAULT_TIME_ZONE,
 ): KidChoreSummary[] {
+  const today = calendarDateInTimeZone(referenceDate, timeZone);
   const kids = people.filter(
     (p) => p.personType === "child" || getCleaningAreaForPerson(p) !== null,
   );
 
   return kids.map((person) => {
     const cleaningArea = getCleaningAreaForPerson(person);
-    const personTasks = tasks.filter((t) => t.personId === person.id);
+    const personTasks = tasks
+      .filter((task) => task.personId === person.id && belongsOnChoreDay(task, today, timeZone))
+      .map((task) => taskForCalendarDate(task, referenceDate, timeZone));
     const openCount = personTasks.filter((t) => !t.completedAt).length;
     const completedCount = personTasks.filter((t) => Boolean(t.completedAt)).length;
     const allDone = personTasks.length > 0 && openCount === 0;

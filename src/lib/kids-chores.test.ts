@@ -3,7 +3,7 @@ import {
   getCleaningAreaByName,
   getCleaningAreaForPerson,
   getKidsChoresOverview,
-  KIDS_CLEANING_AREAS,
+  taskForCalendarDate,
 } from "./kids-chores";
 import type { FamilyPerson, FamilyTask } from "./types";
 
@@ -63,6 +63,7 @@ describe("kids-chores", () => {
       documentId: null,
       title: "Dammsuga lilla vardagsrummet",
       kind: "other",
+      recurrence: "daily",
       dueAt: "2026-09-01T18:00:00.000Z",
       completedAt: null,
       notes: null,
@@ -77,6 +78,7 @@ describe("kids-chores", () => {
       documentId: null,
       title: "Plocka undan leksaker",
       kind: "other",
+      recurrence: "daily",
       dueAt: null,
       completedAt: "2026-09-01T15:00:00.000Z",
       notes: null,
@@ -91,6 +93,7 @@ describe("kids-chores", () => {
       documentId: null,
       title: "Torka köksbänkar",
       kind: "other",
+      recurrence: "once",
       dueAt: null,
       completedAt: "2026-09-01T16:00:00.000Z",
       notes: null,
@@ -120,7 +123,12 @@ describe("kids-chores", () => {
   });
 
   it("calculates chores overview for children correctly", () => {
-    const overview = getKidsChoresOverview(people, tasks);
+    const overview = getKidsChoresOverview(
+      people,
+      tasks,
+      "2026-09-01T17:00:00.000Z",
+      "Europe/Stockholm",
+    );
     expect(overview).toHaveLength(3);
 
     const almaSummary = overview.find((s) => s.person.id === "person-alma");
@@ -137,5 +145,37 @@ describe("kids-chores", () => {
     expect(shureymSummary?.openCount).toBe(0);
     expect(shureymSummary?.completedCount).toBe(0);
     expect(shureymSummary?.allDone).toBe(false);
+  });
+
+  it("reopens daily chores on the next Stockholm calendar day", () => {
+    const yesterday = taskForCalendarDate(
+      tasks[1],
+      "2026-09-02T10:00:00.000Z",
+      "Europe/Stockholm",
+    );
+    expect(yesterday.completedAt).toBeNull();
+
+    const overview = getKidsChoresOverview(
+      people,
+      tasks,
+      "2026-09-02T10:00:00.000Z",
+      "Europe/Stockholm",
+    );
+    const almaSummary = overview.find((summary) => summary.person.id === "person-alma");
+    expect(almaSummary?.openCount).toBe(2);
+    expect(almaSummary?.completedCount).toBe(0);
+    expect(almaSummary?.allDone).toBe(false);
+  });
+
+  it("does not let a completed one-off task claim that it was done today", () => {
+    const overview = getKidsChoresOverview(
+      people,
+      tasks,
+      "2026-09-02T10:00:00.000Z",
+      "Europe/Stockholm",
+    );
+    const cuzeyrSummary = overview.find((summary) => summary.person.id === "person-cuzeyr");
+    expect(cuzeyrSummary?.tasks).toHaveLength(0);
+    expect(cuzeyrSummary?.allDone).toBe(false);
   });
 });

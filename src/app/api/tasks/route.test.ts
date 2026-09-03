@@ -23,6 +23,7 @@ const task: FamilyTask = {
   documentId: null,
   title: "Ta med idrottskläder",
   kind: "bring",
+  recurrence: "once",
   dueAt: "2026-08-25T06:00:00.000Z",
   completedAt: null,
   notes: null,

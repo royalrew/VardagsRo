@@ -29,7 +29,7 @@ import {
 import { assertProject100Adult } from "@/server/project100";
 import { deleteProject100Memory } from "@/server/project100-jarvis";
 import { loadProject100BodyJourney, saveProject100BodyEntry } from "@/server/project100-body";
-import { getCleaningAreaForPerson } from "@/lib/kids-chores";
+import { getCleaningAreaForPerson, getKidsChoresOverview } from "@/lib/kids-chores";
 import { createProject100ContentProject } from "@/server/project100-content";
 import { logJarvisCapabilityGap } from "@/server/jarvis-gaps";
 import { loadProject100Journal, saveProject100JournalEntry } from "@/server/project100-journal";
@@ -889,6 +889,7 @@ export async function processJarvisAgentMessage(
         title,
         personId: actor.personId,
         kind: "other",
+        recurrence: "once",
         dueAt: dueDate,
         notes,
       });
@@ -1508,22 +1509,20 @@ export async function processJarvisAgentMessage(
         });
       }
 
-      const summaries = relevantKids.map((kid) => {
-        const area = getCleaningAreaForPerson(kid);
-        const kidTasks = dashboard.tasks.filter((t) => t.personId === kid.id);
-        const openTasks = kidTasks.filter((t) => !t.completedAt);
-        const completedTasks = kidTasks.filter((t) => Boolean(t.completedAt));
-        const allDone = kidTasks.length > 0 && openTasks.length === 0;
-
-        return {
-          kid,
-          area,
-          total: kidTasks.length,
-          open: openTasks,
-          completed: completedTasks,
-          allDone,
-        };
-      });
+      const overview = getKidsChoresOverview(
+        relevantKids,
+        dashboard.tasks,
+        now,
+        dashboard.timezone,
+      );
+      const summaries = overview.map((summary) => ({
+        kid: summary.person,
+        area: summary.cleaningArea,
+        total: summary.tasks.length,
+        open: summary.tasks.filter((task) => !task.completedAt),
+        completed: summary.tasks.filter((task) => Boolean(task.completedAt)),
+        allDone: summary.allDone,
+      }));
 
       const lines = summaries.map((s) => {
         const areaStr = s.area ? `${s.area.icon} ${s.area.area}` : "sina uppgifter";

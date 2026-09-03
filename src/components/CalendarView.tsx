@@ -13,7 +13,6 @@ import {
 } from "@/components/calendar-contracts";
 import { Avatar, EmptyState, EventRow } from "@/components/ui";
 import {
-  FAMILY_SCOPE_ID,
   calendarColumns,
   eventBelongsToColumn,
   familyScopePerson,
@@ -138,10 +137,9 @@ export function CalendarView({
     () => familyScopePerson(data.familyName, data.householdId),
     [data.familyName, data.householdId],
   );
-  const columns = useMemo(() => calendarColumns(data.people, family), [data.people, family]);
+  const columns = useMemo(() => calendarColumns(data.people), [data.people]);
   const [mode, setMode] = useState<"people" | "hours">("people");
   const [selectedPeople, setSelectedPeople] = useState<string[]>(() => [
-    FAMILY_SCOPE_ID,
     ...data.people.map((person) => person.id),
   ]);
   const [draggedEventId, setDraggedEventId] = useState<string | null>(null);
@@ -156,8 +154,8 @@ export function CalendarView({
   const weekPeriodLabel = capitalize(formatCalendarMonthRange(days[0], days[6]));
   const visibleEvents = useMemo(
     () =>
-      data.events.filter((event) =>
-        selectedPeople.includes(event.personId ?? FAMILY_SCOPE_ID),
+      data.events.filter(
+        (event) => event.personId === null || selectedPeople.includes(event.personId),
       ),
     [data.events, selectedPeople],
   );

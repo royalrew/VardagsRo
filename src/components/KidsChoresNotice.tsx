@@ -1,13 +1,12 @@
 "use client";
 
-import { Check, Circle, LoaderCircle, Plus, Sparkles, Trophy } from "lucide-react";
+import { Check, Circle, LoaderCircle, Plus, Trophy } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Avatar } from "@/components/ui";
 import {
   getCleaningAreaForPerson,
   getKidsChoresOverview,
-  KIDS_CLEANING_AREAS,
 } from "@/lib/kids-chores";
 import type { FamilyPerson, FamilyTask } from "@/lib/types";
 
@@ -17,12 +16,16 @@ export function KidsChoresNotice({
   tasks,
   onToggleTask,
   onOpenAddChore,
+  referenceDate,
+  timeZone,
 }: {
   currentPerson: FamilyPerson | null;
   people: FamilyPerson[];
   tasks: FamilyTask[];
   onToggleTask: (task: FamilyTask, completed: boolean) => Promise<boolean>;
   onOpenAddChore: () => void;
+  referenceDate: Date;
+  timeZone: string;
 }) {
   const isChild = currentPerson?.personType === "child";
   const childCleaningArea = useMemo(
@@ -33,18 +36,16 @@ export function KidsChoresNotice({
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
 
   const overview = useMemo(
-    () => getKidsChoresOverview(people, tasks),
-    [people, tasks],
+    () => getKidsChoresOverview(people, tasks, referenceDate, timeZone),
+    [people, tasks, referenceDate, timeZone],
   );
 
   const myChores = useMemo(() => {
     if (!currentPerson) return [];
-    return tasks.filter((t) => t.personId === currentPerson.id);
-  }, [currentPerson, tasks]);
+    return overview.find((summary) => summary.person.id === currentPerson.id)?.tasks ?? [];
+  }, [currentPerson, overview]);
 
   const openMyChores = myChores.filter((t) => !t.completedAt);
-  const completedMyChores = myChores.filter((t) => Boolean(t.completedAt));
-
   async function handleToggle(task: FamilyTask) {
     if (pendingTaskId) return;
     setPendingTaskId(task.id);

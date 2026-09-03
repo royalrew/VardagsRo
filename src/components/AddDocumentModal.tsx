@@ -1211,6 +1211,7 @@ function isFamilyTask(value: unknown): value is FamilyTask {
     typeof value.id === "string" &&
     typeof value.personId === "string" &&
     typeof value.title === "string" &&
+    (value.recurrence === "once" || value.recurrence === "daily") &&
     (typeof value.dueAt === "string" || value.dueAt === null) &&
     (typeof value.completedAt === "string" || value.completedAt === null)
   );
@@ -1311,6 +1312,7 @@ function createLocalRecords(
     documentId,
     title: task.title,
     kind: task.kind,
+    recurrence: "once",
     dueAt: task.dueAt,
     completedAt: null,
     notes: task.notes,

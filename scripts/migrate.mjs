@@ -1168,6 +1168,33 @@ const migrations = [
         on jarvis_capability_gaps (user_id, status, created_at desc)`,
     ],
   },
+  {
+    version: "026",
+    name: "daily_child_chores",
+    statements: [
+      `alter table family_tasks
+        add column if not exists recurrence text not null default 'once'`,
+      `alter table family_tasks
+        drop constraint if exists family_tasks_recurrence_check`,
+      `alter table family_tasks
+        add constraint family_tasks_recurrence_check
+        check (recurrence in ('once', 'daily'))`,
+      `update family_tasks t
+        set recurrence = 'daily', updated_at = now()
+        where t.recurrence = 'once'
+          and t.document_id is null
+          and t.kind = 'other'
+          and exists (
+            select 1
+            from family_people p
+            where p.id = t.person_id
+              and p.household_id = t.household_id
+              and p.person_type = 'child'
+          )`,
+      `create index if not exists family_tasks_household_recurrence_idx
+        on family_tasks (household_id, recurrence, completed_at)`,
+    ],
+  },
 ];
 
 function checksum(migration) {

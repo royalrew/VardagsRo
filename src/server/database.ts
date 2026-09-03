@@ -117,6 +117,7 @@ interface TaskRow {
   document_id: string | null;
   title: string;
   kind: FamilyTask["kind"];
+  recurrence: FamilyTask["recurrence"];
   due_at: Date | string | null;
   completed_at: Date | string | null;
   notes: string | null;
@@ -249,6 +250,7 @@ function mapTask(row: TaskRow): FamilyTask {
     documentId: row.document_id,
     title: row.title,
     kind: row.kind,
+    recurrence: row.recurrence,
     dueAt: asNullableIso(row.due_at),
     completedAt: asNullableIso(row.completed_at),
     notes: row.notes,
@@ -310,7 +312,7 @@ async function dashboardFromDatabase(
       order by starts_at asc
     `,
     sql<TaskRow[]>`
-      select id, household_id, person_id, document_id, title, kind, due_at,
+      select id, household_id, person_id, document_id, title, kind, recurrence, due_at,
              completed_at, notes, review_status, confidence, source_excerpt
       from family_tasks where household_id = ${household.id}
       order by completed_at asc nulls first, due_at asc nulls last, created_at desc
@@ -918,6 +920,7 @@ export async function saveConfirmedDocument(
     householdId: person.household_id,
     personId: person.id,
     documentId,
+    recurrence: "once",
     dueAt: task.dueAt ? new Date(task.dueAt).toISOString() : null,
     completedAt: null,
     reviewStatus: "confirmed",
@@ -953,11 +956,11 @@ export async function saveConfirmedDocument(
     for (const task of savedTasks) {
       await tx`
         insert into family_tasks
-          (id, household_id, person_id, document_id, title, kind, due_at,
+          (id, household_id, person_id, document_id, title, kind, recurrence, due_at,
            completed_at, notes, review_status, confidence, source_excerpt)
         values
           (${task.id}, ${task.householdId}, ${task.personId}, ${task.documentId},
-           ${task.title}, ${task.kind}, ${task.dueAt}, null, ${task.notes},
+           ${task.title}, ${task.kind}, ${task.recurrence}, ${task.dueAt}, null, ${task.notes},
            ${task.reviewStatus}, ${task.confidence}, ${task.sourceExcerpt})
       `;
     }
@@ -1027,7 +1030,7 @@ export async function removeDocument(
         where document_id = ${id} and household_id = ${actor.householdId}
       `,
       tx<TaskRow[]>`
-        select id, household_id, person_id, document_id, title, kind, due_at,
+        select id, household_id, person_id, document_id, title, kind, recurrence, due_at,
                completed_at, notes, review_status, confidence, source_excerpt
         from family_tasks
         where document_id = ${id} and household_id = ${actor.householdId}
@@ -1190,6 +1193,7 @@ export async function saveManualTask(actor: ActorContext, input: ManualTaskInput
     documentId: null,
     title: input.title,
     kind: input.kind,
+    recurrence: input.recurrence,
     dueAt: input.dueAt ? new Date(input.dueAt).toISOString() : null,
     completedAt: null,
     notes: input.notes,
@@ -1200,11 +1204,11 @@ export async function saveManualTask(actor: ActorContext, input: ManualTaskInput
   await sql.begin(async (tx) => {
     await tx`
       insert into family_tasks
-        (id, household_id, person_id, document_id, title, kind, due_at,
+        (id, household_id, person_id, document_id, title, kind, recurrence, due_at,
          completed_at, notes, review_status, confidence, source_excerpt)
       values
         (${task.id}, ${task.householdId}, ${task.personId}, null, ${task.title},
-         ${task.kind}, ${task.dueAt}, null, ${task.notes}, ${task.reviewStatus},
+         ${task.kind}, ${task.recurrence}, ${task.dueAt}, null, ${task.notes}, ${task.reviewStatus},
          ${task.confidence}, null)
     `;
     await recordAudit(tx, actor, {
@@ -1227,12 +1231,13 @@ export async function updateTaskCompletion(
     const rows = await tx<TaskRow[]>`
       update family_tasks
       set completed_at = case
+            when ${completed} and recurrence = 'daily' then now()
             when ${completed} then coalesce(completed_at, now())
             else null
           end,
           updated_at = now()
       where id = ${id} and household_id = ${actor.householdId}
-      returning id, household_id, person_id, document_id, title, kind, due_at,
+      returning id, household_id, person_id, document_id, title, kind, recurrence, due_at,
                 completed_at, notes, review_status, confidence, source_excerpt
     `;
     if (!rows[0]) return null;
@@ -1281,7 +1286,7 @@ export async function updateManualTask(
           person_id = ${personId},
           updated_at = now()
       where id = ${id} and household_id = ${actor.householdId}
-      returning id, household_id, person_id, document_id, title, kind, due_at,
+      returning id, household_id, person_id, document_id, title, kind, recurrence, due_at,
                 completed_at, notes, review_status, confidence, source_excerpt
     `;
     if (!rows[0]) return null;
@@ -1301,7 +1306,7 @@ export async function removeTask(actor: ActorContext, id: string): Promise<boole
     const rows = await tx<TaskRow[]>`
       delete from family_tasks
       where id = ${id} and household_id = ${actor.householdId}
-      returning id, household_id, person_id, document_id, title, kind, due_at,
+      returning id, household_id, person_id, document_id, title, kind, recurrence, due_at,
                 completed_at, notes, review_status, confidence, source_excerpt
     `;
     if (!rows.length) return false;
@@ -1703,11 +1708,11 @@ async function restoreDocument(
   for (const task of tasks) {
     await tx`
       insert into family_tasks
-        (id, household_id, person_id, document_id, title, kind, due_at, completed_at,
+        (id, household_id, person_id, document_id, title, kind, recurrence, due_at, completed_at,
          notes, review_status, confidence, source_excerpt)
       values
         (${task.id}, ${actor.householdId}, ${task.personId}, ${task.documentId},
-         ${task.title}, ${task.kind}, ${task.dueAt}, ${task.completedAt}, ${task.notes},
+         ${task.title}, ${task.kind}, ${task.recurrence ?? "once"}, ${task.dueAt}, ${task.completedAt}, ${task.notes},
          ${task.reviewStatus}, ${task.confidence}, ${task.sourceExcerpt})
     `;
   }
@@ -1809,11 +1814,11 @@ export async function undoDeletion(
       }
       await tx`
         insert into family_tasks
-          (id, household_id, person_id, document_id, title, kind, due_at, completed_at,
+          (id, household_id, person_id, document_id, title, kind, recurrence, due_at, completed_at,
            notes, review_status, confidence, source_excerpt)
         values
           (${task.id}, ${actor.householdId}, ${task.personId}, ${task.documentId},
-           ${task.title}, ${task.kind}, ${task.dueAt}, ${task.completedAt}, ${task.notes},
+           ${task.title}, ${task.kind}, ${task.recurrence ?? "once"}, ${task.dueAt}, ${task.completedAt}, ${task.notes},
            ${task.reviewStatus}, ${task.confidence}, ${task.sourceExcerpt})
       `;
       await recordAudit(tx, actor, {

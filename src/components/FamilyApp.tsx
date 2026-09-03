@@ -309,6 +309,7 @@ export function FamilyApp({
       notes: string | null;
       dueAt: string | null;
       kind: "other";
+      recurrence: "daily";
     }>,
   ): Promise<boolean> {
     if (inputs.length === 0) return true;
@@ -354,6 +355,7 @@ export function FamilyApp({
       documentId: null,
       title: input.title,
       kind: input.kind,
+      recurrence: input.recurrence,
       dueAt: input.dueAt,
       completedAt: null,
       notes: input.notes,
@@ -1057,7 +1059,12 @@ function normalizeDashboardData(data: DashboardData): DashboardData {
   return {
     ...data,
     events: data.events.map((event) => ({ ...event, notes: event.notes ?? null })),
-    tasks: Array.isArray(data.tasks) ? data.tasks : [],
+    tasks: Array.isArray(data.tasks)
+      ? data.tasks.map((task) => ({
+          ...task,
+          recurrence: task.recurrence === "daily" ? "daily" : "once",
+        }))
+      : [],
     folders: Array.isArray(data.folders) ? data.folders.filter(isFamilyDocumentFolder) : [],
     documents: data.documents.map((document) => ({
       ...document,
@@ -1155,6 +1162,7 @@ function isFamilyTask(value: unknown): value is FamilyTask {
     typeof value.id === "string" &&
     typeof value.personId === "string" &&
     typeof value.title === "string" &&
+    (value.recurrence === "once" || value.recurrence === "daily") &&
     (typeof value.completedAt === "string" || value.completedAt === null)
   );
 }

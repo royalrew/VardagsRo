@@ -8721,6 +8721,12 @@ button.event-row:hover {
   margin-bottom: 16px;
 }
 
+.chore-repeat-hint {
+  margin: 4px 0 9px;
+  color: var(--ink-faint);
+  font-size: 10px;
+}
+
 .chore-label {
   display: block;
   font-size: 12px;
@@ -8888,7 +8894,6 @@ button.event-row:hover {
 .chore-item-remove:hover {
   color: #e53935;
 }
-
 
 
 

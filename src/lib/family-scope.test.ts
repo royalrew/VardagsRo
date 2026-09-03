@@ -60,14 +60,15 @@ describe("family-wide events", () => {
     expect(personForEvent(people, event("borttagen"), family).id).toBe(FAMILY_SCOPE_ID);
   });
 
-  it("puts the family first among the columns", () => {
-    const columns = calendarColumns(people, family);
-    expect(columns.map((column) => column.id)).toEqual([FAMILY_SCOPE_ID, "noa", "tuva"]);
+  it("uses only real family members as calendar columns", () => {
+    const columns = calendarColumns(people);
+    expect(columns.map((column) => column.id)).toEqual(["noa", "tuva"]);
   });
 
-  it("states a shared event once instead of repeating it under everyone", () => {
-    expect(eventBelongsToColumn(event(null), FAMILY_SCOPE_ID)).toBe(true);
-    expect(eventBelongsToColumn(event(null), "noa")).toBe(false);
+  it("shows a shared event for each real person without a family column", () => {
+    expect(eventBelongsToColumn(event(null), FAMILY_SCOPE_ID)).toBe(false);
+    expect(eventBelongsToColumn(event(null), "noa")).toBe(true);
+    expect(eventBelongsToColumn(event(null), "tuva")).toBe(true);
     expect(eventBelongsToColumn(event("noa"), "noa")).toBe(true);
     expect(eventBelongsToColumn(event("noa"), FAMILY_SCOPE_ID)).toBe(false);
   });

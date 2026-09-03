@@ -126,6 +126,7 @@ function task(overrides: Partial<FamilyTask> = {}): FamilyTask {
     documentId: "document-school",
     title: "Gympakläder och vattenflaska",
     kind: "bring",
+    recurrence: "once",
     dueAt: "2026-08-21T06:00:00.000Z",
     completedAt: null,
     notes: null,

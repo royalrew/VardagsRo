@@ -1,12 +1,11 @@
 "use client";
 
-import { Check, Plus, Sparkles, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Plus, Sparkles, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Avatar } from "@/components/ui";
 import {
   getCleaningAreaForPerson,
-  KIDS_CLEANING_AREAS,
 } from "@/lib/kids-chores";
 import type { FamilyPerson } from "@/lib/types";
 
@@ -16,6 +15,7 @@ export interface ChoreItemInput {
   notes: string | null;
   dueAt: string | null;
   kind: "other";
+  recurrence: "daily";
 }
 
 export function AddChoreModal({
@@ -38,7 +38,7 @@ export function AddChoreModal({
     [people],
   );
 
-  const [selectedPersonId, setSelectedPersonId] = useState<string>(
+  const [requestedPersonId, setSelectedPersonId] = useState<string>(
     () => kids[0]?.id || people[0]?.id || "",
   );
   const [selectedChores, setSelectedChores] = useState<string[]>([]);
@@ -48,33 +48,28 @@ export function AddChoreModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const selectedPersonId = people.some((person) => person.id === requestedPersonId)
+    ? requestedPersonId
+    : kids[0]?.id || people[0]?.id || "";
   const selectedPerson = people.find((p) => p.id === selectedPersonId) ?? kids[0];
   const cleaningArea = getCleaningAreaForPerson(selectedPerson);
 
-  useEffect(() => {
-    if (kids.length > 0 && (!selectedPersonId || !people.some((p) => p.id === selectedPersonId))) {
-      setSelectedPersonId(kids[0].id);
-    }
-  }, [kids, people, selectedPersonId]);
-
-  // Reset selected chores when opening or switching child
-  useEffect(() => {
-    if (!open) {
-      setSelectedChores([]);
-      setCustomInput("");
-      setNotes("");
-      setError(null);
-    }
-  }, [open]);
+  const resetAndClose = useCallback(() => {
+    setSelectedChores([]);
+    setCustomInput("");
+    setNotes("");
+    setError(null);
+    onClose();
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") resetAndClose();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+  }, [open, resetAndClose]);
 
   if (!open) return null;
 
@@ -149,6 +144,7 @@ export function AddChoreModal({
       notes: notes.trim() || null,
       dueAt,
       kind: "other",
+      recurrence: "daily",
     }));
 
     setBusy(true);
@@ -156,10 +152,7 @@ export function AddChoreModal({
     try {
       const ok = await onSave(tasksToSave);
       if (ok) {
-        setSelectedChores([]);
-        setCustomInput("");
-        setNotes("");
-        onClose();
+        resetAndClose();
       } else {
         setError("Kunde inte spara uppgifterna.");
       }
@@ -177,7 +170,7 @@ export function AddChoreModal({
       className="modal-backdrop"
       role="presentation"
       onMouseDown={(event) => {
-        if (!dialogRef.current?.contains(event.target as Node)) onClose();
+        if (!dialogRef.current?.contains(event.target as Node)) resetAndClose();
       }}
     >
       <section
@@ -196,7 +189,7 @@ export function AddChoreModal({
             <button
               type="button"
               className="icon-button modal-close"
-              onClick={onClose}
+              onClick={resetAndClose}
               aria-label="Stäng"
               disabled={busy}
             >
@@ -314,7 +307,8 @@ export function AddChoreModal({
 
           {/* Due Options */}
           <div className="chore-due-section">
-            <span className="chore-label">När ska det vara klart?</span>
+            <span className="chore-label">När ska den dagliga uppgiften börja?</span>
+            <p className="chore-repeat-hint">Återställs automatiskt varje ny dag.</p>
             <div className="chore-due-pills">
               <button
                 type="button"
@@ -369,7 +363,7 @@ export function AddChoreModal({
             <button
               type="button"
               className="password-modal-cancel"
-              onClick={onClose}
+              onClick={resetAndClose}
               disabled={busy}
             >
               Avbryt

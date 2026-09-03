@@ -45,7 +45,17 @@ describe("task schemas", () => {
         dueAt: "2026-08-24T18:00:00+02:00",
         notes: null,
       }),
-    ).toMatchObject({ kind: "homework" });
+    ).toMatchObject({ kind: "homework", recurrence: "once" });
+    expect(
+      manualTaskSchema.parse({
+        personId: "person-nora",
+        title: "Torka bordet",
+        kind: "other",
+        recurrence: "daily",
+        dueAt: null,
+        notes: null,
+      }),
+    ).toMatchObject({ recurrence: "daily" });
     expect(taskCompletionSchema.parse({ completed: true })).toEqual({ completed: true });
     expect(() => taskCompletionSchema.parse({ completed: true, title: "Byt titel" })).toThrow();
   });

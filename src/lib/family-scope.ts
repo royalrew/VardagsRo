@@ -4,7 +4,7 @@ import type { FamilyEvent, FamilyPerson } from "@/lib/types";
  * An event with no person concerns the whole family: dinner at grandma's, a
  * moving day, a school holiday. Rather than let every view guard against a
  * missing person, the family itself is handed out as a person-shaped value so
- * avatars, columns and filters keep working unchanged.
+ * avatars and event details keep working unchanged.
  */
 export const FAMILY_SCOPE_ID = "__family__";
 
@@ -41,23 +41,23 @@ export function personForEvent(
   return people.find((person) => person.id === event.personId) ?? family;
 }
 
-/** The columns a week grid shows: the whole family first, then each member. */
-export function calendarColumns(
-  people: FamilyPerson[],
-  family: FamilyPerson,
-): FamilyPerson[] {
-  return [family, ...people];
+/** The people grid has one column per real family member. */
+export function calendarColumns(people: FamilyPerson[]): FamilyPerson[] {
+  return people;
 }
 
 /**
- * Does this event belong in the given column? A family-wide event shows in the
- * family column only, so it is stated once instead of repeated under everyone.
+ * Does this event belong in the given person's column? A family-wide event
+ * concerns every member and is therefore visible without a synthetic family
+ * column taking up permanent space in the grid.
  */
 export function eventBelongsToColumn(
   event: Pick<FamilyEvent, "personId">,
   columnId: string,
 ): boolean {
-  return columnId === FAMILY_SCOPE_ID ? event.personId === null : event.personId === columnId;
+  return event.personId === null
+    ? columnId !== FAMILY_SCOPE_ID
+    : event.personId === columnId;
 }
 
 /**

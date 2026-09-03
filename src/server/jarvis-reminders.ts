@@ -259,6 +259,7 @@ export async function createContextualReminder(
     title: input.title,
     personId: actor.personId,
     kind: "bring",
+    recurrence: "once",
     dueAt: dueAtIso,
     notes: input.notes || (workShiftNote ? `Påminnelse: ${workShiftNote}` : null),
   });

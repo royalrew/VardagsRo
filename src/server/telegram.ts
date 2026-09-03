@@ -431,7 +431,7 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
             where id = ${action.taskId}
               and household_id = ${actor.householdId}
               and person_id = ${actor.personId}
-              and completed_at is null
+              and (completed_at is null or recurrence = 'daily')
             returning id, title
           `;
           const task = rows[0];

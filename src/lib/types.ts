@@ -81,6 +81,7 @@ export interface FamilyTask {
   documentId: string | null;
   title: string;
   kind: TaskKind;
+  recurrence: "once" | "daily";
   dueAt: string | null;
   completedAt: string | null;
   notes: string | null;

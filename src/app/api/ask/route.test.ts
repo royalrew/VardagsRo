@@ -51,6 +51,7 @@ const context: Pick<
       documentId: "document-school",
       title: "Samtyckesblanketten",
       kind: "form",
+      recurrence: "once",
       dueAt: "2026-08-24T14:30:00.000Z",
       completedAt: null,
       notes: null,

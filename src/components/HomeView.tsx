@@ -11,13 +11,14 @@ import {
   Send,
   Sparkles,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { capitalize, formatClock, formatLongDate, formatTimeRange, isSameLocalDay } from "@/lib/dates";
 import { eventConcernsPerson, familyScopePerson, personForEvent } from "@/lib/family-scope";
 import type { DashboardData, FamilyEvent, FamilyTask } from "@/lib/types";
 import { Avatar, EmptyState, EventRow } from "@/components/ui";
 import { KidsChoresNotice } from "@/components/KidsChoresNotice";
 import { TaskBoard } from "@/components/TaskBoard";
+import { taskForCalendarDate } from "@/lib/kids-chores";
 
 export function HomeView({
   data,
@@ -39,7 +40,15 @@ export function HomeView({
   onOpenAddChore?: () => void;
 }) {
   const [question, setQuestion] = useState("");
-  const now = useMemo(() => new Date(), []);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+  const tasksForToday = useMemo(
+    () => data.tasks.map((task) => taskForCalendarDate(task, now, data.timezone)),
+    [data.tasks, data.timezone, now],
+  );
   const todayEvents = useMemo(
     () =>
       data.events
@@ -92,9 +101,11 @@ export function HomeView({
       <KidsChoresNotice
         currentPerson={currentPerson}
         people={data.people}
-        tasks={data.tasks}
+        tasks={tasksForToday}
         onToggleTask={onToggleTask}
         onOpenAddChore={onOpenAddChore ?? onAdd}
+        referenceDate={now}
+        timeZone={data.timezone}
       />
 
       <section className="ask-hero" aria-labelledby="ask-heading">
@@ -215,7 +226,7 @@ export function HomeView({
       </div>
 
       <TaskBoard
-        tasks={data.tasks}
+        tasks={tasksForToday}
         people={data.people}
         documents={data.documents}
         currentPerson={currentPerson}

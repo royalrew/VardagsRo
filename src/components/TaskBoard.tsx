@@ -261,6 +261,7 @@ function compareTasks(a: FamilyTask, b: FamilyTask): number {
 }
 
 function describeDeadline(task: FamilyTask): { label: string; overdue: boolean } {
+  if (task.recurrence === "daily") return { label: "Varje dag", overdue: false };
   if (!task.dueAt) return { label: "Ingen deadline", overdue: false };
   const dueAt = new Date(task.dueAt);
   if (Number.isNaN(dueAt.getTime())) return { label: "Deadline behöver kollas", overdue: false };
