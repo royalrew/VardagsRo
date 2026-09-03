@@ -9,9 +9,11 @@ type ChatMessage =
   | { id: string; role: "assistant"; text: string; answer?: AssistantAnswer; error?: boolean };
 
 const starterQuestions = [
-  "Jobbar pappa på söndag när jag har fotboll?",
-  "Vad har vi kvar att göra i veckan?",
-  "Vad behöver Nora ta med till skolan?",
+  "När börjar jag imorgon?",
+  "Vad ska vi göra idag?",
+  "Vad ska vi äta idag?",
+  "Vad gjorde jag den 1a september?",
+  "Är barnen klara med sina ansvarsområden?",
 ];
 
 export function AskView({
@@ -33,7 +35,7 @@ export function AskView({
     {
       id: "welcome",
       role: "assistant",
-      text: "Hej! Fråga mig om familjens tider, scheman eller kallelser. Jag visar alltid vad svaret bygger på.",
+      text: "Hej! Jag är Jarvis, er digitala familje- och livskollega. Fråga mig om scheman, arbetstider, middagstips, träning eller be mig lägga till och ändra saker!",
     },
   ]);
   const endRef = useRef<HTMLDivElement>(null);
@@ -119,9 +121,9 @@ export function AskView({
     <div className="ask-view view-enter">
       <section className="page-heading ask-page-heading">
         <div>
-          <p className="eyebrow">Svar från familjens egna uppgifter</p>
-          <h1>Fråga Vardagsro</h1>
-          <p>Jag jämför godkända tider och berättar när underlaget saknas.</p>
+          <p className="eyebrow">Er digitala familje- och livskollega</p>
+          <h1>Fråga Jarvis</h1>
+          <p>Fråga om familjens planer, jobbscheman, träning, kost eller be mig ändra i kalendern.</p>
         </div>
         <span className="privacy-pill">
           <Check size={14} /> Bara familjens information
@@ -172,7 +174,7 @@ export function AskView({
               <span className="assistant-avatar" aria-hidden="true">
                 <Bot size={18} />
               </span>
-              <div className="message-bubble typing-bubble" aria-label="Vardagsro tänker">
+              <div className="message-bubble typing-bubble" aria-label="Jarvis tänker">
                 <i /> <i /> <i />
               </div>
             </div>
@@ -201,7 +203,7 @@ export function AskView({
           }}
         >
           <label htmlFor="chat-question" className="sr-only">
-            Skriv en fråga
+            Skriv en fråga till Jarvis
           </label>
           <textarea
             id="chat-question"
@@ -214,13 +216,13 @@ export function AskView({
                 void ask(question);
               }
             }}
-            placeholder="Fråga om familjens planer…"
+            placeholder="Prata med Jarvis eller be om något…"
           />
           <button type="submit" disabled={!question.trim() || loading} aria-label="Skicka frågan">
             <ArrowUp size={19} />
           </button>
         </form>
-        <p className="chat-disclaimer">Vardagsro kan misstolka dokument. Kontrollera alltid viktiga tider.</p>
+        <p className="chat-disclaimer">Jarvis kan misstolka information. Kontrollera alltid viktiga tider.</p>
       </section>
     </div>
   );

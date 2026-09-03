@@ -68,7 +68,7 @@ const STORAGE_KEY = "vardagsro-v1-family-data";
 const navigation: NavigationItem[] = [
   { id: "home", label: "Hem", icon: Home },
   { id: "calendar", label: "Kalender", icon: CalendarDays },
-  { id: "ask", label: "Fråga", icon: Sparkles },
+  { id: "ask", label: "Jarvis", icon: Sparkles },
   { id: "documents", label: "Dokument", icon: FileText },
   { id: "project100", label: "Projekt 100", icon: Swords, href: "/projekt-100" },
 ];

@@ -180,10 +180,10 @@ export function OnboardingModal({
             <div className="onboarding-step">
               <span className="onboarding-step-icon"><CalendarDays size={24} /></span>
               <p className="eyebrow">Klart att använda</p>
-              <h2 ref={titleRef} id="onboarding-title" tabIndex={-1}>Se veckan. Fråga familjens AI.</h2>
+              <h2 ref={titleRef} id="onboarding-title" tabIndex={-1}>Se veckan. Fråga Jarvis.</h2>
               <div className="onboarding-feature-grid">
                 <div><CalendarDays size={22} /><strong>Kalender</strong><span>Dra tider, se veckan och hitta krockar.</span></div>
-                <div><MessageCircleQuestion size={22} /><strong>Fråga</strong><span>“Jobbar pappa på söndag?” eller “Vad ska med?”</span></div>
+                <div><MessageCircleQuestion size={22} /><strong>Jarvis</strong><span>“När börjar jag imorgon?” eller “Middagstips”</span></div>
                 <div><Link2 size={22} /><strong>Källor</strong><span>Öppna dokumentet bakom svaret.</span></div>
               </div>
               <p>Prova gärna att börja med en skollapp eller ett arbetsschema.</p>

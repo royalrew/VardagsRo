@@ -76,8 +76,8 @@ export function HomeView({
   }
 
   const suggestionChips = isChild
-    ? ["Vad händer idag?", "Vad ska jag städa?", "När slutar mamma/pappa jobbet?"]
-    : ["Vad händer i helgen?", "Jobbar pappa på söndag?", "Vad behöver kollas?"];
+    ? ["Vad händer idag?", "Vad ska jag städa?", "När kommer pappa hem?"]
+    : ["När börjar jag imorgon?", "Vad ska vi äta idag?", "Vad händer i helgen?"];
 
   return (
     <div className="home-view view-enter">
@@ -113,13 +113,13 @@ export function HomeView({
           <Sparkles size={23} />
         </div>
         <div className="ask-copy">
-          <span className="ask-label">Fråga Vardagsro</span>
-          <h2 id="ask-heading">Vad vill du veta?</h2>
-          <p>Jag letar bara i det som familjen har lagt in.</p>
+          <span className="ask-label">Fråga Jarvis</span>
+          <h2 id="ask-heading">Vad vill du veta eller be om?</h2>
+          <p>Jag har koll på scheman, tider, middagstips, träning och uppgifter.</p>
         </div>
         <form className="ask-inline" onSubmit={submitQuestion}>
           <label className="sr-only" htmlFor="home-question">
-            Fråga om familjens planer
+            Fråga eller be Jarvis om något
           </label>
           <input
             id="home-question"
@@ -127,8 +127,8 @@ export function HomeView({
             onChange={(event) => setQuestion(event.target.value)}
             placeholder={
               isChild
-                ? "När kommer pappa hem?"
-                : "Jobbar pappa på söndag när jag har fotboll?"
+                ? "Vad händer idag?"
+                : "När börjar jag imorgon? / Vad ska vi äta idag?"
             }
           />
           <button type="submit" aria-label="Skicka frågan" disabled={!question.trim()}>
