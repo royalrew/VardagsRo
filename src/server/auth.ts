@@ -101,6 +101,12 @@ function createAuth() {
     advanced: {
       cookiePrefix: "vardagsro",
       useSecureCookies: isProductionRuntime(),
+      // Railway strips client-supplied X-Forwarded-For values at its edge and
+      // rebuilds the header with the connecting client first. Declaring that
+      // header trusted prevents all users sharing one fallback rate-limit key.
+      ipAddress: {
+        ipAddressHeaders: ["x-forwarded-for"],
+      },
       database: { generateId: "uuid" },
     },
     plugins: [
