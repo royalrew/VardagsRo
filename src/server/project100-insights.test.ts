@@ -220,10 +220,10 @@ const database = vi.hoisted(() => {
         }));
     }
 
-    if (text.includes("from project100_training_sets")) {
+    if (text.includes("from project100_training_session_sets")) {
       const userId = values[0] as string;
-      const from = values[3] as string;
-      const to = values[4] as string;
+      const from = values[values.length - 2] as string;
+      const to = values[values.length - 1] as string;
       return state.sets
         .filter((s) => s.userId === userId && s.sessionDate >= from && s.sessionDate <= to)
         .map((s) => ({
@@ -362,5 +362,23 @@ describe("Project 100 Insights Server", () => {
 
     // Highlights
     expect(result.highlights.length).toBeGreaterThanOrEqual(3);
+
+    // Schema integrity: verify valid Postgres schema tables and joins are used
+    const setQueries = database.calls.filter((c) =>
+      c.text.includes("from project100_training_session_sets"),
+    );
+    expect(setQueries.length).toBeGreaterThanOrEqual(2); // cur and prev periods
+    for (const q of setQueries) {
+      expect(q.text).toContain("join project100_training_session_exercises");
+      expect(q.text).toContain("join project100_training_sessions");
+      expect(q.text).toContain("join project100_exercises");
+    }
+
+    const invalidTableCalls = database.calls.filter(
+      (c) =>
+        c.text.includes("project100_training_sets") ||
+        c.text.includes("project100_training_exercises"),
+    );
+    expect(invalidTableCalls).toHaveLength(0);
   });
 });

@@ -151,24 +151,41 @@ export async function loadProject100Insights(
     sql<SetRow[]>`
       select s.id as session_id, to_char(s.session_date, 'YYYY-MM-DD') as session_date,
              e.id as exercise_id, e.name as exercise_name, e.muscle_groups,
-             ts.actual_reps, ts.actual_weight_kg, ts.actual_duration_seconds
-      from project100_training_sets ts
-      join project100_training_exercises e on e.id = ts.exercise_id and e.user_id = ${actor.userId}
-      join project100_training_sessions s on s.id = ts.session_id and s.user_id = ${actor.userId}
-      where ts.user_id = ${actor.userId} and s.status = 'completed'
+             ss.actual_reps, ss.actual_weight_kg, ss.actual_duration_seconds
+      from project100_training_session_sets ss
+      join project100_training_session_exercises se
+        on se.id = ss.session_exercise_id and se.user_id = ss.user_id
+      join project100_training_sessions s
+        on s.id = se.session_id and s.user_id = se.user_id
+      join project100_exercises e
+        on e.id = se.exercise_id and e.user_id = se.user_id
+      where ss.user_id = ${actor.userId}
+        and se.user_id = ${actor.userId}
+        and s.user_id = ${actor.userId}
+        and e.user_id = ${actor.userId}
+        and s.status = 'completed'
         and s.session_date >= ${from} and s.session_date <= ${to}
-      order by s.session_date asc, ts.position asc
+      order by s.session_date asc, se.position asc, ss.position asc
     `,
     // Completed sets (previous)
     sql<SetRow[]>`
       select s.id as session_id, to_char(s.session_date, 'YYYY-MM-DD') as session_date,
              e.id as exercise_id, e.name as exercise_name, e.muscle_groups,
-             ts.actual_reps, ts.actual_weight_kg, ts.actual_duration_seconds
-      from project100_training_sets ts
-      join project100_training_exercises e on e.id = ts.exercise_id and e.user_id = ${actor.userId}
-      join project100_training_sessions s on s.id = ts.session_id and s.user_id = ${actor.userId}
-      where ts.user_id = ${actor.userId} and s.status = 'completed'
+             ss.actual_reps, ss.actual_weight_kg, ss.actual_duration_seconds
+      from project100_training_session_sets ss
+      join project100_training_session_exercises se
+        on se.id = ss.session_exercise_id and se.user_id = ss.user_id
+      join project100_training_sessions s
+        on s.id = se.session_id and s.user_id = se.user_id
+      join project100_exercises e
+        on e.id = se.exercise_id and e.user_id = se.user_id
+      where ss.user_id = ${actor.userId}
+        and se.user_id = ${actor.userId}
+        and s.user_id = ${actor.userId}
+        and e.user_id = ${actor.userId}
+        and s.status = 'completed'
         and s.session_date >= ${compareFrom} and s.session_date <= ${compareTo}
+      order by s.session_date asc, se.position asc, ss.position asc
     `,
     // Meals (current)
     sql<MealRow[]>`
