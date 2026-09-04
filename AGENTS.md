@@ -21,3 +21,9 @@ Jarvis fångar automatiskt upp ohanterade frågor i Telegram och webben som capa
 Vid start av sessioner och vidareutveckling av Jarvis ska `JARVIS_WISHES.md` konsulteras
 för att se vilka funktioner användaren efterfrågat i vardagen.
 
+## Motion Engine & Vision RPG
+
+Allt arbete som rör rörelsespårning med webbkamera/iPhone, MediaPipe/Apple Vision,
+tränings-gamification, squat-intelligens och RPG Arena ska utgå från den styrande
+planen i `PLAN_MOTION_ENGINE.md`.
+
