@@ -6797,7 +6797,8 @@ button.event-row:hover {
 
 /* Passbyggaren. Modalen är avsiktligt bred: reps, vikt, tid och distans ska
    kunna fyllas i på samma rad utan att man tappar vilket set man är på. */
-.p100-training-modal-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; overflow-y: auto; padding: clamp(12px, 4vh, 44px) 16px; background: rgba(4, 7, 6, .72); backdrop-filter: blur(5px); place-items: start center; }
+.p100-training-modal-backdrop,
+.p100-modal-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; overflow-y: auto; padding: clamp(12px, 4vh, 44px) 16px; background: rgba(4, 7, 6, .72); backdrop-filter: blur(5px); place-items: start center; }
 .p100-training-modal {
   width: min(880px, 100%);
   border: 1px solid var(--p100-line);
@@ -8359,6 +8360,48 @@ button.event-row:hover {
 
 .p100-quick-workout-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
+/* Projekt 100 Modal Input and Field Styling */
+.p100-field { display: flex; flex-direction: column; gap: 5px; width: 100%; }
+.p100-field label { color: #8a968f; font-size: 0.58rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between; }
+.p100-field label .label-hint { font-size: 0.52rem; font-weight: 600; color: #556259; text-transform: none; letter-spacing: normal; }
+.p100-field input,
+.p100-field select,
+.p100-field textarea,
+.p100-quick-workout-modal input,
+.p100-quick-workout-modal select,
+.p100-quick-workout-modal textarea {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--p100-line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 0.74rem;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease;
+}
+.p100-field input:focus,
+.p100-field select:focus,
+.p100-field textarea:focus,
+.p100-quick-workout-modal input:focus,
+.p100-quick-workout-modal select:focus,
+.p100-quick-workout-modal textarea:focus {
+  border-color: rgba(200, 244, 93, 0.5);
+}
+.p100-field input::placeholder,
+.p100-field textarea::placeholder,
+.p100-quick-workout-modal input::placeholder,
+.p100-quick-workout-modal textarea::placeholder {
+  color: #556259;
+}
+.p100-field input[type="date"],
+.p100-quick-workout-modal input[type="date"] {
+  color-scheme: dark;
+}
+
 /* Jarvis Voice Message Audio Player */
 .p100-chat-bubble header { display: flex; justify-content: space-between; align-items: center; }
 .p100-bubble-author { display: flex; align-items: center; gap: 6px; }
@@ -9319,6 +9362,57 @@ button.event-row:hover {
   border-color: var(--p100-accent);
   color: var(--p100-accent);
   font-weight: 700;
+}
+
+/* Fallback compatibility classes for modals, inputs, and RPE */
+.modal-card.quick-workout-card,
+.quick-workout-card {
+  max-width: 540px;
+  width: 92%;
+  background: #121814;
+  border: 1px solid var(--p100-line);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+}
+
+.rpe-selector {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.rpe-button {
+  flex: 1 1 28px;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  border: 1px solid var(--p100-line);
+  background: rgba(0, 0, 0, 0.3);
+  color: #77837b;
+  font-weight: 700;
+  font-size: 0.62rem;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.15s ease;
+}
+.rpe-button:hover {
+  border-color: rgba(200, 244, 93, 0.4);
+  color: #cbd3cd;
+}
+.rpe-button.selected,
+.rpe-button.active {
+  background: var(--p100-accent);
+  color: #121814;
+  font-weight: 800;
+  border-color: var(--p100-accent);
+}
+.rpe-val-badge {
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: var(--p100-accent);
 }
 
 

@@ -236,7 +236,7 @@ export function WorkoutQuickModal({
   }
 
   return (
-    <div className="p100-modal-backdrop" onClick={onClose}>
+    <div className="p100-training-modal-backdrop" onClick={onClose}>
       <div
         className="p100-quick-workout-modal"
         onClick={(e) => e.stopPropagation()}

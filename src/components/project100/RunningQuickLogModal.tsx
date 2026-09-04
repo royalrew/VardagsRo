@@ -170,26 +170,42 @@ export function RunningQuickLogModal({
   }
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="quick-run-title">
-      <div className="modal-card quick-workout-card">
-        <header className="modal-header">
-          <div className="quick-workout-header-title">
-            <span className="quick-workout-badge running-badge">
-              <Wind size={16} /> Runkeeper Snabblogg
+    <div
+      className="p100-training-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="quick-run-title"
+      onClick={onClose}
+    >
+      <div
+        className="p100-quick-workout-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="p100-quick-workout-header">
+          <div className="p100-quick-workout-title">
+            <span className="p100-quick-badge running-badge">
+              <Wind size={12} /> Runkeeper Snabblogg
             </span>
             <h2 id="quick-run-title">Logga löppass</h2>
           </div>
-          <button className="button-icon" onClick={onClose} aria-label="Stäng">
-            <X size={20} />
+          <button
+            type="button"
+            className="p100-quick-close"
+            onClick={onClose}
+            aria-label="Stäng"
+          >
+            <X size={18} />
           </button>
         </header>
 
-        <div className="modal-body quick-workout-body">
-          {error ? <div className="callout callout-error">{error}</div> : null}
+        <div className="p100-quick-workout-form">
+          {error ? <div className="p100-alert danger">{error}</div> : null}
 
           {/* Quick preset titles */}
-          <div className="form-group">
-            <label className="form-label">Titel på passet</label>
+          <section className="p100-quick-section">
+            <label className="p100-quick-section-title">
+              <Wind /> 1. Titel på passet
+            </label>
             <div className="quick-title-chips">
               {["Lugn löpning", "Löppass", "5 km tempo", "Intervaller", "Långpass"].map((preset) => (
                 <button
@@ -202,139 +218,164 @@ export function RunningQuickLogModal({
                 </button>
               ))}
             </div>
-            <input
-              type="text"
-              className="form-input"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="T.ex. Lugn morgonjogg i solen"
-            />
-          </div>
+            <div className="p100-field">
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="T.ex. Lugn morgonjogg i solen"
+              />
+            </div>
+          </section>
 
           {/* Distance & Time Inputs with Live Pace Display */}
-          <div className="run-inputs-grid">
-            <div className="form-group">
-              <label className="form-label">
-                Distans (km) <span className="label-hint">Från Runkeeper</span>
-              </label>
-              <div className="input-with-unit">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  className="form-input"
-                  value={distanceKmStr}
-                  onChange={(e) => setDistanceKmStr(e.target.value)}
-                  placeholder="5.02"
-                />
-                <span className="input-unit">km</span>
+          <section className="p100-quick-section">
+            <label className="p100-quick-section-title">
+              <Timer /> 2. Distans & Tid
+            </label>
+            <div className="run-inputs-grid">
+              <div className="p100-field">
+                <label>
+                  Distans (km) <span className="label-hint">Runkeeper</span>
+                </label>
+                <div className="input-with-unit">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={distanceKmStr}
+                    onChange={(e) => setDistanceKmStr(e.target.value)}
+                    placeholder="5.02"
+                  />
+                  <span className="input-unit">km</span>
+                </div>
+              </div>
+
+              <div className="p100-field">
+                <label>
+                  Total tid <span className="label-hint">mm:ss / min</span>
+                </label>
+                <div className="input-with-unit">
+                  <input
+                    type="text"
+                    value={timeStr}
+                    onChange={(e) => setTimeStr(e.target.value)}
+                    placeholder="29:42"
+                  />
+                  <span className="input-unit"><Timer size={14} /></span>
+                </div>
               </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">
-                Total tid <span className="label-hint">mm:ss eller minuter</span>
-              </label>
-              <div className="input-with-unit">
-                <input
-                  type="text"
-                  className="form-input"
-                  value={timeStr}
-                  onChange={(e) => setTimeStr(e.target.value)}
-                  placeholder="29:42"
-                />
-                <span className="input-unit"><Timer size={14} /></span>
+            {/* Live Pace Result Card */}
+            <div className="run-pace-card">
+              <div className="pace-icon-wrap">
+                <Gauge size={22} />
+              </div>
+              <div className="pace-copy">
+                <span className="pace-label">Beräknat tempo (Pace)</span>
+                <span className="pace-value">{formattedPace}</span>
               </div>
             </div>
-          </div>
-
-          {/* Live Pace Result Card */}
-          <div className="run-pace-card">
-            <div className="pace-icon-wrap">
-              <Gauge size={22} />
-            </div>
-            <div className="pace-copy">
-              <span className="pace-label">Beräknat tempo (Pace)</span>
-              <span className="pace-value">{formattedPace}</span>
-            </div>
-          </div>
+          </section>
 
           {/* Effort / RPE */}
-          <div className="form-group">
-            <div className="label-with-val">
-              <label className="form-label">
-                <Flame size={15} /> Upplevd ansträngning (RPE 1–10)
-              </label>
-              {effort ? (
-                <span className="rpe-val-badge">
-                  RPE {effort}: {RPE_DESCRIPTIONS[effort] || ""}
-                </span>
-              ) : null}
-            </div>
-            <div className="rpe-selector">
+          <section className="p100-quick-section">
+            <label className="p100-quick-section-title">
+              <Flame /> 3. Upplevd ansträngning (RPE 1–10)
+            </label>
+            <div className="p100-quick-rpe-row">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
                 <button
                   key={num}
                   type="button"
-                  className={`rpe-button rpe-${num} ${effort === num ? "selected" : ""}`}
-                  onClick={() => setEffort(num)}
+                  className={`p100-rpe-btn ${effort === num ? "active" : ""}`}
+                  onClick={() => setEffort(effort === num ? null : num)}
                 >
                   {num}
                 </button>
               ))}
             </div>
-          </div>
+            <small className="p100-quick-hint">
+              {effort === null
+                ? "Valfritt · klicka för att sätta passets upplevda ansträngning"
+                : `RPE ${effort}: ${RPE_DESCRIPTIONS[effort] || ""}`}
+            </small>
+          </section>
 
           {/* Date & Notes */}
-          <div className="form-group">
-            <label className="form-label">Datum</label>
-            <input
-              type="date"
-              className="form-input"
-              value={sessionDate}
-              onChange={(e) => setSessionDate(e.target.value)}
-            />
-          </div>
+          <section className="p100-quick-section">
+            <label className="p100-quick-section-title">
+              <CalendarClock /> 4. Datum & Notering
+            </label>
+            <div className="p100-field">
+              <label>Datum</label>
+              <input
+                type="date"
+                value={sessionDate}
+                onChange={(e) => setSessionDate(e.target.value)}
+              />
+            </div>
 
-          <div className="form-group">
-            <label className="form-label">Anteckningar / Känsla (valfritt)</label>
-            <input
-              type="text"
-              className="form-input"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="T.ex. Lätta ben, skön runda i skogen"
-            />
-          </div>
+            <div className="p100-field">
+              <label>Anteckningar / Känsla (valfritt)</label>
+              <input
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="T.ex. Lätta ben, skön runda i skogen"
+              />
+            </div>
+          </section>
 
           {/* Post-Workout Protein */}
-          <div className="form-group post-workout-protein">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={includeProteinShake}
-                onChange={(e) => setIncludeProteinShake(e.target.checked)}
-              />
-              <span className="checkbox-custom" />
-              <span className="checkbox-text">
-                <Utensils size={15} /> Logga proteinshake direkt efter passet (+{proteinGrams}g protein)
-              </span>
+          <section className="p100-quick-section">
+            <label className="p100-quick-section-title">
+              <Utensils /> 5. Post-Workout Protein
             </label>
-          </div>
-        </div>
+            <div className="p100-quick-protein-toggle">
+              <label className="p100-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={includeProteinShake}
+                  onChange={(e) => setIncludeProteinShake(e.target.checked)}
+                />
+                <span>Logga proteinshake direkt efter passet (+{proteinGrams}g protein)</span>
+              </label>
 
-        <footer className="modal-footer">
-          <button type="button" className="button button-ghost" onClick={onClose} disabled={isSaving}>
-            Avbryt
-          </button>
-          <button
-            type="button"
-            className="button button-primary"
-            onClick={handleSave}
-            disabled={isSaving || !distanceMeters || !durationSeconds}
-          >
-            {isSaving ? "Sparar..." : "Spara löppass"}
-          </button>
-        </footer>
+              {includeProteinShake ? (
+                <div className="p100-protein-input-wrap">
+                  <input
+                    type="number"
+                    min="10"
+                    max="150"
+                    value={proteinGrams}
+                    onChange={(e) => setProteinGrams(Number(e.target.value))}
+                  />
+                  <span>g protein (~{Math.round(proteinGrams * 4.5)} kcal)</span>
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <footer className="p100-quick-workout-footer">
+            <button
+              type="button"
+              className="p100-btn"
+              onClick={onClose}
+              disabled={isSaving}
+            >
+              Avbryt
+            </button>
+            <button
+              type="button"
+              className="p100-btn p100-btn-primary p100-btn-lg"
+              onClick={handleSave}
+              disabled={isSaving || !distanceMeters || !durationSeconds}
+            >
+              {isSaving ? "Sparar..." : "Spara löppass"}
+            </button>
+          </footer>
+        </div>
       </div>
     </div>
   );
