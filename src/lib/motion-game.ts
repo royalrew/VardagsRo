@@ -16,6 +16,7 @@ export interface MotionGameTarget extends MotionGamePoint {
   kind: MotionGameTargetKind;
   radius: number;
   spawnedAt: number;
+  activeAt?: number;
   expiresAt: number;
   pairedWithId?: number;
   requiredLimb?: "leftHand" | "rightHand" | "lowerBody";
@@ -324,25 +325,49 @@ function spawnNext(state: MotionGameState, snapshot: MotionPoseSnapshot, nowMs: 
 
   if (shouldSpawnDual) {
     const wideDistance = clamp(state.body.reachX * 1.35, 0.3, 0.44);
+    const targetAX = clamp(state.body.centerX - wideDistance, 0.08, 0.92);
+    const targetBX = clamp(state.body.centerX + wideDistance, 0.08, 0.92);
     const y = state.body.shoulderY + 0.04;
+
+    const hands = [landmarkPoint(snapshot.landmarks, 15), landmarkPoint(snapshot.landmarks, 16)].filter(
+      (point): point is MotionGamePoint => point !== null,
+    );
+    const handNearSpawn = hands.some(
+      (hand) =>
+        pointToSegmentDistance({ x: targetAX, y }, hand, hand, state.aspectRatio) < 0.13 ||
+        pointToSegmentDistance({ x: targetBX, y }, hand, hand, state.aspectRatio) < 0.13,
+    );
+
+    // Om en hand fortfarande är utsträckt på målplatsen efter ett tidigare slag,
+    // skjut upp spawn kort så spelaren hinner dra tillbaka handen till gard.
+    if (handNearSpawn) {
+      return {
+        ...state,
+        nextSpawnAt: nowMs + 150,
+      };
+    }
+
+    const armingMs = 300;
     const lifetimeMs = config.targetLifetimeMs.dual;
     const targetA: MotionGameTarget = {
       id: state.spawnIndex + 1,
       kind: "dual",
-      x: clamp(state.body.centerX - wideDistance, 0.08, 0.92),
+      x: targetAX,
       y,
       radius: config.targetRadius,
       spawnedAt: nowMs,
+      activeAt: nowMs + armingMs,
       expiresAt: nowMs + lifetimeMs,
       pairedWithId: state.spawnIndex + 2,
     };
     const targetB: MotionGameTarget = {
       id: state.spawnIndex + 2,
       kind: "dual",
-      x: clamp(state.body.centerX + wideDistance, 0.08, 0.92),
+      x: targetBX,
       y,
       radius: config.targetRadius,
       spawnedAt: nowMs,
+      activeAt: nowMs + armingMs,
       expiresAt: nowMs + lifetimeMs,
       pairedWithId: state.spawnIndex + 1,
     };
@@ -550,6 +575,7 @@ export function advanceMotionGame(
   };
 
   const checkKickHit = (target: MotionGameTarget): boolean => {
+    if (target.activeAt && nowMs < target.activeAt) return false;
     const pad = 0.08;
     const leftFootHit = checkLimbHit(target, leftFoot, state.previousLeftFoot, pad);
     const rightFootHit = checkLimbHit(target, rightFoot, state.previousRightFoot, pad);
@@ -559,6 +585,7 @@ export function advanceMotionGame(
   };
 
   const checkHandHit = (target: MotionGameTarget, hand: "left" | "right"): boolean => {
+    if (target.activeAt && nowMs < target.activeAt) return false;
     const pad = 0.045;
     if (hand === "left") {
       return checkLimbHit(target, leftHand, state.previousLeftHand, pad);
@@ -614,7 +641,7 @@ export function advanceMotionGame(
 
       if (hitA && !hitB) {
         // Första noden träffades! Den andra noden MÅSTE träffas med den ANDRA handen
-        // inom ett strikt simultanitetsfönster (280 ms), annars bryts combon med miss!
+        // inom ett simultanitetsfönster (550 ms), annars bryts combon med miss!
         const requiredOtherLimb = hitAWithLeft ? "rightHand" : "leftHand";
         state = {
           ...state,
@@ -624,7 +651,7 @@ export function advanceMotionGame(
           secondaryTarget: {
             ...targetB,
             requiredLimb: requiredOtherLimb,
-            expiresAt: Math.min(targetB.expiresAt, nowMs + 280),
+            expiresAt: Math.min(targetB.expiresAt, nowMs + 550),
           },
           effect: {
             id: state.spawnIndex + 30_000,
@@ -644,7 +671,7 @@ export function advanceMotionGame(
           target: {
             ...targetA,
             requiredLimb: requiredOtherLimb,
-            expiresAt: Math.min(targetA.expiresAt, nowMs + 280),
+            expiresAt: Math.min(targetA.expiresAt, nowMs + 550),
           },
           secondaryTarget: null,
           effect: {

@@ -292,12 +292,13 @@ function drawMotionGame(
     const ay = game.target.y * canvas.height;
     const bx = game.secondaryTarget.x * canvas.width;
     const by = game.secondaryTarget.y * canvas.height;
+    const isArming = Boolean(game.target.activeAt && nowMs < game.target.activeAt);
     context.save();
-    context.strokeStyle = "rgba(255, 120, 240, 0.75)";
-    context.shadowBlur = 18;
-    context.shadowColor = "rgba(255, 100, 230, 0.85)";
+    context.strokeStyle = isArming ? "rgba(255, 210, 80, 0.85)" : "rgba(255, 120, 240, 0.75)";
+    context.shadowBlur = isArming ? 24 : 18;
+    context.shadowColor = isArming ? "rgba(255, 190, 50, 0.95)" : "rgba(255, 100, 230, 0.85)";
     context.lineWidth = Math.max(3, canvas.height / 200);
-    context.setLineDash([8, 8]);
+    context.setLineDash(isArming ? [4, 4] : [8, 8]);
     context.beginPath();
     context.moveTo(ax, ay);
     context.lineTo(bx, by);
@@ -314,6 +315,7 @@ function drawMotionGame(
 
     const isKick = tgt.kind === "kick";
     const isDual = tgt.kind === "dual";
+    const isArming = Boolean(tgt.activeAt && nowMs < tgt.activeAt);
 
     context.save();
     if (isKick) {
@@ -323,9 +325,17 @@ function drawMotionGame(
       context.strokeStyle = "#ffd040";
     } else if (isDual) {
       context.shadowBlur = 32;
-      context.shadowColor = isSecondary ? "rgba(255, 100, 230, 0.9)" : "rgba(100, 210, 255, 0.9)";
-      context.fillStyle = isSecondary ? "rgba(110, 20, 95, 0.78)" : "rgba(19, 84, 105, 0.78)";
-      context.strokeStyle = isSecondary ? "#ff88ec" : "#7de8ff";
+      context.shadowColor = isArming
+        ? "rgba(255, 200, 80, 0.9)"
+        : isSecondary
+          ? "rgba(255, 100, 230, 0.9)"
+          : "rgba(100, 210, 255, 0.9)";
+      context.fillStyle = isArming
+        ? "rgba(70, 50, 10, 0.78)"
+        : isSecondary
+          ? "rgba(110, 20, 95, 0.78)"
+          : "rgba(19, 84, 105, 0.78)";
+      context.strokeStyle = isArming ? "#ffd040" : isSecondary ? "#ff88ec" : "#7de8ff";
     } else {
       context.shadowBlur = 30;
       context.shadowColor = "rgba(82, 224, 255, .8)";
@@ -365,7 +375,15 @@ function drawMotionGame(
     if (isKick) {
       movementLabel = arenaLang === "sv" ? "SPARKA" : "KICK";
     } else if (isDual) {
-      movementLabel = arenaLang === "sv" ? "BÅDA" : "DUAL";
+      if (isArming) {
+        movementLabel = arenaLang === "sv" ? "REDO!" : "READY!";
+      } else if (tgt.requiredLimb === "leftHand") {
+        movementLabel = arenaLang === "sv" ? "VÄNSTER!" : "LEFT!";
+      } else if (tgt.requiredLimb === "rightHand") {
+        movementLabel = arenaLang === "sv" ? "HÖGER!" : "RIGHT!";
+      } else {
+        movementLabel = arenaLang === "sv" ? "BÅDA" : "DUAL";
+      }
     } else {
       movementLabel =
         arenaLang === "sv"

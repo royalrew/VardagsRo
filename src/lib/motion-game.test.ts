@@ -494,14 +494,14 @@ describe("motion-game", () => {
       15: { x: 0.25, y: 0.4, visibility: 0.95 },
     });
     const afterHitA = advanceMotionGame(dualState, hitTargetAPose, 1_040);
-    expect(afterHitA.secondaryTarget?.expiresAt).toBe(1_040 + 280); // 1_320ms
+    expect(afterHitA.secondaryTarget?.expiresAt).toBe(1_040 + 550); // 1_590ms
 
-    // Step 2: 300ms pass without hitting second target (current time: 1_340ms)
+    // Step 2: 600ms pass without hitting second target (current time: 1_640ms)
     const idlePose = pose(4, {
       15: { x: 0.2, y: 0.8, visibility: 0.9 },
       16: { x: 0.8, y: 0.8, visibility: 0.9 },
     });
-    const afterTimeout = advanceMotionGame(afterHitA, idlePose, 1_340);
+    const afterTimeout = advanceMotionGame(afterHitA, idlePose, 1_640);
 
     // Target has expired as a miss!
     expect(afterTimeout.target).toBeNull();
@@ -509,6 +509,49 @@ describe("motion-game", () => {
     expect(afterTimeout.combo).toBe(0); // Combo broken!
     expect(afterTimeout.misses).toBe(1);
     expect(afterTimeout.effect?.type).toBe("miss");
+  });
+
+  it("does not trigger hits on dual targets during the 300ms arming window", () => {
+    const initial = startMotionGame(pose(1), 0, 16 / 9, { difficulty: "medium" })!;
+    const running = advanceMotionGame(initial, pose(2), MOTION_GAME_COUNTDOWN_MS);
+
+    // Dual targets spawned at 1_000ms with activeAt at 1_300ms
+    const armingDualState = {
+      ...running,
+      target: {
+        id: 101,
+        x: 0.25,
+        y: 0.4,
+        radius: 0.08,
+        spawnedAt: 1_000,
+        activeAt: 1_300,
+        expiresAt: 4_000,
+        kind: "dual" as const,
+      },
+      secondaryTarget: {
+        id: 102,
+        x: 0.75,
+        y: 0.4,
+        radius: 0.08,
+        spawnedAt: 1_000,
+        activeAt: 1_300,
+        expiresAt: 4_000,
+        kind: "dual" as const,
+      },
+      previousLeftHand: { x: 0.25, y: 0.4 }, // hand was already sitting there at spawn!
+      previousRightHand: { x: 0.9, y: 0.8 },
+    };
+
+    // Frame at 1_100ms (during arming window) where hand is at target position
+    const handAtTargetPose = pose(3, {
+      15: { x: 0.25, y: 0.4, visibility: 0.95 },
+    });
+
+    const result = advanceMotionGame(armingDualState, handAtTargetPose, 1_100);
+    // Neither target should be hit because it's still arming!
+    expect(result.target).not.toBeNull();
+    expect(result.secondaryTarget).not.toBeNull();
+    expect(result.hits).toBe(0);
   });
 });
 
