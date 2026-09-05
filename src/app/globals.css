@@ -9499,15 +9499,17 @@ button.event-row:hover {
 .p100-motion-stage-empty button { display: inline-flex; min-height: 39px; padding: 0 16px; border-radius: 9px; background: var(--p100-accent); color: #10150f; align-items: center; gap: 7px; font-size: .71rem; font-weight: 850; }
 .p100-motion-stage-empty button svg { width: 15px; fill: currentColor; }
 
-.p100-motion-game-hud { position: absolute; inset: 59px 14px auto; z-index: 4; display: grid; min-height: 52px; padding: 7px 11px; border: 1px solid rgba(125,232,255,.17); border-radius: 11px; background: linear-gradient(90deg, rgba(5,16,20,.82), rgba(7,12,10,.66)); box-shadow: 0 10px 28px rgba(0,0,0,.22); backdrop-filter: blur(12px); grid-template-columns: auto auto 1fr auto; align-items: center; gap: clamp(13px, 3vw, 30px); pointer-events: none; }
-.p100-motion-game-hud > div { display: flex; flex-direction: column; }
-.p100-motion-game-hud small { color: #6c848b; font-size: .48rem; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
-.p100-motion-game-hud strong { margin-top: 1px; color: #e7fcff; font-size: clamp(.88rem, 2vw, 1.12rem); letter-spacing: -.03em; }
-.p100-motion-game-hud > div:nth-child(2) strong { color: var(--p100-accent); }
-.p100-motion-game-hud .hearts { display: flex; align-items: center; justify-content: center; flex-direction: row; gap: 5px; }
-.p100-motion-game-hud .hearts svg { width: clamp(16px, 2.5vw, 21px); color: #3f4a44; fill: rgba(255,255,255,.025); }
-.p100-motion-game-hud .hearts svg.alive { color: #ff6f68; fill: #ff6f68; filter: drop-shadow(0 0 7px rgba(255,94,87,.55)); }
-.p100-motion-game-hud .time { align-items: flex-end; }
+.p100-motion-game-hud { position: absolute; inset: 54px 14px auto; z-index: 4; display: flex; justify-content: space-between; align-items: center; background: transparent; border: none; box-shadow: none; backdrop-filter: none; pointer-events: none; }
+.p100-motion-game-health { display: inline-flex; align-items: center; padding: 6px 12px; border: 1px solid rgba(255,255,255,.09); border-radius: 999px; background: rgba(6,10,8,.52); backdrop-filter: blur(10px); box-shadow: 0 4px 16px rgba(0,0,0,.22); }
+.p100-motion-game-health .hearts { display: flex; align-items: center; gap: 6px; }
+.p100-motion-game-health .hearts svg { width: clamp(16px, 2.2vw, 20px); height: clamp(16px, 2.2vw, 20px); color: rgba(255,255,255,.16); fill: rgba(255,255,255,.04); transition: all .25s ease; }
+.p100-motion-game-health .hearts svg.alive { color: #ff5e57; fill: #ff5e57; filter: drop-shadow(0 0 7px rgba(255,94,87,.65)); }
+.p100-motion-game-stats { display: inline-flex; align-items: center; gap: clamp(10px, 2.5vw, 20px); padding: 5px 14px; border: 1px solid rgba(125,232,255,.15); border-radius: 999px; background: rgba(6,12,14,.52); backdrop-filter: blur(10px); box-shadow: 0 4px 16px rgba(0,0,0,.22); }
+.p100-motion-game-stats .stat { display: flex; flex-direction: column; align-items: flex-end; }
+.p100-motion-game-stats small { color: #6c848b; font-size: .46rem; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+.p100-motion-game-stats strong { margin-top: 1px; color: #e7fcff; font-size: clamp(.85rem, 1.8vw, 1.05rem); letter-spacing: -.02em; line-height: 1; }
+.p100-motion-game-stats .stat.combo strong { color: var(--p100-accent); }
+.p100-motion-game-stats .stat.time strong { color: #ffd040; }
 
 .p100-motion-countdown { position: absolute; inset: 0; z-index: 6; display: flex; background: radial-gradient(circle, rgba(7,20,23,.28), rgba(3,7,6,.5)); color: white; align-items: center; justify-content: center; flex-direction: column; pointer-events: none; }
 .p100-motion-countdown small { color: #7de8ff; font-size: clamp(.65rem, 1.5vw, .85rem); font-weight: 900; letter-spacing: .18em; text-transform: uppercase; }
@@ -9745,9 +9747,12 @@ button.event-row:hover {
   .p100-motion-guide, .p100-motion-error, .p100-motion-recovery { inset: auto 9px 9px; padding: 11px 12px; }
   .p100-motion-guide strong, .p100-motion-error strong, .p100-motion-recovery strong { font-size: .7rem; }
   .p100-motion-guide span, .p100-motion-error > span, .p100-motion-recovery > span { font-size: .62rem; }
-  .p100-motion-game-hud { inset: 55px 8px auto; min-height: 48px; padding: 6px 8px; gap: 8px; }
-  .p100-motion-game-hud .hearts { gap: 2px; }
-  .p100-motion-game-hud .hearts svg { width: 15px; }
+  .p100-motion-game-hud { inset: 48px 8px auto; }
+  .p100-motion-game-health { padding: 4px 8px; }
+  .p100-motion-game-health .hearts { gap: 3px; }
+  .p100-motion-game-health .hearts svg { width: 14px; height: 14px; }
+  .p100-motion-game-stats { padding: 4px 10px; gap: 8px; }
+  .p100-motion-game-stats strong { font-size: .78rem; }
   .p100-motion-baseline-hud, .p100-motion-profile-hud { inset: 55px auto auto 50%; width: calc(100% - 16px); padding: 10px; }
   .p100-motion-baseline-hud-instruction, .p100-motion-profile-hud-instruction { min-height: 70px; }
   .p100-motion-baseline-done { padding: 20px 14px; }

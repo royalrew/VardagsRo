@@ -2006,12 +2006,27 @@ export function MotionLab() {
           ) : null}
           {gameView && gameActive ? (
             <div className="p100-motion-game-hud">
-              <div><small>Poäng</small><strong>{gameView.score.toLocaleString("sv-SE")}</strong></div>
-              <div><small>Combo</small><strong>×{gameView.combo}</strong></div>
-              <div className="hearts" aria-label={`${gameView.hearts} liv kvar`}>
-                {[0, 1, 2].map((heart) => <Heart key={heart} className={heart < gameView.hearts ? "alive" : ""} />)}
+              <div className="p100-motion-game-health" aria-label={`${gameView.hearts} liv kvar`}>
+                <div className="hearts">
+                  {[0, 1, 2].map((heart) => (
+                    <Heart key={heart} className={heart < gameView.hearts ? "alive" : ""} />
+                  ))}
+                </div>
               </div>
-              <div className="time"><small>Tid</small><strong>{gameSeconds}</strong></div>
+              <div className="p100-motion-game-stats">
+                <div className="stat combo">
+                  <small>Combo</small>
+                  <strong>×{gameView.combo}</strong>
+                </div>
+                <div className="stat score">
+                  <small>{arenaLanguage === "sv" ? "Poäng" : "Score"}</small>
+                  <strong>{gameView.score.toLocaleString(arenaLanguage === "sv" ? "sv-SE" : "en-US")}</strong>
+                </div>
+                <div className="stat time">
+                  <small>{arenaLanguage === "sv" ? "Tid" : "Time"}</small>
+                  <strong>{gameSeconds}</strong>
+                </div>
+              </div>
             </div>
           ) : null}
           {gameView?.status === "countdown" ? (
