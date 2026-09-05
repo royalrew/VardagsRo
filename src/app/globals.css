@@ -9462,7 +9462,7 @@ button.event-row:hover {
 .p100-motion-stage canvas { z-index: 2; pointer-events: none; }
 .p100-motion-stage.replaying video { opacity: .08; filter: grayscale(1) blur(2px); }
 .p100-motion-stage.replaying::after { content: ""; position: absolute; inset: 0; z-index: 1; background: radial-gradient(circle at center, rgba(200,244,93,.035), rgba(3,6,4,.72)); pointer-events: none; }
-.p100-motion-stage-top { position: absolute; inset: 14px 14px auto; z-index: 4; display: flex; align-items: center; gap: 7px; }
+.p100-motion-stage-top { position: absolute; inset: 14px 14px auto; z-index: 7; display: flex; align-items: center; gap: 7px; }
 .p100-motion-stage-top > span { display: inline-flex; min-height: 27px; padding: 0 9px; border: 1px solid rgba(255,255,255,.09); border-radius: 999px; background: rgba(6,9,8,.76); color: #89958d; backdrop-filter: blur(10px); align-items: center; gap: 5px; font-size: .57rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .p100-motion-stage-top svg { width: 12px; }
 .p100-motion-stage-top .p100-motion-live.active { border-color: rgba(200,244,93,.24); color: var(--p100-accent); }
@@ -9526,8 +9526,15 @@ button.event-row:hover {
 .p100-motion-game-result small { color: #7de8ff; font-size: .63rem; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
 .p100-motion-game-result > strong { margin-top: 7px; color: #f0ffff; font-size: clamp(2rem, 7vw, 4rem); letter-spacing: -.055em; text-shadow: 0 0 30px rgba(125,232,255,.24); }
 .p100-motion-game-result p { margin: 7px 0 20px; color: #8fa7aa; font-size: .7rem; }
-.p100-motion-game-result button { display: inline-flex; min-height: 40px; padding: 0 16px; border-radius: 9px; background: var(--p100-accent); color: #10150f; align-items: center; gap: 7px; font-size: .7rem; font-weight: 850; }
-.p100-motion-game-result button svg { width: 15px; }
+.p100-motion-game-result-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 9px; }
+.p100-motion-game-result-actions button { display: inline-flex; min-height: 40px; padding: 0 16px; border-radius: 9px; align-items: center; justify-content: center; gap: 7px; font-size: .7rem; font-weight: 850; transition: all .15s ease; }
+.p100-motion-game-result-actions button svg { width: 15px; }
+.p100-motion-game-result-primary { border: 1px solid var(--p100-accent); background: var(--p100-accent); color: #10150f; box-shadow: 0 0 20px rgba(200,244,93,.2); }
+.p100-motion-game-result-primary:hover { background: #ddff82; color: #0d120c; }
+.p100-motion-game-result-secondary { border: 1px solid rgba(255,255,255,.14); border-radius: 9px; background: rgba(255,255,255,.055); color: #d6e2db; backdrop-filter: blur(8px); }
+.p100-motion-game-result-secondary:hover { border-color: rgba(200,244,93,.35); background: rgba(200,244,93,.1); color: #f0f7f2; }
+.p100-motion-game-result-secondary.fullscreen-exit { border-color: rgba(125,232,255,.32); background: rgba(125,232,255,.09); color: #bff6ff; }
+.p100-motion-game-result-secondary.fullscreen-exit:hover { border-color: rgba(125,232,255,.55); background: rgba(125,232,255,.18); color: #e5fbff; }
 
 .p100-motion-guide { position: absolute; inset: auto 18px 18px; z-index: 4; display: flex; padding: 13px 15px; border: 1px solid rgba(213,180,102,.24); border-radius: 10px; background: rgba(21,18,10,.84); backdrop-filter: blur(10px); flex-direction: column; }
 .p100-motion-guide strong { color: #d9c183; font-size: .7rem; }
@@ -9744,6 +9751,9 @@ button.event-row:hover {
   .p100-motion-baseline-hud, .p100-motion-profile-hud { inset: 55px auto auto 50%; width: calc(100% - 16px); padding: 10px; }
   .p100-motion-baseline-hud-instruction, .p100-motion-profile-hud-instruction { min-height: 70px; }
   .p100-motion-baseline-done { padding: 20px 14px; }
+  .p100-motion-game-result { padding: 20px 14px; }
+  .p100-motion-game-result-actions { width: 100%; max-width: 320px; flex-direction: column; gap: 8px; }
+  .p100-motion-game-result-actions button { width: 100%; min-height: 44px; }
   .p100-motion-sidebar { grid-template-columns: 1fr; }
   .p100-motion-panel, .p100-motion-recording, .p100-motion-baseline { width: 100%; }
   .p100-motion-panel *, .p100-motion-recording *, .p100-motion-baseline * { min-width: 0; }

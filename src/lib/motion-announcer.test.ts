@@ -25,21 +25,31 @@ function game(overrides: Partial<MotionGameState> = {}): MotionGameState {
 }
 
 describe("motion announcer", () => {
-  it("starts with a short, high-priority introduction", () => {
-    expect(motionArenaStartCue()).toMatchObject({ kind: "start", priority: true });
+  it("starts with a short, high-priority introduction in English and Swedish", () => {
+    expect(motionArenaStartCue("en")).toMatchObject({
+      kind: "start",
+      priority: true,
+      text: expect.stringContaining("Neon Guardian approaches"),
+    });
+    expect(motionArenaStartCue("sv")).toMatchObject({
+      kind: "start",
+      priority: true,
+      text: expect.stringContaining("Neonväktaren vaknar"),
+    });
   });
 
-  it("prioritizes go and new duck warnings", () => {
+  it("prioritizes go and new duck warnings in English and Swedish", () => {
     const countdown = game();
     const beforeThree = { ...countdown, nowMs: countdown.startedAt - 3_100 };
     const atThree = { ...countdown, nowMs: countdown.startedAt - 2_900 };
-    expect(motionArenaCue(beforeThree, atThree)).toMatchObject({
+    expect(motionArenaCue(beforeThree, atThree, "en")).toMatchObject({
       kind: "countdown",
       priority: true,
       text: "3",
     });
     const running = { ...countdown, status: "running" as const, nowMs: countdown.startedAt };
-    expect(motionArenaCue(countdown, running)).toMatchObject({ kind: "go", priority: true });
+    expect(motionArenaCue(countdown, running, "en")).toMatchObject({ kind: "go", priority: true, text: "Fight!" });
+    expect(motionArenaCue(countdown, running, "sv")).toMatchObject({ kind: "go", priority: true, text: "Kör!" });
 
     const duck = {
       id: 7,
@@ -50,7 +60,11 @@ describe("motion announcer", () => {
       startingShoulderY: 0.36,
       requiredDropY: 0.06,
     };
-    expect(motionArenaCue(running, { ...running, duck })).toMatchObject({
+    expect(motionArenaCue(running, { ...running, duck }, "en")).toMatchObject({
+      kind: "duck",
+      text: "Duck!",
+    });
+    expect(motionArenaCue(running, { ...running, duck }, "sv")).toMatchObject({
       kind: "duck",
       text: "Ducka!",
     });
@@ -63,8 +77,9 @@ describe("motion announcer", () => {
       combo: 3,
       effect: { id: 4, type: "hit" as const, x: 0.5, y: 0.5, at: 4_000 },
     };
-    expect(motionArenaCue(previous, hit)).toMatchObject({ kind: "praise", priority: false });
-    expect(motionArenaCue(hit, { ...hit, combo: 4 })).toBeNull();
+    expect(motionArenaCue(previous, hit, "en")).toMatchObject({ kind: "praise", priority: false, text: "3 hit combo!" });
+    expect(motionArenaCue(previous, hit, "sv")).toMatchObject({ kind: "praise", priority: false, text: "3 i combo. Snyggt!" });
+    expect(motionArenaCue(hit, { ...hit, combo: 4 }, "en")).toBeNull();
   });
 
   it("announces damage, time milestones and the final result", () => {
@@ -74,14 +89,23 @@ describe("motion announcer", () => {
       hearts: 2,
       effect: { id: 8, type: "damage" as const, x: 0.5, y: 0.5, at: 32_000 },
     };
-    expect(motionArenaCue(running, damage)).toMatchObject({ kind: "damage", priority: true });
+    expect(motionArenaCue(running, damage, "en")).toMatchObject({ kind: "damage", priority: true, text: "2 hearts left! Stay up!" });
 
     const beforeHalf = game({ status: "running", startedAt: 0, endsAt: 60_000, nowMs: 29_500 });
-    expect(motionArenaCue(beforeHalf, { ...beforeHalf, nowMs: 30_100 })).toMatchObject({ kind: "halfway" });
+    expect(motionArenaCue(beforeHalf, { ...beforeHalf, nowMs: 30_100 }, "en")).toMatchObject({ kind: "halfway", text: "Halfway! Keep moving!" });
     const beforeFinal = { ...beforeHalf, nowMs: 49_500 };
-    expect(motionArenaCue(beforeFinal, { ...beforeFinal, nowMs: 50_100 })).toMatchObject({ kind: "final" });
+    expect(motionArenaCue(beforeFinal, { ...beforeFinal, nowMs: 50_100 }, "en")).toMatchObject({ kind: "final", text: "Ten seconds left!" });
 
     const finished = { ...running, status: "finished" as const, score: 900, hits: 7, dodges: 2, finishReason: "time" as const };
-    expect(motionArenaCue(running, finished)).toMatchObject({ kind: "finish", priority: true });
+    expect(motionArenaCue(running, finished, "en")).toMatchObject({
+      kind: "finish",
+      priority: true,
+      text: expect.stringContaining("Time's up! Final score: 900 points"),
+    });
+    expect(motionArenaCue(running, finished, "sv")).toMatchObject({
+      kind: "finish",
+      priority: true,
+      text: expect.stringContaining("Tiden är ute. 900 poäng"),
+    });
   });
 });

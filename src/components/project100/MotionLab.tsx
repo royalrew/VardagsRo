@@ -31,6 +31,7 @@ import {
   motionArenaCue,
   motionArenaStartCue,
   type MotionArenaCue,
+  type MotionArenaLanguage,
 } from "@/lib/motion-announcer";
 import {
   MOTION_BASELINE_PROTOCOL,
@@ -257,7 +258,12 @@ function drawSnapshot(canvas: HTMLCanvasElement, snapshot: MotionPoseSnapshot | 
   context.shadowBlur = 0;
 }
 
-function drawMotionGame(canvas: HTMLCanvasElement, game: MotionGameState | null, nowMs: number) {
+function drawMotionGame(
+  canvas: HTMLCanvasElement,
+  game: MotionGameState | null,
+  nowMs: number,
+  arenaLang: MotionArenaLanguage = "en",
+) {
   if (!game || game.status === "finished") return;
   const context = canvas.getContext("2d");
   if (!context) return;
@@ -308,7 +314,10 @@ function drawMotionGame(canvas: HTMLCanvasElement, game: MotionGameState | null,
     context.font = `800 ${Math.max(11, canvas.height / 42)}px system-ui`;
     context.textAlign = "center";
     context.textBaseline = "middle";
-    const movementLabel = game.target.kind === "low" ? "NER" : game.target.kind === "high" ? "UPP" : "SIDAN";
+    const movementLabel =
+      arenaLang === "sv"
+        ? (game.target.kind === "low" ? "NER" : game.target.kind === "high" ? "UPP" : "SIDAN")
+        : (game.target.kind === "low" ? "DOWN" : game.target.kind === "high" ? "UP" : "SIDE");
     // Canvasen spegelvänds tillsammans med kameran. Spegelvänd texten en gång här
     // så att den blir rättvänd efter canvasens CSS-transform.
     context.save();
@@ -465,6 +474,8 @@ export function MotionLab() {
   const [baselineNotice, setBaselineNotice] = useState<{ complete: boolean; durationMs: number } | null>(null);
   const [reportCopied, setReportCopied] = useState(false);
   const [voiceGuidance, setVoiceGuidance] = useState(true);
+  const [arenaLanguage, setArenaLanguage] = useState<MotionArenaLanguage>("en");
+  const arenaLanguageRef = useRef<MotionArenaLanguage>("en");
   const [workerRecoveryAttempt, setWorkerRecoveryAttempt] = useState<number | null>(null);
   const [performanceProfileRunning, setPerformanceProfileRunning] = useState(false);
   const [performanceProfileMode, setPerformanceProfileMode] = useState<PerformanceProfileMode>("quick");
@@ -567,6 +578,15 @@ export function MotionLab() {
       const stored = parseStoredColdStarts();
       coldStartRef.current = stored;
       setColdStarts(stored);
+      try {
+        const storedLang = localStorage.getItem("motion-arena-lang-v1");
+        if (storedLang === "sv" || storedLang === "en") {
+          arenaLanguageRef.current = storedLang;
+          setArenaLanguage(storedLang);
+        }
+      } catch {
+        // Ignorera storage-fel i privat surfning
+      }
     });
     return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
@@ -612,11 +632,34 @@ export function MotionLab() {
     oscillator.stop(now + (finished ? 0.3 : 0.14));
   }
 
+  function getBestVoice(lang: MotionArenaLanguage): SpeechSynthesisVoice | null {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || voices.length === 0) return null;
+    if (lang === "en") {
+      const englishVoices = voices.filter((v) => v.lang.startsWith("en"));
+      if (englishVoices.length === 0) return null;
+      return (
+        englishVoices.find((v) => /natural|neural|online|google|siri/i.test(v.name))
+        ?? englishVoices.find((v) => v.lang === "en-US" || v.lang === "en_US")
+        ?? englishVoices[0]
+      );
+    }
+    const swedishVoices = voices.filter((v) => v.lang.startsWith("sv"));
+    if (swedishVoices.length === 0) return null;
+    return (
+      swedishVoices.find((v) => /natural|neural|online|google|siri/i.test(v.name))
+      ?? swedishVoices[0]
+    );
+  }
+
   function speakBaselineInstruction(text: string) {
     if (!voiceGuidanceRef.current || !("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "sv-SE";
+    const voice = getBestVoice("sv");
+    if (voice) utterance.voice = voice;
     utterance.rate = 0.92;
     utterance.pitch = 1;
     utterance.volume = 1;
@@ -630,13 +673,26 @@ export function MotionLab() {
       return;
     }
     if (cue.priority) window.speechSynthesis.cancel();
+    const lang = arenaLanguageRef.current;
     const utterance = new SpeechSynthesisUtterance(cue.text);
-    utterance.lang = "sv-SE";
-    utterance.rate = cue.kind === "duck" || cue.kind === "go" || cue.kind === "countdown" ? 1.08 : 0.96;
-    utterance.pitch = cue.kind === "duck" ? 1.1 : 1;
+    utterance.lang = lang === "sv" ? "sv-SE" : "en-US";
+    const voice = getBestVoice(lang);
+    if (voice) utterance.voice = voice;
+    utterance.rate = cue.kind === "duck" || cue.kind === "go" || cue.kind === "countdown" ? 1.08 : 0.98;
+    utterance.pitch = cue.kind === "duck" ? 1.05 : 1;
     utterance.volume = 1;
     lastArenaSpeechAtRef.current = now;
     window.speechSynthesis.speak(utterance);
+  }
+
+  function changeArenaLanguage(next: MotionArenaLanguage) {
+    arenaLanguageRef.current = next;
+    setArenaLanguage(next);
+    try {
+      localStorage.setItem("motion-arena-lang-v1", next);
+    } catch {
+      // Ignorera storage-fel
+    }
   }
 
   function toggleVoiceGuidance() {
@@ -925,7 +981,7 @@ export function MotionLab() {
         const previousStatus = game.status;
         game = advanceMotionGame(game, snapshot, now);
         gameRef.current = game;
-        const arenaCue = motionArenaCue(previousGame, game);
+        const arenaCue = motionArenaCue(previousGame, game, arenaLanguageRef.current);
         if (arenaCue) speakArenaInstruction(arenaCue);
         if (game.effect && game.effect.id !== lastGameEffectIdRef.current) {
           lastGameEffectIdRef.current = game.effect.id;
@@ -939,7 +995,7 @@ export function MotionLab() {
       }
       if (canvas) {
         drawSnapshot(canvas, snapshot);
-        drawMotionGame(canvas, game, now);
+        drawMotionGame(canvas, game, now, arenaLanguageRef.current);
       }
 
       const video = videoRef.current;
@@ -1608,7 +1664,7 @@ export function MotionLab() {
     lastGameUiAtRef.current = performance.now();
     lastArenaSpeechAtRef.current = -Infinity;
     setGameView(game);
-    speakArenaInstruction(motionArenaStartCue());
+    speakArenaInstruction(motionArenaStartCue(arenaLanguageRef.current));
   }
 
   function stopGame() {
@@ -1865,22 +1921,50 @@ export function MotionLab() {
             </div>
           ) : null}
           {gameView?.status === "countdown" ? (
-            <div className="p100-motion-countdown"><small>Gå till din plats · kalibrerar live</small><strong>{motionGameCountdown(gameView)}</strong><span>Slå målen. Ducka under den röda vågen.</span></div>
+            <div className="p100-motion-countdown">
+              <small>{arenaLanguage === "sv" ? "Gå till din plats · kalibrerar live" : "Take your position · live calibration"}</small>
+              <strong>{motionGameCountdown(gameView)}</strong>
+              <span>{arenaLanguage === "sv" ? "Slå målen. Ducka under den röda vågen." : "Strike targets. Duck under the red wave."}</span>
+            </div>
           ) : null}
           {gameView?.duck ? (
             <div className={`p100-motion-duck-callout ${gameView.nowMs >= gameView.duck.activeAt ? "active" : ""}`}>
-              <strong>{gameView.nowMs >= gameView.duck.activeAt ? "DUCKA!" : "GÖR DIG REDO"}</strong>
+              <strong>{gameView.nowMs >= gameView.duck.activeAt ? (arenaLanguage === "sv" ? "DUCKA!" : "DUCK!") : (arenaLanguage === "sv" ? "GÖR DIG REDO" : "GET READY")}</strong>
             </div>
           ) : null}
           {isLive && !isRecovering && poseVisible && !replaying && !gameView && !baselineRunning && !performanceProfileRunning ? (
-            <button type="button" className="p100-motion-game-launch" onClick={startGame}><Swords /> Starta 60 s bossfight</button>
+            <button type="button" className="p100-motion-game-launch" onClick={startGame}><Swords /> {arenaLanguage === "sv" ? "Starta 60 s bossfight" : "Start 60s Boss Fight"}</button>
           ) : null}
           {gameView?.status === "finished" ? (
-            <div className="p100-motion-game-result">
-              <small>{gameView.finishReason === "hearts" ? "Neonväktaren vann den här gången" : "Rundan klar"}</small>
-              <strong>{gameView.score.toLocaleString("sv-SE")} poäng</strong>
-              <p>{gameView.hits} träffar · {gameView.dodges} duckningar · bästa combo ×{gameView.bestCombo}</p>
-              <button type="button" onClick={startGame}><RefreshCw /> Kör igen</button>
+            <div className="p100-motion-game-result" role="dialog" aria-label="Resultat från bossfight">
+              <small>{gameView.finishReason === "hearts" ? (arenaLanguage === "sv" ? "Neonväktaren vann den här gången" : "Neon Guardian won this round") : (arenaLanguage === "sv" ? "Rundan klar" : "Round clear")}</small>
+              <strong>{gameView.score.toLocaleString(arenaLanguage === "sv" ? "sv-SE" : "en-US")} {arenaLanguage === "sv" ? "poäng" : "pts"}</strong>
+              <p>{gameView.hits} {arenaLanguage === "sv" ? "träffar" : "hits"} · {gameView.dodges} {arenaLanguage === "sv" ? "duckningar" : "dodges"} · {arenaLanguage === "sv" ? "bästa combo" : "best combo"} ×{gameView.bestCombo}</p>
+              <div className="p100-motion-game-result-actions">
+                <button type="button" className="p100-motion-game-result-primary" onClick={startGame}>
+                  <RefreshCw /> {arenaLanguage === "sv" ? "Kör igen" : "Play again"}
+                </button>
+                {fullscreen ? (
+                  <button
+                    type="button"
+                    className="p100-motion-game-result-secondary fullscreen-exit"
+                    onClick={() => void toggleFullscreen()}
+                    title={arenaLanguage === "sv" ? "Lämna helskärm" : "Exit fullscreen"}
+                    aria-label={arenaLanguage === "sv" ? "Avsluta helskärm" : "Exit fullscreen"}
+                  >
+                    <Minimize /> {arenaLanguage === "sv" ? "Avsluta helskärm" : "Exit fullscreen"}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="p100-motion-game-result-secondary"
+                  onClick={stopGame}
+                  title={arenaLanguage === "sv" ? "Stäng rundan och gå tillbaka till labbet" : "Close round and return to lab"}
+                  aria-label={arenaLanguage === "sv" ? "Avsluta runda" : "Close round"}
+                >
+                  <CircleStop /> {arenaLanguage === "sv" ? "Avsluta runda" : "Close round"}
+                </button>
+              </div>
             </div>
           ) : null}
           {replaying && recordingData ? (
@@ -1911,6 +1995,17 @@ export function MotionLab() {
                 <option value="1280x720">1280 × 720 · kvalitet</option>
               </select>
               <small>{changingResolution ? "Byter kameraläge…" : actualResolution ? `Kameran levererar ${actualResolution}` : "Aktiveras när kameran startar"}</small>
+            </label>
+            <label className="p100-motion-select">
+              <span>Arena-röst & Announcer</span>
+              <select
+                value={arenaLanguage}
+                onChange={(event) => changeArenaLanguage(event.target.value as MotionArenaLanguage)}
+              >
+                <option value="en">Engelska (Arcade Announcer · 0 ms)</option>
+                <option value="sv">Svenska (Klassisk)</option>
+              </select>
+              <small>Lokal webbläsarsyntes utan API-kostnad.</small>
             </label>
             <div className="p100-motion-readiness">
               <span className={isLive ? "ok" : ""}><i /> Kamera</span>
