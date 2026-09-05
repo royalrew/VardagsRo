@@ -9474,17 +9474,21 @@ button.event-row:hover {
 .p100-motion-game-stop { display: grid; width: 30px; height: 30px; border: 1px solid rgba(255,255,255,.09); border-radius: 8px; background: rgba(6,9,8,.76); color: #8e9992; place-items: center; }
 .p100-motion-game-stop:hover { border-color: rgba(255,100,91,.3); color: #ff766e; }
 .p100-motion-game-stop svg { width: 14px; }
-.p100-motion-fullscreen { display: grid; width: 34px; height: 34px; margin-left: auto; border: 1px solid rgba(255,255,255,.11); border-radius: 9px; background: rgba(6,9,8,.78); color: #c5cec8; backdrop-filter: blur(10px); place-items: center; }
+.p100-motion-fullscreen { display: inline-flex; min-height: 34px; margin-left: auto; padding: 0 9px; border: 1px solid rgba(255,255,255,.11); border-radius: 9px; background: rgba(6,9,8,.78); color: #c5cec8; backdrop-filter: blur(10px); align-items: center; justify-content: center; gap: 5px; font-size: .54rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .p100-motion-fullscreen:hover { border-color: rgba(200,244,93,.3); background: rgba(18,24,21,.9); color: var(--p100-accent); }
 .p100-motion-fullscreen:focus-visible { outline: 2px solid var(--p100-accent); outline-offset: 2px; }
 .p100-motion-fullscreen svg { width: 16px; }
-.p100-motion-stage-spacer { margin-left: auto; }
 .p100-motion-voice-toggle { display: inline-flex; min-height: 34px; padding: 0 9px; border: 1px solid rgba(255,255,255,.11); border-radius: 9px; background: rgba(6,9,8,.78); color: #89958d; backdrop-filter: blur(10px); align-items: center; gap: 5px; font-size: .54rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .p100-motion-voice-toggle.active { border-color: rgba(125,232,255,.28); color: #a9eef8; }
 .p100-motion-voice-toggle:hover { background: rgba(18,24,21,.9); color: #d0f8ff; }
-.p100-motion-stage:fullscreen { width: 100vw; height: 100vh; border: 0; border-radius: 0; background: #050806; }
+.p100-motion-stage:fullscreen,
+.p100-motion-stage.viewport-fullscreen { width: 100vw; height: 100dvh; border: 0; border-radius: 0; background: #050806; aspect-ratio: auto !important; }
+.p100-motion-stage.viewport-fullscreen { position: fixed; inset: 0; z-index: 1000; max-width: none; max-height: none; }
 .p100-motion-stage:fullscreen video,
-.p100-motion-stage:fullscreen canvas { object-fit: contain; }
+.p100-motion-stage:fullscreen canvas,
+.p100-motion-stage.viewport-fullscreen video,
+.p100-motion-stage.viewport-fullscreen canvas { object-fit: contain; }
+.p100-motion-stage.viewport-fullscreen .p100-motion-stage-top { top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); left: max(14px, env(safe-area-inset-left)); }
 
 .p100-motion-stage-empty { position: absolute; inset: 0; z-index: 3; display: flex; padding: 40px; background: rgba(8,12,10,.68); align-items: center; justify-content: center; flex-direction: column; text-align: center; }
 .p100-motion-stage-empty > span { display: grid; width: 58px; height: 58px; margin-bottom: 17px; border: 1px solid rgba(200,244,93,.2); border-radius: 18px; background: rgba(200,244,93,.075); color: var(--p100-accent); place-items: center; }
@@ -9729,7 +9733,7 @@ button.event-row:hover {
   .p100-motion-stage-top { inset: 8px 8px auto; gap: 5px; }
   .p100-motion-stage-top > span { min-height: 25px; padding: 0 7px; font-size: .49rem; }
   .p100-motion-stage-top > span.engine { display: none; }
-  .p100-motion-fullscreen { width: 40px; height: 40px; }
+  .p100-motion-fullscreen { min-height: 40px; padding-inline: 10px; }
   .p100-motion-voice-toggle { min-height: 40px; padding: 0 10px; }
   .p100-motion-guide, .p100-motion-error, .p100-motion-recovery { inset: auto 9px 9px; padding: 11px 12px; }
   .p100-motion-guide strong, .p100-motion-error strong, .p100-motion-recovery strong { font-size: .7rem; }

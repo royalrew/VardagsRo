@@ -1252,7 +1252,19 @@ export async function processJarvisAgentMessage(
           distanceMeters: number | null;
           rpe: number | null;
         }>;
-      }> = Array.isArray(args.exercises) ? (args.exercises as any) : [];
+      }> = Array.isArray(args.exercises)
+        ? (args.exercises as Array<{
+            name: string;
+            notes: string | null;
+            sets: Array<{
+              reps: number | null;
+              weightKg: number | null;
+              durationSeconds: number | null;
+              distanceMeters: number | null;
+              rpe: number | null;
+            }>;
+          }>)
+        : [];
 
       if ((activityType === "running" || distanceKm) && exercises.length === 0) {
         exercises.push({

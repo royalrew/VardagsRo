@@ -373,6 +373,7 @@ export function MotionLab() {
   const animationFrameRef = useRef<number | null>(null);
   const replayFrameRef = useRef<number | null>(null);
   const reportCopiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bodyOverflowBeforeFullscreenRef = useRef("");
   const workerRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const workerGenerationRef = useRef(0);
   const workerRestartAttemptsRef = useRef(0);
@@ -455,7 +456,7 @@ export function MotionLab() {
   const [recordingData, setRecordingData] = useState<MotionRecording | null>(null);
   const [replaying, setReplaying] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const [fullscreenAvailable, setFullscreenAvailable] = useState(false);
+  const [viewportFullscreen, setViewportFullscreen] = useState(false);
   const [gameView, setGameView] = useState<MotionGameState | null>(null);
   const [coldStarts, setColdStarts] = useState<MotionColdStartStats>({ attempts: 0, successes: 0 });
   const [baselineRunning, setBaselineRunning] = useState(false);
@@ -554,18 +555,24 @@ export function MotionLab() {
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setFullscreen(document.fullscreenElement === stageRef.current);
+      const webkitDocument = document as Document & { webkitFullscreenElement?: Element | null };
+      setFullscreen(
+        document.fullscreenElement === stageRef.current
+        || webkitDocument.webkitFullscreenElement === stageRef.current,
+      );
     };
     document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
     const hydrationFrame = requestAnimationFrame(() => {
-      setFullscreenAvailable(Boolean(document.fullscreenEnabled));
       const stored = parseStoredColdStarts();
       coldStartRef.current = stored;
       setColdStarts(stored);
     });
     return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
       cancelAnimationFrame(hydrationFrame);
+      document.body.style.overflow = bodyOverflowBeforeFullscreenRef.current;
       activeRef.current = false;
       if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
       if (replayFrameRef.current !== null) cancelAnimationFrame(replayFrameRef.current);
@@ -1611,15 +1618,46 @@ export function MotionLab() {
   }
 
   async function toggleFullscreen() {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      } else if (stageRef.current) {
-        await stageRef.current.requestFullscreen();
-      }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Fullskärmsläget kunde inte öppnas.");
+    const stage = stageRef.current as (HTMLDivElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+    }) | null;
+    const webkitDocument = document as Document & {
+      webkitExitFullscreen?: () => Promise<void> | void;
+      webkitFullscreenElement?: Element | null;
+    };
+    if (!stage) return;
+
+    if (viewportFullscreen) {
+      document.body.style.overflow = bodyOverflowBeforeFullscreenRef.current;
+      setViewportFullscreen(false);
+      setFullscreen(false);
+      return;
     }
+    if (document.fullscreenElement || webkitDocument.webkitFullscreenElement) {
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else {
+        await webkitDocument.webkitExitFullscreen?.();
+      }
+      return;
+    }
+
+    try {
+      if (stage.requestFullscreen) {
+        await stage.requestFullscreen();
+        return;
+      }
+      if (stage.webkitRequestFullscreen) {
+        await stage.webkitRequestFullscreen();
+        return;
+      }
+    } catch {
+      // iPhone kan exponera Fullscreen API utan att tillåta interaktiva element.
+    }
+    bodyOverflowBeforeFullscreenRef.current = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    setViewportFullscreen(true);
+    setFullscreen(true);
   }
 
   const isStarting = status === "requesting" || status === "loading";
@@ -1700,7 +1738,7 @@ export function MotionLab() {
       </header>
 
       <section className="p100-motion-grid">
-        <div ref={stageRef} className={`p100-motion-stage ${replaying ? "replaying" : ""} ${gameActive ? "game-active" : ""}`} style={{ aspectRatio: cameraAspectRatio ?? `${requestedWidth} / ${requestedHeight}` }}>
+        <div ref={stageRef} className={`p100-motion-stage ${replaying ? "replaying" : ""} ${gameActive ? "game-active" : ""} ${viewportFullscreen ? "viewport-fullscreen" : ""}`} style={{ aspectRatio: cameraAspectRatio ?? `${requestedWidth} / ${requestedHeight}` }}>
           <video ref={videoRef} muted playsInline aria-label="Spegelvänd kamerabild" />
           <canvas ref={canvasRef} aria-label="Pose-overlay med kroppens landmärken" />
           <div className="p100-motion-stage-top">
@@ -1711,17 +1749,15 @@ export function MotionLab() {
             {baselineRunning ? <span className="baseline"><Gauge /> Baseline {baselineClock(baselineElapsedMs)}</span> : null}
             {performanceProfileRunning ? <span className="profile"><Gauge /> {performanceProfileMode === "gate-b" ? `Gate B ${remainingClock(GATE_B_DURATION_MS, performanceProfileElapsedMs)}` : `Profil ${performanceProfileSecondsLeft} s`}</span> : null}
             {gameActive ? <button type="button" className="p100-motion-game-stop" onClick={stopGame} title="Avsluta rundan" aria-label="Avsluta rundan"><X /></button> : null}
-            {fullscreenAvailable ? (
-              <button
-                type="button"
-                className="p100-motion-fullscreen"
-                onClick={() => void toggleFullscreen()}
-                aria-label={fullscreen ? "Lämna fullskärm" : "Visa i fullskärm"}
-                title={fullscreen ? "Lämna fullskärm" : "Visa i fullskärm"}
-              >
-                {fullscreen ? <Minimize /> : <Maximize />}
-              </button>
-            ) : <span className="p100-motion-stage-spacer" />}
+            <button
+              type="button"
+              className="p100-motion-fullscreen"
+              onClick={() => void toggleFullscreen()}
+              aria-label={fullscreen ? "Lämna helskärm" : "Visa i helskärm"}
+              title={fullscreen ? "Lämna helskärm" : "Visa i helskärm"}
+            >
+              {fullscreen ? <Minimize /> : <Maximize />}<span>{fullscreen ? "Stäng" : "Helskärm"}</span>
+            </button>
             <button
               type="button"
               className={`p100-motion-voice-toggle ${voiceGuidance ? "active" : ""}`}
