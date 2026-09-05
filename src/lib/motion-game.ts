@@ -3,6 +3,9 @@ import type { MotionLandmark, MotionPoseSnapshot } from "./motion-engine";
 export const MOTION_GAME_DURATION_MS = 60_000;
 export const MOTION_GAME_COUNTDOWN_MS = 7_000;
 
+export type MotionGameDifficulty = "easy" | "medium" | "hard";
+export type MotionGameTargetKind = "wide" | "low" | "high" | "kick" | "dual";
+
 export interface MotionGamePoint {
   x: number;
   y: number;
@@ -10,10 +13,11 @@ export interface MotionGamePoint {
 
 export interface MotionGameTarget extends MotionGamePoint {
   id: number;
-  kind: "wide" | "low" | "high";
+  kind: MotionGameTargetKind;
   radius: number;
   spawnedAt: number;
   expiresAt: number;
+  pairedWithId?: number;
 }
 
 export interface MotionDuckAttack {
@@ -28,7 +32,7 @@ export interface MotionDuckAttack {
 
 export interface MotionGameEffect extends MotionGamePoint {
   id: number;
-  type: "hit" | "miss" | "duck" | "damage";
+  type: "hit" | "miss" | "duck" | "damage" | "kick" | "double";
   at: number;
 }
 
@@ -42,6 +46,8 @@ interface MotionBodyFrame {
 
 export interface MotionGameState {
   status: "countdown" | "running" | "finished";
+  difficulty: MotionGameDifficulty;
+  allowKicks: boolean;
   startedAt: number;
   endsAt: number;
   nowMs: number;
@@ -54,6 +60,7 @@ export interface MotionGameState {
   misses: number;
   dodges: number;
   target: MotionGameTarget | null;
+  secondaryTarget: MotionGameTarget | null;
   duck: MotionDuckAttack | null;
   duckPending: boolean;
   nextSpawnAt: number;
@@ -62,10 +69,54 @@ export interface MotionGameState {
   lastPoseTimestamp: number;
   previousLeftHand: MotionGamePoint | null;
   previousRightHand: MotionGamePoint | null;
+  previousLeftFoot: MotionGamePoint | null;
+  previousRightFoot: MotionGamePoint | null;
+  previousLeftKnee: MotionGamePoint | null;
+  previousRightKnee: MotionGamePoint | null;
   body: MotionBodyFrame;
   effect: MotionGameEffect | null;
   finishReason: "time" | "hearts" | null;
 }
+
+interface DifficultyConfig {
+  targetLifetimeMs: { wide: number; low: number; high: number; kick: number; dual: number };
+  targetRadius: number;
+  duckFrequency: number;
+  duckTelegraphMs: number;
+  duckDurationMs: number;
+  allowDualTargets: boolean;
+  nextSpawnDelayMs: number;
+}
+
+export const DIFFICULTY_CONFIGS: Record<MotionGameDifficulty, DifficultyConfig> = {
+  easy: {
+    targetLifetimeMs: { wide: 2_600, low: 2_900, high: 2_500, kick: 2_800, dual: 2_800 },
+    targetRadius: 0.075,
+    duckFrequency: 5,
+    duckTelegraphMs: 1_100,
+    duckDurationMs: 2_700,
+    allowDualTargets: false,
+    nextSpawnDelayMs: 320,
+  },
+  medium: {
+    targetLifetimeMs: { wide: 2_050, low: 2_300, high: 1_900, kick: 2_200, dual: 2_200 },
+    targetRadius: 0.062,
+    duckFrequency: 4,
+    duckTelegraphMs: 850,
+    duckDurationMs: 2_350,
+    allowDualTargets: true,
+    nextSpawnDelayMs: 220,
+  },
+  hard: {
+    targetLifetimeMs: { wide: 1_350, low: 1_500, high: 1_250, kick: 1_400, dual: 1_400 },
+    targetRadius: 0.054,
+    duckFrequency: 3,
+    duckTelegraphMs: 650,
+    duckDurationMs: 1_850,
+    allowDualTargets: true,
+    nextSpawnDelayMs: 160,
+  },
+};
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
@@ -79,6 +130,19 @@ function landmarkPoint(
   const landmark = landmarks[index];
   if (!landmark || (landmark.visibility ?? 1) < minimumVisibility) return null;
   return { x: landmark.x, y: landmark.y };
+}
+
+function primaryFootPoint(
+  landmarks: readonly MotionLandmark[],
+  ankleIndex: number,
+  footIndex: number,
+  heelIndex: number,
+): MotionGamePoint | null {
+  return (
+    landmarkPoint(landmarks, footIndex, 0.25) ??
+    landmarkPoint(landmarks, ankleIndex, 0.25) ??
+    landmarkPoint(landmarks, heelIndex, 0.25)
+  );
 }
 
 function calibrationPoint(
@@ -164,7 +228,8 @@ export function pointToSegmentDistance(
 function targetPosition(
   state: MotionGameState,
   landmarks: readonly MotionLandmark[],
-): MotionGamePoint & { kind: MotionGameTarget["kind"] } {
+  forceKind?: MotionGameTargetKind,
+): MotionGamePoint & { kind: MotionGameTargetKind } {
   const torsoHeight = Math.max(0.12, state.body.hipY - state.body.shoulderY);
   const wideDistance = clamp(state.body.reachX * 1.42, 0.32, 0.46);
   const lowY = clamp(
@@ -177,6 +242,21 @@ function targetPosition(
     0.08,
     state.body.shoulderY - 0.16,
   );
+  const kickY = clamp(
+    state.body.hipY + torsoHeight * 0.92,
+    0.68,
+    0.88,
+  );
+
+  if (forceKind === "kick") {
+    const side = (state.spawnIndex % 2 === 0) ? -1 : 1;
+    return {
+      kind: "kick",
+      x: clamp(state.body.centerX + side * state.body.reachX * 0.62, 0.1, 0.9),
+      y: kickY,
+    };
+  }
+
   const slots = [
     { kind: "wide" as const, x: state.body.centerX - wideDistance, y: state.body.shoulderY + torsoHeight * 0.1 },
     { kind: "wide" as const, x: state.body.centerX + wideDistance, y: state.body.shoulderY + torsoHeight * 0.1 },
@@ -185,6 +265,7 @@ function targetPosition(
     { kind: "high" as const, x: state.body.centerX - state.body.reachX * 0.58, y: highY },
     { kind: "high" as const, x: state.body.centerX + state.body.reachX * 0.58, y: highY },
   ].map((slot) => ({ ...slot, x: clamp(slot.x, 0.06, 0.94), y: clamp(slot.y, 0.07, 0.9) }));
+
   const hands = [landmarkPoint(landmarks, 15), landmarkPoint(landmarks, 16)].filter(
     (point): point is MotionGamePoint => point !== null,
   );
@@ -200,6 +281,8 @@ function targetPosition(
 }
 
 function spawnNext(state: MotionGameState, snapshot: MotionPoseSnapshot, nowMs: number): MotionGameState {
+  const config = DIFFICULTY_CONFIGS[state.difficulty];
+
   if (state.duckPending) {
     const liveBody = bodyFrame(snapshot) ?? state.body;
     const nose = landmarkPoint(snapshot.landmarks, 0, 0.2);
@@ -220,8 +303,8 @@ function spawnNext(state: MotionGameState, snapshot: MotionPoseSnapshot, nowMs: 
       duck: {
         id: state.spawnIndex + 1,
         telegraphAt: nowMs,
-        activeAt: nowMs + 850,
-        expiresAt: nowMs + 2_350,
+        activeAt: nowMs + config.duckTelegraphMs,
+        expiresAt: nowMs + config.duckDurationMs,
         thresholdY,
         startingShoulderY,
         requiredDropY,
@@ -229,17 +312,65 @@ function spawnNext(state: MotionGameState, snapshot: MotionPoseSnapshot, nowMs: 
       spawnIndex: state.spawnIndex + 1,
     };
   }
-  const position = targetPosition(state, snapshot.landmarks);
-  const lifetimeMs = position.kind === "low" ? 2_300 : position.kind === "wide" ? 2_050 : 1_900;
+
+  // Bestäm måltyp utifrån svårighetsgrad och spelmönster
+  const shouldSpawnDual =
+    config.allowDualTargets &&
+    state.resolvedPunches >= 3 &&
+    state.spawnIndex % 4 === 1;
+
+  const shouldSpawnKick =
+    state.allowKicks &&
+    state.resolvedPunches >= 2 &&
+    state.spawnIndex % 4 === 3;
+
+  if (shouldSpawnDual) {
+    const wideDistance = clamp(state.body.reachX * 1.35, 0.3, 0.44);
+    const y = state.body.shoulderY + 0.04;
+    const lifetimeMs = config.targetLifetimeMs.dual;
+    const targetA: MotionGameTarget = {
+      id: state.spawnIndex + 1,
+      kind: "dual",
+      x: clamp(state.body.centerX - wideDistance, 0.08, 0.92),
+      y,
+      radius: config.targetRadius,
+      spawnedAt: nowMs,
+      expiresAt: nowMs + lifetimeMs,
+      pairedWithId: state.spawnIndex + 2,
+    };
+    const targetB: MotionGameTarget = {
+      id: state.spawnIndex + 2,
+      kind: "dual",
+      x: clamp(state.body.centerX + wideDistance, 0.08, 0.92),
+      y,
+      radius: config.targetRadius,
+      spawnedAt: nowMs,
+      expiresAt: nowMs + lifetimeMs,
+      pairedWithId: state.spawnIndex + 1,
+    };
+    return {
+      ...state,
+      target: targetA,
+      secondaryTarget: targetB,
+      spawnIndex: state.spawnIndex + 2,
+    };
+  }
+
+  const forcedKind = shouldSpawnKick ? "kick" : undefined;
+  const position = targetPosition(state, snapshot.landmarks, forcedKind);
+  const lifetimeMs = config.targetLifetimeMs[position.kind];
+  const radius = position.kind === "kick" ? config.targetRadius * 1.15 : config.targetRadius;
+
   return {
     ...state,
     target: {
       id: state.spawnIndex + 1,
       ...position,
-      radius: position.kind === "wide" ? 0.06 : 0.064,
+      radius,
       spawnedAt: nowMs,
       expiresAt: nowMs + lifetimeMs,
     },
+    secondaryTarget: null,
     spawnIndex: state.spawnIndex + 1,
   };
 }
@@ -248,14 +379,27 @@ export function startMotionGame(
   snapshot: MotionPoseSnapshot,
   nowMs: number,
   aspectRatio = 4 / 3,
+  options?: {
+    difficulty?: MotionGameDifficulty;
+    allowKicks?: boolean;
+  },
 ): MotionGameState | null {
   const body = bodyFrame(snapshot);
   if (!body) return null;
   const leftHand = landmarkPoint(snapshot.landmarks, 15);
   const rightHand = landmarkPoint(snapshot.landmarks, 16);
+  const leftFoot = primaryFootPoint(snapshot.landmarks, 27, 31, 29);
+  const rightFoot = primaryFootPoint(snapshot.landmarks, 28, 32, 30);
+  const leftKnee = landmarkPoint(snapshot.landmarks, 25);
+  const rightKnee = landmarkPoint(snapshot.landmarks, 26);
   const startedAt = nowMs + MOTION_GAME_COUNTDOWN_MS;
+  const difficulty = options?.difficulty ?? "medium";
+  const allowKicks = options?.allowKicks ?? (leftFoot !== null && rightFoot !== null);
+
   return {
     status: "countdown",
+    difficulty,
+    allowKicks,
     startedAt,
     endsAt: startedAt + MOTION_GAME_DURATION_MS,
     nowMs,
@@ -268,6 +412,7 @@ export function startMotionGame(
     misses: 0,
     dodges: 0,
     target: null,
+    secondaryTarget: null,
     duck: null,
     duckPending: false,
     nextSpawnAt: startedAt,
@@ -276,6 +421,10 @@ export function startMotionGame(
     lastPoseTimestamp: snapshot.timestampMs,
     previousLeftHand: leftHand,
     previousRightHand: rightHand,
+    previousLeftFoot: leftFoot,
+    previousRightFoot: rightFoot,
+    previousLeftKnee: leftKnee,
+    previousRightKnee: rightKnee,
     body,
     effect: null,
     finishReason: null,
@@ -294,10 +443,19 @@ export function advanceMotionGame(
       ...state,
       status: "finished",
       target: null,
+      secondaryTarget: null,
       duck: null,
       finishReason: state.hearts <= 0 ? "hearts" : "time",
     };
   }
+
+  const leftHand = landmarkPoint(snapshot.landmarks, 15);
+  const rightHand = landmarkPoint(snapshot.landmarks, 16);
+  const leftFoot = primaryFootPoint(snapshot.landmarks, 27, 31, 29);
+  const rightFoot = primaryFootPoint(snapshot.landmarks, 28, 32, 30);
+  const leftKnee = landmarkPoint(snapshot.landmarks, 25);
+  const rightKnee = landmarkPoint(snapshot.landmarks, 26);
+
   if (state.status === "countdown") {
     const latestBody = bodyFrame(snapshot);
     if (nowMs < state.startedAt) {
@@ -306,26 +464,44 @@ export function advanceMotionGame(
         ...state,
         body: latestBody ?? state.body,
         lastPoseTimestamp: snapshot.timestampMs,
-        previousLeftHand: landmarkPoint(snapshot.landmarks, 15) ?? state.previousLeftHand,
-        previousRightHand: landmarkPoint(snapshot.landmarks, 16) ?? state.previousRightHand,
+        previousLeftHand: leftHand ?? state.previousLeftHand,
+        previousRightHand: rightHand ?? state.previousRightHand,
+        previousLeftFoot: leftFoot ?? state.previousLeftFoot,
+        previousRightFoot: rightFoot ?? state.previousRightFoot,
+        previousLeftKnee: leftKnee ?? state.previousLeftKnee,
+        previousRightKnee: rightKnee ?? state.previousRightKnee,
       };
     }
     state = { ...state, status: "running", body: latestBody ?? state.body };
   }
 
-  if (state.target && nowMs >= state.target.expiresAt) {
+  const config = DIFFICULTY_CONFIGS[state.difficulty];
+
+  // Kontrollera om mål löpt ut
+  const targetExpired = state.target && nowMs >= state.target.expiresAt;
+  const secondaryExpired = state.secondaryTarget && nowMs >= state.secondaryTarget.expiresAt;
+  if (targetExpired || secondaryExpired) {
     const resolvedPunches = state.resolvedPunches + 1;
     state = {
       ...state,
       target: null,
+      secondaryTarget: null,
       combo: 0,
       misses: state.misses + 1,
       resolvedPunches,
-      duckPending: resolvedPunches % 4 === 0,
-      nextSpawnAt: nowMs + 280,
-      effect: { id: state.spawnIndex + 10_000, type: "miss", x: state.target.x, y: state.target.y, at: nowMs },
+      duckPending: resolvedPunches % config.duckFrequency === 0,
+      nextSpawnAt: nowMs + config.nextSpawnDelayMs + 80,
+      effect: {
+        id: state.spawnIndex + 10_000,
+        type: "miss",
+        x: state.target?.x ?? state.secondaryTarget?.x ?? 0.5,
+        y: state.target?.y ?? state.secondaryTarget?.y ?? 0.5,
+        at: nowMs,
+      },
     };
   }
+
+  // Kontrollera om duck-attack löpt ut
   if (state.duck && nowMs >= state.duck.expiresAt) {
     const hearts = Math.max(0, state.hearts - 1);
     state = {
@@ -341,42 +517,130 @@ export function advanceMotionGame(
       return { ...state, status: "finished", finishReason: "hearts" };
     }
   }
-  if (!state.target && !state.duck && nowMs >= state.nextSpawnAt) {
+
+  if (!state.target && !state.secondaryTarget && !state.duck && nowMs >= state.nextSpawnAt) {
     state = spawnNext(state, snapshot, nowMs);
   }
 
   if (snapshot.timestampMs === state.lastPoseTimestamp) return state;
-  const leftHand = landmarkPoint(snapshot.landmarks, 15);
-  const rightHand = landmarkPoint(snapshot.landmarks, 16);
 
-  if (state.target) {
-    const collisionRadius = state.target.radius + 0.045;
-    const leftHit =
+  // Kollisionskontroll mot primärt och sekundärt mål
+  const checkHitOnTarget = (target: MotionGameTarget): boolean => {
+    const isKickTarget = target.kind === "kick";
+    const collisionRadius = target.radius + (isKickTarget ? 0.065 : 0.045);
+
+    // Sparkar: kontrollera fötter och knän
+    if (isKickTarget) {
+      const leftFootHit =
+        leftFoot && state.previousLeftFoot
+          ? pointToSegmentDistance(target, state.previousLeftFoot, leftFoot, state.aspectRatio) <= collisionRadius
+          : false;
+      const rightFootHit =
+        rightFoot && state.previousRightFoot
+          ? pointToSegmentDistance(target, state.previousRightFoot, rightFoot, state.aspectRatio) <= collisionRadius
+          : false;
+      const leftKneeHit =
+        leftKnee && state.previousLeftKnee
+          ? pointToSegmentDistance(target, state.previousLeftKnee, leftKnee, state.aspectRatio) <= collisionRadius
+          : false;
+      const rightKneeHit =
+        rightKnee && state.previousRightKnee
+          ? pointToSegmentDistance(target, state.previousRightKnee, rightKnee, state.aspectRatio) <= collisionRadius
+          : false;
+      if (leftFootHit || rightFootHit || leftKneeHit || rightKneeHit) return true;
+    }
+
+    // Slag: kontrollera händerna
+    const leftHandHit =
       leftHand && state.previousLeftHand
-        ? pointToSegmentDistance(state.target, state.previousLeftHand, leftHand, state.aspectRatio) <= collisionRadius
+        ? pointToSegmentDistance(target, state.previousLeftHand, leftHand, state.aspectRatio) <= collisionRadius
         : false;
-    const rightHit =
+    const rightHandHit =
       rightHand && state.previousRightHand
-        ? pointToSegmentDistance(state.target, state.previousRightHand, rightHand, state.aspectRatio) <= collisionRadius
+        ? pointToSegmentDistance(target, state.previousRightHand, rightHand, state.aspectRatio) <= collisionRadius
         : false;
-    if (leftHit || rightHit) {
-      const combo = state.combo + 1;
-      const resolvedPunches = state.resolvedPunches + 1;
+    return leftHandHit || rightHandHit;
+  };
+
+  let hitTargetA = false;
+  let hitTargetB = false;
+
+  if (state.target && checkHitOnTarget(state.target)) {
+    hitTargetA = true;
+  }
+  if (state.secondaryTarget && checkHitOnTarget(state.secondaryTarget)) {
+    hitTargetB = true;
+  }
+
+  if (hitTargetA || hitTargetB) {
+    const isDual = (state.target?.kind === "dual" || state.secondaryTarget?.kind === "dual");
+    const resolvedBoth = isDual && (
+      (hitTargetA && hitTargetB) ||
+      (hitTargetA && !state.secondaryTarget) ||
+      (hitTargetB && !state.target)
+    );
+    const isKick = state.target?.kind === "kick" || state.secondaryTarget?.kind === "kick";
+
+    if (resolvedBoth) {
+      // Dubbelslag helt avklarat!
+      const addedHits = hitTargetA && hitTargetB ? 2 : 1;
+      const combo = state.combo + addedHits;
+      const resolvedPunches = state.resolvedPunches + addedHits;
       state = {
         ...state,
-        score: state.score + 100 + state.combo * 20,
+        score: state.score + 300 + state.combo * 30,
+        combo,
+        bestCombo: Math.max(state.bestCombo, combo),
+        hits: state.hits + addedHits,
+        target: null,
+        secondaryTarget: null,
+        resolvedPunches,
+        duckPending: resolvedPunches % config.duckFrequency === 0,
+        nextSpawnAt: nowMs + config.nextSpawnDelayMs,
+        effect: { id: state.spawnIndex + 35_000, type: "double", x: state.body.centerX, y: state.body.shoulderY, at: nowMs },
+      };
+    } else if (isDual) {
+      // En av de två noderna träffades
+      const hitX = hitTargetA ? state.target!.x : state.secondaryTarget!.x;
+      const hitY = hitTargetA ? state.target!.y : state.secondaryTarget!.y;
+      state = {
+        ...state,
+        score: state.score + 120,
+        hits: state.hits + 1,
+        target: hitTargetA ? null : state.target,
+        secondaryTarget: hitTargetB ? null : state.secondaryTarget,
+        effect: { id: state.spawnIndex + 30_000, type: "hit", x: hitX, y: hitY, at: nowMs },
+      };
+    } else {
+      // Enkelt mål (vanligt eller kick)
+      const hitX = state.target?.x ?? 0.5;
+      const hitY = state.target?.y ?? 0.5;
+      const combo = state.combo + 1;
+      const resolvedPunches = state.resolvedPunches + 1;
+      const baseScore = isKick ? 150 : 100;
+      state = {
+        ...state,
+        score: state.score + baseScore + state.combo * 20,
         combo,
         bestCombo: Math.max(state.bestCombo, combo),
         hits: state.hits + 1,
         target: null,
+        secondaryTarget: null,
         resolvedPunches,
-        duckPending: resolvedPunches % 4 === 0,
-        nextSpawnAt: nowMs + 220,
-        effect: { id: state.spawnIndex + 30_000, type: "hit", x: state.target.x, y: state.target.y, at: nowMs },
+        duckPending: resolvedPunches % config.duckFrequency === 0,
+        nextSpawnAt: nowMs + config.nextSpawnDelayMs,
+        effect: {
+          id: state.spawnIndex + 30_000,
+          type: isKick ? "kick" : "hit",
+          x: hitX,
+          y: hitY,
+          at: nowMs,
+        },
       };
     }
   }
 
+  // Duck-avkänning
   if (state.duck && nowMs >= state.duck.activeAt) {
     const nose = landmarkPoint(snapshot.landmarks, 0);
     const leftShoulder = landmarkPoint(snapshot.landmarks, 11);
@@ -410,6 +674,10 @@ export function advanceMotionGame(
     lastPoseTimestamp: snapshot.timestampMs,
     previousLeftHand: leftHand ?? state.previousLeftHand,
     previousRightHand: rightHand ?? state.previousRightHand,
+    previousLeftFoot: leftFoot ?? state.previousLeftFoot,
+    previousRightFoot: rightFoot ?? state.previousRightFoot,
+    previousLeftKnee: leftKnee ?? state.previousLeftKnee,
+    previousRightKnee: rightKnee ?? state.previousRightKnee,
   };
 }
 
@@ -437,6 +705,13 @@ export function pauseMotionGameFor(state: MotionGameState, durationMs: number): 
           ...state.target,
           spawnedAt: state.target.spawnedAt + offset,
           expiresAt: state.target.expiresAt + offset,
+        }
+      : null,
+    secondaryTarget: state.secondaryTarget
+      ? {
+          ...state.secondaryTarget,
+          spawnedAt: state.secondaryTarget.spawnedAt + offset,
+          expiresAt: state.secondaryTarget.expiresAt + offset,
         }
       : null,
     duck: state.duck

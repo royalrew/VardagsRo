@@ -1,9 +1,13 @@
-import { MOTION_GAME_COUNTDOWN_MS, type MotionGameState } from "./motion-game";
+import {
+  MOTION_GAME_COUNTDOWN_MS,
+  type MotionGameDifficulty,
+  type MotionGameState,
+} from "./motion-game";
 
 export type MotionArenaLanguage = "en" | "sv";
 
 export interface MotionArenaCue {
-  kind: "start" | "countdown" | "go" | "duck" | "praise" | "damage" | "halfway" | "final" | "finish";
+  kind: "start" | "countdown" | "go" | "duck" | "praise" | "damage" | "halfway" | "final" | "finish" | "double" | "kick";
   priority: boolean;
   text: string;
 }
@@ -13,8 +17,31 @@ function secondsRemaining(state: MotionGameState): number {
   return Math.max(0, Math.ceil((state.endsAt - state.nowMs) / 1_000));
 }
 
-export function motionArenaStartCue(lang: MotionArenaLanguage = "en"): MotionArenaCue {
+export function motionArenaStartCue(
+  lang: MotionArenaLanguage = "en",
+  difficulty: MotionGameDifficulty = "medium",
+): MotionArenaCue {
   const countdownSeconds = Math.round(MOTION_GAME_COUNTDOWN_MS / 1_000);
+  if (difficulty === "hard") {
+    return {
+      kind: "start",
+      priority: true,
+      text:
+        lang === "sv"
+          ? `Bossläge! Neonväktaren släpper lös all kraft. ${countdownSeconds} sekunder. Gör dig redo!`
+          : `Boss mode! Neon Guardian unleashed. ${countdownSeconds} seconds. Prepare for battle!`,
+    };
+  }
+  if (difficulty === "easy") {
+    return {
+      kind: "start",
+      priority: true,
+      text:
+        lang === "sv"
+          ? `Träningsläge redo. Du har ${countdownSeconds} sekunder. Ställ dig på plats.`
+          : `Rookie battle ready. ${countdownSeconds} seconds. Take your position.`,
+    };
+  }
   return {
     kind: "start",
     priority: true,
@@ -81,6 +108,12 @@ export function motionArenaCue(
         priority: true,
         text: current.hearts === 1 ? "One heart remaining! Focus!" : `${current.hearts} hearts left! Stay up!`,
       };
+    }
+    if (current.effect.type === "double") {
+      return { kind: "double", priority: true, text: lang === "sv" ? "Dubbelslag!" : "Double strike!" };
+    }
+    if (current.effect.type === "kick") {
+      return { kind: "kick", priority: false, text: lang === "sv" ? "Snygg spark!" : "Great kick!" };
     }
     if (current.effect.type === "duck") {
       return { kind: "praise", priority: false, text: lang === "sv" ? "Snygg duckning!" : "Clean dodge!" };

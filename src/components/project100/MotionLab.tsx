@@ -67,8 +67,10 @@ import {
   motionGameSecondsRemaining,
   pauseMotionGameFor,
   startMotionGame,
+  type MotionGameDifficulty,
   type MotionGameEffect,
   type MotionGameState,
+  type MotionGameTarget,
 } from "@/lib/motion-game";
 import { MotionLandmarkStabilizer } from "@/lib/motion-stabilizer";
 
@@ -284,40 +286,93 @@ function drawMotionGame(
     context.fillRect(0, y - bandHeight / 2, canvas.width, bandHeight);
   }
 
-  if (game.target) {
-    const x = game.target.x * canvas.width;
-    const y = game.target.y * canvas.height;
-    const baseRadius = game.target.radius * canvas.height;
-    const pulse = 1 + Math.sin((nowMs - game.target.spawnedAt) / 85) * 0.08;
-    const life = Math.max(0, (game.target.expiresAt - nowMs) / (game.target.expiresAt - game.target.spawnedAt));
-    context.shadowBlur = 30;
-    context.shadowColor = "rgba(82, 224, 255, .8)";
-    context.fillStyle = "rgba(19, 84, 105, .72)";
-    context.strokeStyle = "#7de8ff";
+  // Om båda målen i en dual strike är aktiva, rita en neon-laserkoppling mellan dem
+  if (game.target && game.secondaryTarget && game.target.kind === "dual") {
+    const ax = game.target.x * canvas.width;
+    const ay = game.target.y * canvas.height;
+    const bx = game.secondaryTarget.x * canvas.width;
+    const by = game.secondaryTarget.y * canvas.height;
+    context.save();
+    context.strokeStyle = "rgba(255, 120, 240, 0.75)";
+    context.shadowBlur = 18;
+    context.shadowColor = "rgba(255, 100, 230, 0.85)";
+    context.lineWidth = Math.max(3, canvas.height / 200);
+    context.setLineDash([8, 8]);
+    context.beginPath();
+    context.moveTo(ax, ay);
+    context.lineTo(bx, by);
+    context.stroke();
+    context.restore();
+  }
+
+  const renderSingleTarget = (tgt: MotionGameTarget, isSecondary = false) => {
+    const x = tgt.x * canvas.width;
+    const y = tgt.y * canvas.height;
+    const baseRadius = tgt.radius * canvas.height;
+    const pulse = 1 + Math.sin((nowMs - tgt.spawnedAt) / 85) * 0.08;
+    const life = Math.max(0, (tgt.expiresAt - nowMs) / (tgt.expiresAt - tgt.spawnedAt));
+
+    const isKick = tgt.kind === "kick";
+    const isDual = tgt.kind === "dual";
+
+    context.save();
+    if (isKick) {
+      context.shadowBlur = 32;
+      context.shadowColor = "rgba(255, 200, 50, 0.9)";
+      context.fillStyle = "rgba(120, 80, 10, 0.78)";
+      context.strokeStyle = "#ffd040";
+    } else if (isDual) {
+      context.shadowBlur = 32;
+      context.shadowColor = isSecondary ? "rgba(255, 100, 230, 0.9)" : "rgba(100, 210, 255, 0.9)";
+      context.fillStyle = isSecondary ? "rgba(110, 20, 95, 0.78)" : "rgba(19, 84, 105, 0.78)";
+      context.strokeStyle = isSecondary ? "#ff88ec" : "#7de8ff";
+    } else {
+      context.shadowBlur = 30;
+      context.shadowColor = "rgba(82, 224, 255, .8)";
+      context.fillStyle = "rgba(19, 84, 105, .72)";
+      context.strokeStyle = "#7de8ff";
+    }
+
     context.lineWidth = Math.max(3, canvas.height / 180);
     context.beginPath();
     context.arc(x, y, baseRadius * pulse, 0, Math.PI * 2);
     context.fill();
     context.stroke();
+
     context.shadowBlur = 12;
-    context.fillStyle = "#e5fbff";
+    context.fillStyle = isKick ? "#fff8db" : isDual && isSecondary ? "#ffe8fb" : "#e5fbff";
     context.beginPath();
     context.arc(x, y, baseRadius * 0.28, 0, Math.PI * 2);
     context.fill();
+
     context.shadowBlur = 0;
-    context.strokeStyle = "rgba(125, 232, 255, .5)";
+    context.strokeStyle = isKick
+      ? "rgba(255, 208, 64, 0.55)"
+      : isDual && isSecondary
+        ? "rgba(255, 136, 236, 0.55)"
+        : "rgba(125, 232, 255, .5)";
     context.lineWidth = Math.max(2, canvas.height / 260);
     context.beginPath();
     context.arc(x, y, baseRadius * 1.25, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * life);
     context.stroke();
+
     context.fillStyle = "rgba(229, 251, 255, .92)";
     context.font = `800 ${Math.max(11, canvas.height / 42)}px system-ui`;
     context.textAlign = "center";
     context.textBaseline = "middle";
-    const movementLabel =
-      arenaLang === "sv"
-        ? (game.target.kind === "low" ? "NER" : game.target.kind === "high" ? "UPP" : "SIDAN")
-        : (game.target.kind === "low" ? "DOWN" : game.target.kind === "high" ? "UP" : "SIDE");
+
+    let movementLabel = "";
+    if (isKick) {
+      movementLabel = arenaLang === "sv" ? "SPARKA" : "KICK";
+    } else if (isDual) {
+      movementLabel = arenaLang === "sv" ? "BÅDA" : "DUAL";
+    } else {
+      movementLabel =
+        arenaLang === "sv"
+          ? (tgt.kind === "low" ? "NER" : tgt.kind === "high" ? "UPP" : "SIDAN")
+          : (tgt.kind === "low" ? "DOWN" : tgt.kind === "high" ? "UP" : "SIDE");
+    }
+
     // Canvasen spegelvänds tillsammans med kameran. Spegelvänd texten en gång här
     // så att den blir rättvänd efter canvasens CSS-transform.
     context.save();
@@ -325,7 +380,11 @@ function drawMotionGame(
     context.scale(-1, 1);
     context.fillText(movementLabel, 0, y + baseRadius * 1.7);
     context.restore();
-  }
+    context.restore();
+  };
+
+  if (game.target) renderSingleTarget(game.target, false);
+  if (game.secondaryTarget) renderSingleTarget(game.secondaryTarget, true);
 
   if (game.effect && nowMs - game.effect.at < 480) {
     const age = (nowMs - game.effect.at) / 480;
@@ -335,7 +394,11 @@ function drawMotionGame(
         ? `rgba(255, 100, 91, ${1 - age})`
         : game.effect.type === "duck"
           ? `rgba(200, 244, 93, ${1 - age})`
-          : `rgba(125, 232, 255, ${1 - age})`;
+          : game.effect.type === "kick"
+            ? `rgba(255, 208, 64, ${1 - age})`
+            : game.effect.type === "double"
+              ? `rgba(255, 120, 240, ${1 - age})`
+              : `rgba(125, 232, 255, ${1 - age})`;
     context.strokeStyle = color;
     context.lineWidth = Math.max(3, canvas.height / 150) * (1 - age * 0.6);
     context.beginPath();
@@ -476,6 +539,8 @@ export function MotionLab() {
   const [voiceGuidance, setVoiceGuidance] = useState(true);
   const [arenaLanguage, setArenaLanguage] = useState<MotionArenaLanguage>("en");
   const arenaLanguageRef = useRef<MotionArenaLanguage>("en");
+  const [difficulty, setDifficulty] = useState<MotionGameDifficulty>("medium");
+  const difficultyRef = useRef<MotionGameDifficulty>("medium");
   const [workerRecoveryAttempt, setWorkerRecoveryAttempt] = useState<number | null>(null);
   const [performanceProfileRunning, setPerformanceProfileRunning] = useState(false);
   const [performanceProfileMode, setPerformanceProfileMode] = useState<PerformanceProfileMode>("quick");
@@ -584,6 +649,11 @@ export function MotionLab() {
           arenaLanguageRef.current = storedLang;
           setArenaLanguage(storedLang);
         }
+        const storedDiff = localStorage.getItem("motion-game-difficulty-v1");
+        if (storedDiff === "easy" || storedDiff === "medium" || storedDiff === "hard") {
+          difficultyRef.current = storedDiff;
+          setDifficulty(storedDiff);
+        }
       } catch {
         // Ignorera storage-fel i privat surfning
       }
@@ -615,21 +685,31 @@ export function MotionLab() {
     const now = audioContext.currentTime;
     const frequency = finished
       ? 620
-      : effect?.type === "hit"
-        ? 520
-        : effect?.type === "duck"
-          ? 720
-          : 115;
+      : effect?.type === "double"
+        ? 660
+        : effect?.type === "hit"
+          ? 520
+          : effect?.type === "kick"
+            ? 340
+            : effect?.type === "duck"
+              ? 720
+              : 115;
     oscillator.type = effect?.type === "damage" || effect?.type === "miss" ? "sawtooth" : "sine";
     oscillator.frequency.setValueAtTime(frequency, now);
-    if (finished) oscillator.frequency.exponentialRampToValueAtTime(880, now + 0.22);
+    if (finished) {
+      oscillator.frequency.exponentialRampToValueAtTime(880, now + 0.22);
+    } else if (effect?.type === "double") {
+      oscillator.frequency.exponentialRampToValueAtTime(990, now + 0.14);
+    } else if (effect?.type === "kick") {
+      oscillator.frequency.exponentialRampToValueAtTime(180, now + 0.14);
+    }
     gain.gain.setValueAtTime(0.0001, now);
     gain.gain.exponentialRampToValueAtTime(finished ? 0.16 : 0.11, now + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + (finished ? 0.28 : 0.12));
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + (finished ? 0.28 : 0.14));
     oscillator.connect(gain);
     gain.connect(audioContext.destination);
     oscillator.start(now);
-    oscillator.stop(now + (finished ? 0.3 : 0.14));
+    oscillator.stop(now + (finished ? 0.3 : 0.16));
   }
 
   function getBestVoice(lang: MotionArenaLanguage): SpeechSynthesisVoice | null {
@@ -690,6 +770,16 @@ export function MotionLab() {
     setArenaLanguage(next);
     try {
       localStorage.setItem("motion-arena-lang-v1", next);
+    } catch {
+      // Ignorera storage-fel
+    }
+  }
+
+  function changeDifficulty(next: MotionGameDifficulty) {
+    difficultyRef.current = next;
+    setDifficulty(next);
+    try {
+      localStorage.setItem("motion-game-difficulty-v1", next);
     } catch {
       // Ignorera storage-fel
     }
@@ -1654,7 +1744,11 @@ export function MotionLab() {
     setError(null);
     if (!audioContextRef.current) audioContextRef.current = new AudioContext();
     void audioContextRef.current.resume();
-    const game = startMotionGame(snapshot, performance.now(), canvas.width / canvas.height);
+    const diff = difficultyRef.current;
+    const game = startMotionGame(snapshot, performance.now(), canvas.width / canvas.height, {
+      difficulty: diff,
+      allowKicks: fullBodyVisibleRef.current,
+    });
     if (!game) {
       setError("Kunde inte läsa båda axlarna. Vänd dig mot kameran och försök igen.");
       return;
@@ -1664,7 +1758,7 @@ export function MotionLab() {
     lastGameUiAtRef.current = performance.now();
     lastArenaSpeechAtRef.current = -Infinity;
     setGameView(game);
-    speakArenaInstruction(motionArenaStartCue(arenaLanguageRef.current));
+    speakArenaInstruction(motionArenaStartCue(arenaLanguageRef.current, diff));
   }
 
   function stopGame() {
@@ -1933,7 +2027,12 @@ export function MotionLab() {
             </div>
           ) : null}
           {isLive && !isRecovering && poseVisible && !replaying && !gameView && !baselineRunning && !performanceProfileRunning ? (
-            <button type="button" className="p100-motion-game-launch" onClick={startGame}><Swords /> {arenaLanguage === "sv" ? "Starta 60 s bossfight" : "Start 60s Boss Fight"}</button>
+            <button type="button" className="p100-motion-game-launch" onClick={startGame}>
+              <Swords />{" "}
+              {arenaLanguage === "sv"
+                ? `Starta 60 s bossfight (${difficulty === "easy" ? "Lätt" : difficulty === "hard" ? "Svår" : "Medel"})`
+                : `Start 60s Boss Fight (${difficulty === "easy" ? "Easy" : difficulty === "hard" ? "Hard" : "Medium"})`}
+            </button>
           ) : null}
           {gameView?.status === "finished" ? (
             <div className="p100-motion-game-result" role="dialog" aria-label="Resultat från bossfight">
@@ -2006,6 +2105,24 @@ export function MotionLab() {
                 <option value="sv">Svenska (Klassisk)</option>
               </select>
               <small>Lokal webbläsarsyntes utan API-kostnad.</small>
+            </label>
+            <label className="p100-motion-select">
+              <span>Svårighetsgrad</span>
+              <select
+                value={difficulty}
+                onChange={(event) => changeDifficulty(event.target.value as MotionGameDifficulty)}
+              >
+                <option value="easy">Lätt (Stora noder · längre tid)</option>
+                <option value="medium">Medel (Klassisk balans · sparkar)</option>
+                <option value="hard">Svår (Snabba noder · dubbelslag · sparkar)</option>
+              </select>
+              <small>
+                {difficulty === "easy"
+                  ? "För nybörjare eller mindre barn. Gott om tid på varje mål."
+                  : difficulty === "medium"
+                    ? "Balanserat tempo med sparkar när hela kroppen syns."
+                    : "Maximal utmaning: kräver dubbelslag med båda händerna samtidigt!"}
+              </small>
             </label>
             <div className="p100-motion-readiness">
               <span className={isLive ? "ok" : ""}><i /> Kamera</span>

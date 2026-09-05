@@ -25,16 +25,26 @@ function game(overrides: Partial<MotionGameState> = {}): MotionGameState {
 }
 
 describe("motion announcer", () => {
-  it("starts with a short, high-priority introduction in English and Swedish", () => {
-    expect(motionArenaStartCue("en")).toMatchObject({
+  it("starts with a short, high-priority introduction in English and Swedish with difficulty", () => {
+    expect(motionArenaStartCue("en", "medium")).toMatchObject({
       kind: "start",
       priority: true,
       text: expect.stringContaining("Neon Guardian approaches"),
     });
-    expect(motionArenaStartCue("sv")).toMatchObject({
+    expect(motionArenaStartCue("sv", "medium")).toMatchObject({
       kind: "start",
       priority: true,
       text: expect.stringContaining("Neonväktaren vaknar"),
+    });
+    expect(motionArenaStartCue("en", "hard")).toMatchObject({
+      kind: "start",
+      priority: true,
+      text: expect.stringContaining("Boss mode! Neon Guardian unleashed"),
+    });
+    expect(motionArenaStartCue("sv", "easy")).toMatchObject({
+      kind: "start",
+      priority: true,
+      text: expect.stringContaining("Träningsläge redo"),
     });
   });
 
@@ -70,7 +80,7 @@ describe("motion announcer", () => {
     });
   });
 
-  it("announces combo milestones without narrating every hit", () => {
+  it("announces combo milestones, double strikes, and kicks", () => {
     const previous = game({ status: "running", combo: 2, effect: null });
     const hit = {
       ...previous,
@@ -80,6 +90,20 @@ describe("motion announcer", () => {
     expect(motionArenaCue(previous, hit, "en")).toMatchObject({ kind: "praise", priority: false, text: "3 hit combo!" });
     expect(motionArenaCue(previous, hit, "sv")).toMatchObject({ kind: "praise", priority: false, text: "3 i combo. Snyggt!" });
     expect(motionArenaCue(hit, { ...hit, combo: 4 }, "en")).toBeNull();
+
+    const doubleStrike = {
+      ...previous,
+      effect: { id: 5, type: "double" as const, x: 0.5, y: 0.5, at: 5_000 },
+    };
+    expect(motionArenaCue(previous, doubleStrike, "en")).toMatchObject({ kind: "double", priority: true, text: "Double strike!" });
+    expect(motionArenaCue(previous, doubleStrike, "sv")).toMatchObject({ kind: "double", priority: true, text: "Dubbelslag!" });
+
+    const kickStrike = {
+      ...previous,
+      effect: { id: 6, type: "kick" as const, x: 0.5, y: 0.7, at: 6_000 },
+    };
+    expect(motionArenaCue(previous, kickStrike, "en")).toMatchObject({ kind: "kick", text: "Great kick!" });
+    expect(motionArenaCue(previous, kickStrike, "sv")).toMatchObject({ kind: "kick", text: "Snygg spark!" });
   });
 
   it("announces damage, time milestones and the final result", () => {

@@ -237,4 +237,107 @@ describe("motion-game", () => {
     expect(result.duck).toBeNull();
     expect(result.dodges).toBe(1);
   });
+
+  it("configures different timeouts and hit windows based on difficulty", () => {
+    const easy = startMotionGame(pose(1), 0, 16 / 9, { difficulty: "easy" })!;
+    const hard = startMotionGame(pose(1), 0, 16 / 9, { difficulty: "hard" })!;
+
+    expect(easy.difficulty).toBe("easy");
+    expect(hard.difficulty).toBe("hard");
+
+    const runningEasy = advanceMotionGame(easy, pose(2), MOTION_GAME_COUNTDOWN_MS);
+    const runningHard = advanceMotionGame(hard, pose(2), MOTION_GAME_COUNTDOWN_MS);
+
+    expect(runningEasy.target!.radius).toBeGreaterThan(runningHard.target!.radius);
+    expect(runningEasy.target!.expiresAt - runningEasy.target!.spawnedAt).toBeGreaterThan(
+      runningHard.target!.expiresAt - runningHard.target!.spawnedAt,
+    );
+  });
+
+  it("awards a kick hit when a foot or knee sweeps through a kick target", () => {
+    const initial = startMotionGame(pose(1), 0, 16 / 9, { allowKicks: true, difficulty: "medium" })!;
+    const running = advanceMotionGame(initial, pose(2), MOTION_GAME_COUNTDOWN_MS);
+
+    // Force a kick target
+    const kickTarget = {
+      id: 99,
+      x: 0.45,
+      y: 0.75,
+      radius: 0.1,
+      spawnedAt: 1_000,
+      expiresAt: 4_000,
+      kind: "kick" as const,
+    };
+    const armedState = {
+      ...running,
+      target: kickTarget,
+      previousLeftFoot: { x: 0.45, y: 0.6 },
+    };
+
+    const footMovedPose = pose(3, {
+      27: { x: 0.45, y: 0.78, visibility: 0.9 }, // left ankle
+    });
+
+    const afterKick = advanceMotionGame(armedState, footMovedPose, 1_050);
+    expect(afterKick.target).toBeNull();
+    expect(afterKick.hits).toBe(1);
+    expect(afterKick.effect?.type).toBe("kick");
+    expect(afterKick.score).toBeGreaterThan(100);
+  });
+
+  it("handles dual targets requiring both nodes to be hit for full combo", () => {
+    const initial = startMotionGame(pose(1), 0, 16 / 9, { difficulty: "hard" })!;
+    const running = advanceMotionGame(initial, pose(2), MOTION_GAME_COUNTDOWN_MS);
+
+    const primaryTarget = {
+      id: 101,
+      x: 0.25,
+      y: 0.4,
+      radius: 0.08,
+      spawnedAt: 1_000,
+      expiresAt: 4_000,
+      kind: "dual" as const,
+    };
+    const secondaryTarget = {
+      id: 102,
+      x: 0.75,
+      y: 0.4,
+      radius: 0.08,
+      spawnedAt: 1_000,
+      expiresAt: 4_000,
+      kind: "dual" as const,
+    };
+
+    const dualState = {
+      ...running,
+      target: primaryTarget,
+      secondaryTarget: secondaryTarget,
+      previousLeftHand: { x: 0.2, y: 0.4 },
+      previousRightHand: { x: 0.6, y: 0.4 },
+    };
+
+    // First hand hits primary target only
+    const hitOnePose = pose(3, {
+      15: { x: 0.26, y: 0.4, visibility: 0.9 }, // left wrist on primary
+      16: { x: 0.62, y: 0.4, visibility: 0.9 }, // right wrist NOT on secondary
+    });
+
+    const partialHit = advanceMotionGame(dualState, hitOnePose, 1_040);
+    expect(partialHit.target).toBeNull();
+    expect(partialHit.secondaryTarget).not.toBeNull();
+    expect(partialHit.hits).toBe(1);
+    expect(partialHit.effect?.type).toBe("hit"); // partial hit gets standard hit effect
+
+    // Now second hand sweeps the remaining secondary target
+    const hitSecondPose = pose(4, {
+      16: { x: 0.76, y: 0.4, visibility: 0.9 }, // right wrist hits secondary
+    });
+
+    const fullHit = advanceMotionGame(partialHit, hitSecondPose, 1_080);
+    expect(fullHit.secondaryTarget).toBeNull();
+    expect(fullHit.target).toBeNull();
+    expect(fullHit.hits).toBe(2);
+    expect(fullHit.effect?.type).toBe("double"); // completes double strike!
+  });
 });
+
