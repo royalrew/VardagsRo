@@ -1,4 +1,4 @@
-import type { MotionLandmark, MotionPoseSnapshot } from "./motion-engine";
+import { hasUsableFullBody, type MotionLandmark, type MotionPoseSnapshot } from "./motion-engine";
 
 export const MOTION_GAME_DURATION_MS = 60_000;
 export const MOTION_GAME_COUNTDOWN_MS = 7_000;
@@ -18,6 +18,7 @@ export interface MotionGameTarget extends MotionGamePoint {
   spawnedAt: number;
   expiresAt: number;
   pairedWithId?: number;
+  requiredLimb?: "leftHand" | "rightHand" | "lowerBody";
 }
 
 export interface MotionDuckAttack {
@@ -314,15 +315,12 @@ function spawnNext(state: MotionGameState, snapshot: MotionPoseSnapshot, nowMs: 
   }
 
   // Bestäm måltyp utifrån svårighetsgrad och spelmönster
-  const shouldSpawnDual =
-    config.allowDualTargets &&
-    state.resolvedPunches >= 3 &&
-    state.spawnIndex % 4 === 1;
+  const canDual = config.allowDualTargets && state.resolvedPunches >= 2;
+  const canKick = state.allowKicks && state.resolvedPunches >= 2;
 
-  const shouldSpawnKick =
-    state.allowKicks &&
-    state.resolvedPunches >= 2 &&
-    state.spawnIndex % 4 === 3;
+  const pattern = state.spawnIndex % 4;
+  const shouldSpawnDual = canDual && pattern === 1;
+  const shouldSpawnKick = canKick && pattern === 3;
 
   if (shouldSpawnDual) {
     const wideDistance = clamp(state.body.reachX * 1.35, 0.3, 0.44);
@@ -365,12 +363,13 @@ function spawnNext(state: MotionGameState, snapshot: MotionPoseSnapshot, nowMs: 
     ...state,
     target: {
       id: state.spawnIndex + 1,
-      ...position,
+      kind: position.kind,
+      x: position.x,
+      y: position.y,
       radius,
       spawnedAt: nowMs,
       expiresAt: nowMs + lifetimeMs,
     },
-    secondaryTarget: null,
     spawnIndex: state.spawnIndex + 1,
   };
 }
@@ -394,7 +393,9 @@ export function startMotionGame(
   const rightKnee = landmarkPoint(snapshot.landmarks, 26);
   const startedAt = nowMs + MOTION_GAME_COUNTDOWN_MS;
   const difficulty = options?.difficulty ?? "medium";
-  const allowKicks = options?.allowKicks ?? (leftFoot !== null && rightFoot !== null);
+  const allowKicks =
+    options?.allowKicks ??
+    (difficulty !== "easy" || leftFoot !== null || rightFoot !== null || leftKnee !== null || rightKnee !== null);
 
   return {
     status: "countdown",
@@ -455,6 +456,18 @@ export function advanceMotionGame(
   const rightFoot = primaryFootPoint(snapshot.landmarks, 28, 32, 30);
   const leftKnee = landmarkPoint(snapshot.landmarks, 25);
   const rightKnee = landmarkPoint(snapshot.landmarks, 26);
+
+  // Dynamiskt tillåt sparkar om nedre kroppen syns eller svårighetsgraden är medel/svår
+  const hasLowerBodyLandmarks = Boolean(
+    leftFoot !== null ||
+    rightFoot !== null ||
+    leftKnee !== null ||
+    rightKnee !== null ||
+    hasUsableFullBody(snapshot.landmarks),
+  );
+  if (!state.allowKicks && state.difficulty !== "easy" && hasLowerBodyLandmarks) {
+    state = { ...state, allowKicks: true };
+  }
 
   if (state.status === "countdown") {
     const latestBody = bodyFrame(snapshot);
@@ -524,66 +537,51 @@ export function advanceMotionGame(
 
   if (snapshot.timestampMs === state.lastPoseTimestamp) return state;
 
-  // Kollisionskontroll mot primärt och sekundärt mål
-  const checkHitOnTarget = (target: MotionGameTarget): boolean => {
-    const isKickTarget = target.kind === "kick";
-    const collisionRadius = target.radius + (isKickTarget ? 0.065 : 0.045);
-
-    // Sparkar: kontrollera fötter och knän
-    if (isKickTarget) {
-      const leftFootHit =
-        leftFoot && state.previousLeftFoot
-          ? pointToSegmentDistance(target, state.previousLeftFoot, leftFoot, state.aspectRatio) <= collisionRadius
-          : false;
-      const rightFootHit =
-        rightFoot && state.previousRightFoot
-          ? pointToSegmentDistance(target, state.previousRightFoot, rightFoot, state.aspectRatio) <= collisionRadius
-          : false;
-      const leftKneeHit =
-        leftKnee && state.previousLeftKnee
-          ? pointToSegmentDistance(target, state.previousLeftKnee, leftKnee, state.aspectRatio) <= collisionRadius
-          : false;
-      const rightKneeHit =
-        rightKnee && state.previousRightKnee
-          ? pointToSegmentDistance(target, state.previousRightKnee, rightKnee, state.aspectRatio) <= collisionRadius
-          : false;
-      if (leftFootHit || rightFootHit || leftKneeHit || rightKneeHit) return true;
-    }
-
-    // Slag: kontrollera händerna
-    const leftHandHit =
-      leftHand && state.previousLeftHand
-        ? pointToSegmentDistance(target, state.previousLeftHand, leftHand, state.aspectRatio) <= collisionRadius
-        : false;
-    const rightHandHit =
-      rightHand && state.previousRightHand
-        ? pointToSegmentDistance(target, state.previousRightHand, rightHand, state.aspectRatio) <= collisionRadius
-        : false;
-    return leftHandHit || rightHandHit;
+  // Kollisionshjälpare för lem mot mål
+  const checkLimbHit = (
+    target: MotionGameTarget,
+    current: MotionGamePoint | null,
+    previous: MotionGamePoint | null,
+    radiusPadding: number,
+  ): boolean => {
+    if (!current) return false;
+    const startPoint = previous ?? current;
+    return pointToSegmentDistance(target, startPoint, current, state.aspectRatio) <= target.radius + radiusPadding;
   };
 
-  let hitTargetA = false;
-  let hitTargetB = false;
+  const checkKickHit = (target: MotionGameTarget): boolean => {
+    const pad = 0.08;
+    const leftFootHit = checkLimbHit(target, leftFoot, state.previousLeftFoot, pad);
+    const rightFootHit = checkLimbHit(target, rightFoot, state.previousRightFoot, pad);
+    const leftKneeHit = checkLimbHit(target, leftKnee, state.previousLeftKnee, pad);
+    const rightKneeHit = checkLimbHit(target, rightKnee, state.previousRightKnee, pad);
+    return leftFootHit || rightFootHit || leftKneeHit || rightKneeHit;
+  };
 
-  if (state.target && checkHitOnTarget(state.target)) {
-    hitTargetA = true;
-  }
-  if (state.secondaryTarget && checkHitOnTarget(state.secondaryTarget)) {
-    hitTargetB = true;
-  }
+  const checkHandHit = (target: MotionGameTarget, hand: "left" | "right"): boolean => {
+    const pad = 0.045;
+    if (hand === "left") {
+      return checkLimbHit(target, leftHand, state.previousLeftHand, pad);
+    }
+    return checkLimbHit(target, rightHand, state.previousRightHand, pad);
+  };
 
-  if (hitTargetA || hitTargetB) {
-    const isDual = (state.target?.kind === "dual" || state.secondaryTarget?.kind === "dual");
-    const resolvedBoth = isDual && (
-      (hitTargetA && hitTargetB) ||
-      (hitTargetA && !state.secondaryTarget) ||
-      (hitTargetB && !state.target)
-    );
-    const isKick = state.target?.kind === "kick" || state.secondaryTarget?.kind === "kick";
+  // Om BÅDA målen i ett dubbelslag är aktiva samtidigt
+  if (state.target && state.secondaryTarget) {
+    const targetA = state.target;
+    const targetB = state.secondaryTarget;
 
-    if (resolvedBoth) {
-      // Dubbelslag helt avklarat!
-      const addedHits = hitTargetA && hitTargetB ? 2 : 1;
+    const leftHitsA = checkHandHit(targetA, "left");
+    const rightHitsA = checkHandHit(targetA, "right");
+    const leftHitsB = checkHandHit(targetB, "left");
+    const rightHitsB = checkHandHit(targetB, "right");
+
+    // Kräver två OLIKA händer (vänster på ena, höger på andra)
+    const simultaneousBoth = (leftHitsA && rightHitsB) || (rightHitsA && leftHitsB);
+
+    if (simultaneousBoth) {
+      // Perfekt simultan träff med båda händerna!
+      const addedHits = 2;
       const combo = state.combo + addedHits;
       const resolvedPunches = state.resolvedPunches + addedHits;
       state = {
@@ -597,30 +595,99 @@ export function advanceMotionGame(
         resolvedPunches,
         duckPending: resolvedPunches % config.duckFrequency === 0,
         nextSpawnAt: nowMs + config.nextSpawnDelayMs,
-        effect: { id: state.spawnIndex + 35_000, type: "double", x: state.body.centerX, y: state.body.shoulderY, at: nowMs },
-      };
-    } else if (isDual) {
-      // En av de två noderna träffades
-      const hitX = hitTargetA ? state.target!.x : state.secondaryTarget!.x;
-      const hitY = hitTargetA ? state.target!.y : state.secondaryTarget!.y;
-      state = {
-        ...state,
-        score: state.score + 120,
-        hits: state.hits + 1,
-        target: hitTargetA ? null : state.target,
-        secondaryTarget: hitTargetB ? null : state.secondaryTarget,
-        effect: { id: state.spawnIndex + 30_000, type: "hit", x: hitX, y: hitY, at: nowMs },
+        effect: {
+          id: state.spawnIndex + 35_000,
+          type: "double",
+          x: state.body.centerX,
+          y: state.body.shoulderY,
+          at: nowMs,
+        },
       };
     } else {
-      // Enkelt mål (vanligt eller kick)
-      const hitX = state.target?.x ?? 0.5;
-      const hitY = state.target?.y ?? 0.5;
+      const hitAWithLeft = leftHitsA;
+      const hitAWithRight = !hitAWithLeft && rightHitsA;
+      const hitA = hitAWithLeft || hitAWithRight;
+
+      const hitBWithRight = rightHitsB;
+      const hitBWithLeft = !hitBWithRight && leftHitsB;
+      const hitB = hitBWithRight || hitBWithLeft;
+
+      if (hitA && !hitB) {
+        // Första noden träffades! Den andra noden MÅSTE träffas med den ANDRA handen
+        // inom ett strikt simultanitetsfönster (280 ms), annars bryts combon med miss!
+        const requiredOtherLimb = hitAWithLeft ? "rightHand" : "leftHand";
+        state = {
+          ...state,
+          score: state.score + 100,
+          hits: state.hits + 1,
+          target: null,
+          secondaryTarget: {
+            ...targetB,
+            requiredLimb: requiredOtherLimb,
+            expiresAt: Math.min(targetB.expiresAt, nowMs + 280),
+          },
+          effect: {
+            id: state.spawnIndex + 30_000,
+            type: "hit",
+            x: targetA.x,
+            y: targetA.y,
+            at: nowMs,
+          },
+        };
+      } else if (hitB && !hitA) {
+        // Motsvarande om nod B träffades först
+        const requiredOtherLimb = hitBWithRight ? "leftHand" : "rightHand";
+        state = {
+          ...state,
+          score: state.score + 100,
+          hits: state.hits + 1,
+          target: {
+            ...targetA,
+            requiredLimb: requiredOtherLimb,
+            expiresAt: Math.min(targetA.expiresAt, nowMs + 280),
+          },
+          secondaryTarget: null,
+          effect: {
+            id: state.spawnIndex + 30_000,
+            type: "hit",
+            x: targetB.x,
+            y: targetB.y,
+            at: nowMs,
+          },
+        };
+      }
+    }
+  } else if (state.target || state.secondaryTarget) {
+    // Endast ett mål aktivt (enkelt slag, spark, eller återstående nod av dubbelslag)
+    const singleTarget = (state.target ?? state.secondaryTarget)!;
+    const isKickTarget = singleTarget.kind === "kick" || singleTarget.requiredLimb === "lowerBody";
+    const isRemainingDual = singleTarget.kind === "dual";
+
+    let hit = false;
+    if (isKickTarget) {
+      // Sparkar accepterar ENDAST fötter och knän — händer ignoreras!
+      hit = checkKickHit(singleTarget);
+    } else if (isRemainingDual && singleTarget.requiredLimb) {
+      // Återstående nod i dubbelslag MÅSTE träffas med den angivna andra handen
+      if (singleTarget.requiredLimb === "leftHand") {
+        hit = checkHandHit(singleTarget, "left");
+      } else if (singleTarget.requiredLimb === "rightHand") {
+        hit = checkHandHit(singleTarget, "right");
+      }
+    } else {
+      // Vanligt slag
+      hit = checkHandHit(singleTarget, "left") || checkHandHit(singleTarget, "right");
+    }
+
+    if (hit) {
       const combo = state.combo + 1;
       const resolvedPunches = state.resolvedPunches + 1;
-      const baseScore = isKick ? 150 : 100;
+      const baseScore = isKickTarget ? 160 : isRemainingDual ? 200 : 100;
+      const effectType = isKickTarget ? "kick" : isRemainingDual ? "double" : "hit";
+
       state = {
         ...state,
-        score: state.score + baseScore + state.combo * 20,
+        score: state.score + baseScore + state.combo * (isRemainingDual ? 30 : 20),
         combo,
         bestCombo: Math.max(state.bestCombo, combo),
         hits: state.hits + 1,
@@ -630,10 +697,10 @@ export function advanceMotionGame(
         duckPending: resolvedPunches % config.duckFrequency === 0,
         nextSpawnAt: nowMs + config.nextSpawnDelayMs,
         effect: {
-          id: state.spawnIndex + 30_000,
-          type: isKick ? "kick" : "hit",
-          x: hitX,
-          y: hitY,
+          id: state.spawnIndex + (isRemainingDual ? 35_000 : 30_000),
+          type: effectType,
+          x: isRemainingDual ? state.body.centerX : singleTarget.x,
+          y: isRemainingDual ? state.body.shoulderY : singleTarget.y,
           at: nowMs,
         },
       };

@@ -339,5 +339,177 @@ describe("motion-game", () => {
     expect(fullHit.hits).toBe(2);
     expect(fullHit.effect?.type).toBe("double"); // completes double strike!
   });
+
+  it("rejects hand punches on a kick target", () => {
+    const initial = startMotionGame(pose(1), 0, 16 / 9, { allowKicks: true, difficulty: "medium" })!;
+    const running = advanceMotionGame(initial, pose(2), MOTION_GAME_COUNTDOWN_MS);
+
+    const kickTarget = {
+      id: 99,
+      x: 0.45,
+      y: 0.75,
+      radius: 0.1,
+      spawnedAt: 1_000,
+      expiresAt: 4_000,
+      kind: "kick" as const,
+    };
+    const armedState = {
+      ...running,
+      target: kickTarget,
+      previousLeftHand: { x: 0.45, y: 0.6 },
+    };
+
+    // Left hand moves right onto the kick target (punches it with fist)
+    const handPunchPose = pose(3, {
+      15: { x: 0.45, y: 0.75, visibility: 0.95 },
+    });
+
+    const afterPunch = advanceMotionGame(armedState, handPunchPose, 1_050);
+    // Hand punch must NOT hit the kick target
+    expect(afterPunch.target).not.toBeNull();
+    expect(afterPunch.hits).toBe(0);
+    expect(afterPunch.effect).toBeNull();
+  });
+
+  it("awards immediate double strike when both hands hit simultaneously in the same frame", () => {
+    const initial = startMotionGame(pose(1), 0, 16 / 9, { difficulty: "medium" })!;
+    const running = advanceMotionGame(initial, pose(2), MOTION_GAME_COUNTDOWN_MS);
+
+    const dualState = {
+      ...running,
+      target: {
+        id: 101,
+        x: 0.25,
+        y: 0.4,
+        radius: 0.08,
+        spawnedAt: 1_000,
+        expiresAt: 4_000,
+        kind: "dual" as const,
+      },
+      secondaryTarget: {
+        id: 102,
+        x: 0.75,
+        y: 0.4,
+        radius: 0.08,
+        spawnedAt: 1_000,
+        expiresAt: 4_000,
+        kind: "dual" as const,
+      },
+      previousLeftHand: { x: 0.2, y: 0.4 },
+      previousRightHand: { x: 0.8, y: 0.4 },
+    };
+
+    // Both hands land on their respective nodes in the same frame
+    const bothHitPose = pose(3, {
+      15: { x: 0.25, y: 0.4, visibility: 0.95 }, // left hand on target A
+      16: { x: 0.75, y: 0.4, visibility: 0.95 }, // right hand on target B
+    });
+
+    const result = advanceMotionGame(dualState, bothHitPose, 1_040);
+    expect(result.target).toBeNull();
+    expect(result.secondaryTarget).toBeNull();
+    expect(result.hits).toBe(2);
+    expect(result.combo).toBe(2);
+    expect(result.effect?.type).toBe("double");
+  });
+
+  it("rejects the same hand attempting to hit both dual targets sequentially", () => {
+    const initial = startMotionGame(pose(1), 0, 16 / 9, { difficulty: "medium" })!;
+    const running = advanceMotionGame(initial, pose(2), MOTION_GAME_COUNTDOWN_MS);
+
+    const dualState = {
+      ...running,
+      target: {
+        id: 101,
+        x: 0.25,
+        y: 0.4,
+        radius: 0.08,
+        spawnedAt: 1_000,
+        expiresAt: 4_000,
+        kind: "dual" as const,
+      },
+      secondaryTarget: {
+        id: 102,
+        x: 0.75,
+        y: 0.4,
+        radius: 0.08,
+        spawnedAt: 1_000,
+        expiresAt: 4_000,
+        kind: "dual" as const,
+      },
+      previousLeftHand: { x: 0.2, y: 0.4 },
+      previousRightHand: { x: 0.9, y: 0.8 },
+    };
+
+    // Step 1: Left hand hits left target A
+    const hitTargetAPose = pose(3, {
+      15: { x: 0.25, y: 0.4, visibility: 0.95 },
+    });
+    const afterHitA = advanceMotionGame(dualState, hitTargetAPose, 1_040);
+    expect(afterHitA.target).toBeNull();
+    expect(afterHitA.secondaryTarget?.requiredLimb).toBe("rightHand");
+
+    // Step 2: User tries to hit target B with the SAME left hand!
+    const tryHitBWithLeftHand = pose(4, {
+      15: { x: 0.75, y: 0.4, visibility: 0.95 }, // Left hand on target B
+      16: { x: 0.9, y: 0.8, visibility: 0.9 },   // Right hand idle
+    });
+    const afterTrySameHand = advanceMotionGame(afterHitA, tryHitBWithLeftHand, 1_080);
+    // Target B must NOT be hit by the left hand
+    expect(afterTrySameHand.secondaryTarget).not.toBeNull();
+    expect(afterTrySameHand.hits).toBe(1); // Still only 1 hit
+  });
+
+  it("expires remaining dual target and breaks combo if not hit within tight simultaneity window", () => {
+    const initial = startMotionGame(pose(1), 0, 16 / 9, { difficulty: "medium" })!;
+    const running = advanceMotionGame(initial, pose(2), MOTION_GAME_COUNTDOWN_MS);
+
+    const dualState = {
+      ...running,
+      combo: 3,
+      target: {
+        id: 101,
+        x: 0.25,
+        y: 0.4,
+        radius: 0.08,
+        spawnedAt: 1_000,
+        expiresAt: 4_000,
+        kind: "dual" as const,
+      },
+      secondaryTarget: {
+        id: 102,
+        x: 0.75,
+        y: 0.4,
+        radius: 0.08,
+        spawnedAt: 1_000,
+        expiresAt: 4_000,
+        kind: "dual" as const,
+      },
+      previousLeftHand: { x: 0.2, y: 0.4 },
+      previousRightHand: { x: 0.9, y: 0.8 },
+    };
+
+    // Step 1: Hit left target at 1_040ms
+    const hitTargetAPose = pose(3, {
+      15: { x: 0.25, y: 0.4, visibility: 0.95 },
+    });
+    const afterHitA = advanceMotionGame(dualState, hitTargetAPose, 1_040);
+    expect(afterHitA.secondaryTarget?.expiresAt).toBe(1_040 + 280); // 1_320ms
+
+    // Step 2: 300ms pass without hitting second target (current time: 1_340ms)
+    const idlePose = pose(4, {
+      15: { x: 0.2, y: 0.8, visibility: 0.9 },
+      16: { x: 0.8, y: 0.8, visibility: 0.9 },
+    });
+    const afterTimeout = advanceMotionGame(afterHitA, idlePose, 1_340);
+
+    // Target has expired as a miss!
+    expect(afterTimeout.target).toBeNull();
+    expect(afterTimeout.secondaryTarget).toBeNull();
+    expect(afterTimeout.combo).toBe(0); // Combo broken!
+    expect(afterTimeout.misses).toBe(1);
+    expect(afterTimeout.effect?.type).toBe("miss");
+  });
 });
+
 

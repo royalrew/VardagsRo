@@ -1747,7 +1747,7 @@ export function MotionLab() {
     const diff = difficultyRef.current;
     const game = startMotionGame(snapshot, performance.now(), canvas.width / canvas.height, {
       difficulty: diff,
-      allowKicks: fullBodyVisibleRef.current,
+      allowKicks: diff !== "easy" || fullBodyVisibleRef.current || hasUsableFullBody(snapshot.landmarks),
     });
     if (!game) {
       setError("Kunde inte läsa båda axlarna. Vänd dig mot kameran och försök igen.");
