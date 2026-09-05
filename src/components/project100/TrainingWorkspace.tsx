@@ -16,6 +16,7 @@ import {
   MapPin,
   Mountain,
   Plus,
+  ScanLine,
   Search,
   SkipForward,
   Sparkles,
@@ -26,6 +27,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -1053,6 +1055,9 @@ export function TrainingWorkspace({
       <header className="p100-page-head p100-training-head">
         <div><span>Bygg · mät · förstå</span><h1>Träning</h1><p>Planera runt verkligheten, logga vad som faktiskt hände och bygg ett minne som går att lära av.</p></div>
         <div className="p100-head-actions">
+          <Link className="p100-button-secondary" href="/projekt-100/traning/motion">
+            <ScanLine /> Motion Lab
+          </Link>
           <button
             type="button"
             className="p100-button p100-button-run"

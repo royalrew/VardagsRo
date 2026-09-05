@@ -16,14 +16,14 @@
 3. **Förtjänad progression (Earned RPG Stats):**  
    Du kan inte köpa *Strength 25* eller *Stamina 50* med mikrotransaktioner. Du måste förtjäna det genom fysisk ansträngning i verkliga livet.
 4. **Respekt för latens ("Motion-to-Photon"):**  
-   Ett rörelsebaserat spel lever och dör med latensen. Målet är under 30 ms upplevd responstid.
+   Ett rörelsebaserat spel lever och dör med latensen. Vi mäter hela kedjan i stället för att lova ett orealistiskt totalvärde: spelmotorn ska reagera inom en render-frame efter senaste pose-snapshot, medan faktisk motion-to-photon redovisas som p50/p95 per hårdvaruläge. Första HDMI-budgeten är p50 ≤ 80 ms och p95 ≤ 120 ms; Gate A får skärpa eller justera budgeten utifrån uppmätt kamera-, inferens- och displaylatens.
 
 ---
 
 ## 2. Teknisk Arkitektur & Kärnprinciper
 
 ### A. Trådseparation via Web Worker
-MediaPipes synkrona `detectForVideo()` får aldrig ligga på UI-tråden:
+MediaPipes synkrona `detectForVideo()` får aldrig ligga på UI-tråden. Worker-gränsen införs redan i den första kärnloopen och behålls när motorn härdas:
 ```
 [ WEBBKAMERA (Capture) ]
          │
@@ -44,7 +44,7 @@ För att stoppa *tunneling* (att en snabb knytnäve i 2 000 px/s teleporteras f�
 $$\text{Avstånd från målets mittpunkt till linjesegmentet } \le (r_{\text{hand}} + r_{\text{target}})$$
 
 ### C. Nätverkseffektiv iPhone-sensor
-När iPhonen används som trådlös kamera över LAN (WebRTC/WebSocket) skickas **landmarks och tidsstämplar** istället för råvideoström. Det sparar 99% bandbredd och minimerar nätverkslagg.
+När iPhonen används som trådlös kamera över LAN (WebRTC/WebSocket) skickas **landmarks och tidsstämplar** istället för råvideoström. Det minskar bandbredden kraftigt och håller videon lokal; faktisk KB/s och nätverkslatens ska mätas i Gate F i stället för att anges som en oprövad procentsats.
 
 ---
 
@@ -55,7 +55,7 @@ När iPhonen används som trådlös kamera över LAN (WebRTC/WebSocket) skickas 
 
 | Steg | Mål | Bygg / Ändra | Test | Godkänt när | Hårdvara / Läge | Primärt mätetal | Blockerar? |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: |
-| **1** | Bestäm första kärnloopen | Skapa minimal webbapp: kamera $\rightarrow$ pose $\rightarrow$ overlay $\rightarrow$ logg. Ingen AI-coach ännu. | Öppna appen 10 gånger från kall start. | Kamera och app startar korrekt minst 9/10 gånger. | Dator + kamera | Startfel | **JA** |
+| **1** | Bestäm första kärnloopen | Skapa isolerad Motion Lab: kamera $\rightarrow$ `ImageBitmap` $\rightarrow$ pose i worker $\rightarrow$ snapshot $\rightarrow$ overlay + lokal landmark-logg. Ingen AI-coach ännu. | Öppna appen 10 gånger från kall start. | Kamera och app startar korrekt minst 9/10 gånger; posearbete blockerar inte UI-tråden. | Dator + kamera | Startfel | **JA** |
 | **2** | Lås målplattform | Dokumentera målsetup: dator som compute, Smart TV som display, iPhone som senare sensor. | Kör igenom fysisk setup i vardagsrummet. | Det finns en realistisk plats för iPhone/kamera där hela kroppen syns. | Dator + Smart TV + iPhone | Synfält | NEJ |
 | **3** | Låg-latens display | Koppla datorn till Smart TV med HDMI som referensläge. Aktivera TV:ns Game Mode om tillgängligt. | Filma handrörelse + skärm i slow motion. | HDMI-läget känns omedelbart och används som latency-baseline. | Dator + Smart TV | Displaylatens | **JA** |
 | **4** | Trådlös TV-baseline | Testa trådlös skärmspegling/cast som jämförelse, om TV:n stöder det. | Samma slow-motion-test som HDMI. | Latensen är dokumenterad; trådlöst klassas som OK/ej OK för realtid. | Dator + Smart TV | Displaylatens | NEJ |
@@ -73,16 +73,23 @@ När iPhonen används som trådlös kamera över LAN (WebRTC/WebSocket) skickas 
 
 | Steg | Mål | Bygg / Ändra | Test | Godkänt när | Hårdvara / Läge | Primärt mätetal | Blockerar? |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: |
-| **11** | Första pose | Integrera MediaPipe Pose Landmarker Lite. | Stå i helbild och rita 33 landmarks. | Kroppen hittas inom 2 sekunder och följs stabilt. | Dator + kamera | Detection | **JA** |
+| **11** | Pose-baseline | Stabilisera MediaPipe Pose Landmarker Lite från Motion Lab och lås modell/runtime-version. | Stå i helbild och rita 33 landmarks i varierat ljus. | Kroppen hittas inom 2 sekunder och följs stabilt; vald modell och runtime är reproducerbara. | Dator + kamera | Detection | **JA** |
 | **12** | GPU-delegate | Aktivera GPU-delegate där den stöds och logga fallback. | Jämför CPU vs GPU i 5 min vardera. | Snabbaste stabila läget väljs automatiskt eller via config. | Dator | Inferens p95 | NEJ |
 | **13** | Video/live mode | Använd video/live-stream-läge med monotona timestamps. | Snabba rörelser i 2 min. | Inga timestamp-fel; tracking tappar inte kroppen onödigt. | Dator | Dropped poses | **JA** |
-| **14** | Worker-arkitektur | Flytta tung posebearbetning från UI-tråden till worker där praktiskt möjligt. | Kör partiklar/animation samtidigt. | Render håller nära 60 FPS även när pose körs. | Dator | Render FPS | **JA** |
+| **14** | Härda worker-arkitektur | Belastningstesta och härda worker-gränsen från Steg 1, inklusive backpressure, återstart och CPU-fallback. | Kör partiklar/animation samtidigt och simulera worker-fel. | Render håller nära 60 FPS även när pose körs och motorn kan återhämta sig utan sidladdning. | Dator | Render FPS | **JA** |
 | **15** | Separata loopar | Kör render 60 Hz och pose så snabbt stabilt som möjligt utan blockering. | Logga 10 min. | Render-FPS påverkas inte tydligt av variationer i pose-Hz. | Dator | Render/pose Hz | **JA** |
 | **16** | Confidence-filter | Ignorera eller markera landmarks med låg confidence. | Dölj arm delvis bakom kroppen. | Inga extrema hopp används som sanna positioner. | Dator + kamera | Outlier-rate | NEJ |
 | **17** | Smoothing | Inför lätt adaptiv smoothing som minskar jitter utan stor fördröjning. | Håll handen still, sedan slå snabbt. | Stillbild jitter minskar men snabb rörelse känns fortsatt responsiv. | Dator | Jitter/lag | **JA** |
 | **18** | Prediktion | Beräkna velocity och kort extrapolering för händer/leder. | Snabba jabbar framför kamera. | Prediktion minskar upplevt släp utan tydlig overshoot. | Dator | Pred error | NEJ |
 | **19** | Person i rätt zon | Skapa guidesilhuett och automatisk avstånd/centreringsfeedback. | Stå för nära, för långt, åt sidan. | Appen ger rätt instruktion i minst 9/10 testfall. | Dator + Smart TV | Framing accuracy | NEJ |
 | **20** | **GATE B** | Benchmark pose-motorn. | 10 min squat/slag/duck-rörelser. | Pose stabil; p95 inferens inom acceptabel nivå; render ~60 FPS. | Dator + Smart TV | p95/FPS | **GATE** |
+
+---
+
+### Checkpoint B+: Tidig spelkänsla
+*Mål: Avriskera produktens löfte innan coach- och squatdjup byggs färdigt. Checkpointen ersätter inte RPG-prototypen i Steg 88.*
+
+Bygg en kastbar femminuters micro-loop med enkla handledsmål och duck-zon ovanpå pose-snapshots. Spela minst tio rundor i HDMI-referensläget. Dokumentera motion-to-photon p50/p95, missade/falska träffar och en enkel kvalitativ dom: **kul**, **nära** eller **inte ännu**. Om upplevelsen inte når minst *nära* prioriteras latency, feedback och collision-känsla före fler coachfunktioner.
 
 ---
 
@@ -206,7 +213,7 @@ När iPhonen används som trådlös kamera över LAN (WebRTC/WebSocket) skickas 
 | **85** | Coach-A/B | Jämför "repräknare" mot "levande coach" på samma pass. | Minst 5 användare ger preferens + kommentar. | Levande coach vinner tydligt eller förbättras innan vidare satsning. | Alla | Preference | **GATE** |
 | **86** | Retention-signal | Låt liten betagrupp använda 2 veckor. | Mät hur många som frivilligt gör flera pass. | Det finns verklig återanvändning, inte bara wow första gången. | Alla | Repeat sessions | **GATE** |
 | **87** | XP-lager | Lägg XP, nivåer, streaks och achievements utan att ändra coachkvalitet. | 2 veckors användning. | Gamification ökar motivation utan att skapa konstiga träningsincitament. | Smart TV | Engagement | NEJ |
-| **88** | RPG-prototyp | Återanvänd samma motion engine: squat/duck/punch som 5-min bossfight. | Spela 10 rundor. | Rörelser känns responsiva och bossfighten är rolig utan extra sensorer. | iPhone + dator + Smart TV | Fun/latency | NEJ |
+| **88** | Full RPG-prototyp | Förädla lärdomarna från Checkpoint B+ till en 5-min bossfight med squat/duck/punch, telegraphs, HP och feedback. | Spela 10 rundor. | Rörelser känns responsiva, reglerna är begripliga och bossfighten är rolig utan extra sensorer. | iPhone + dator + Smart TV | Fun/latency | NEJ |
 | **89** | Produktval | Jämför tre erbjudanden: AI PT, AI PT + gamification, Motion RPG. | Intervjua/testa med riktiga användare. | Välj spår utifrån retention/betalningsvilja, inte magkänsla. | Alla | Retention/WTP | **GATE** |
 | **90** | **GATE I / v1** | Frys första publika v1-scope och ta bort allt som inte behövs. | Kör release candidate i 7 dagar. | Stabil, begriplig, mätbar produkt med tydlig kärnnytta och inga blockerande fel. | Dator + iPhone + Smart TV | Crash/retention | **FINAL GATE** |
 
@@ -214,6 +221,25 @@ När iPhonen används som trådlös kamera över LAN (WebRTC/WebSocket) skickas 
 
 ## 4. Nuvarande Position
 
-* **Aktiv fas:** Fas A (Grund & Mätning)
-* **Aktuellt steg:** **Steg 1 (Bestäm första kärnloopen)**
-* **Mål för Steg 1:** Skapa en minimal webbapp (`kamera → pose → overlay → logg`). Inga AI-coacher eller bossar än. Kallstartstest 10 gånger med $\ge 9/10$ godkända starter.
+* **Aktiv fas:** Fas A Gate A följs långsiktigt; Fas B (Pose-motor) är tekniskt godkänd och nästa bygge går vidare till Fas C.
+* **Senast godkända steg:** **Steg 20 (GATE B)** — godkänt 2026-09-05 efter ett komplett 10-minuterstest i vardagsrumssetup med 6/6 automatiska kvalitetskontroller.
+* **Aktuellt steg:** **Steg 21–22 (iPhone-kamerakälla och WebRTC-prototyp)**, utan att ersätta det fungerande dator/HDMI-läget.
+* **Levererat i mjukvara:** Automatisk treminutersbaseline med versionsmärkt, guidat fram-/sidoprotokoll som mäter capture, pose, pose-pipeline, första render, tappade frames, kropp-i-bild och ljus samt exporterar ett reproducerbart lokalt JSON-kvitto utan råvideo.
+* **Första fulla baseline 2026-09-04:** 640×480/GPU i 180 s gav capture 29,9 FPS, pose 16,2 Hz, första render p95 55,2 ms och bra ljus. Helkropp 57,3 % visade att ren sidoprofil gav benöverlapp och att TV-kameran inte täcker golvarmhävningar.
+* **Protokollbeslut:** `guided-living-room-v2` använder svensk röstguidning, sju sekunders förvarning, 45° squat i stället för ren sidoprofil och stående utfall/sidosteg i stället för golvarmhävningar. Golvövningar får senare ett separat kameraprofiltest.
+* **V2 verifierad 2026-09-04:** 640×480/GPU i 180 s gav capture 29,9 FPS, första render p95 55,1 ms och helkropp 96,6 % (+39,3 procentenheter). Tre av fyra automatiska kvalitetskontroller passerade; kvarvarande flaskhals är pose 16,2 Hz mot målet 20 Hz. Protokollet fryses som aktuell vardagsrumsbaseline.
+* **Upplösningsbeslut 2026-09-04:** 1280×720 gav ingen latency- eller posevinst mot 640×480 (29,2 capture FPS, 15,9 pose-Hz, första render p95 55,2 ms, helkropp 94,9 %). Efter de första 20 sekundernas uppställning var helkropp och capture 100 % respektive cirka 29,9 FPS i samtliga rörelsefaser. **640×480 låses som standardläge** för lägre resurskostnad och bättre vertikalt synfält; 1280×720 behålls som valbart kvalitets-/diagnostikläge.
+* **Displayreferens:** Smart TV är bekräftad ansluten via HDMI. TV:n saknar valbart spelläge, så en eventuell framtida slow-motion-mätning görs i dess vanliga HDMI-bildläge och räknar in TV:ns bildbehandling.
+* **Latencybeslut:** Manuellt slow-motion-test är frivilligt och blockerar inte fortsatt bygge. HDMI-upplevelsen är kvalitativt 10/10 och den uppmätta webbläsarpipelinen har första render p95 cirka 55 ms; verklig total TV-latens får mätas senare om ett konkret problem uppstår.
+* **Pose guard levererad:** Confidence-filter och adaptiv temporal smoothing körs i pose-workern. Kort låg-confidence hålls i högst 120 ms, anatomiskt orimliga språng hastighetsbegränsas och händer får snabbare filterrespons än bål/ben. Korrigeringsandelar visas live och sparas i baseline-rapporten. Steg 16–17 godkänns först efter kvalitativ kontroll i bossfight och squat-rörelse.
+* **Timestamp-härdning 2026-09-05:** MediaPipes VIDEO-flöde normaliserar kamerans tidsstämplar till strikt stigande heltalsmillisekunder med minst 1 ms mellan anrop. Det stänger ett observerat flyttalsfall där två WASM-paket annars fick samma mikrosekundstämpel och stoppade grafen. Ett eventuellt återfall visas som en kort återstartsuppmaning i stället för intern MediaPipe-diagnostik.
+* **Worker-återhämtning levererad 2026-09-05:** Vid ett worker- eller MediaPipe-fel behålls kameran och renderloopen, pose-workern startas automatiskt om högst tre gånger med 0,4/0,8/1,6 sekunders backoff och spelklocka, aktiva mål och duckattacker pausas rättvist under avbrottet. TV-vyn visar återanslutningsförsök; efter 30 stabila poseframes nollställs felbudgeten. Först efter tre misslyckade återstarter krävs manuell kamerastart. Gate A-panelen har ett avsiktligt lokalt återstartstest som verifierar hela flödet utan att invänta ett slumpmässigt fel.
+* **16 Hz-profil 2026-09-05:** De två befintliga treminutersrapporterna visar att flaskhalsen är MediaPipe-inferensen, inte upplösning eller workertransport: 640×480 gav inferens p95 53,1 ms av pipeline p95 54,4 ms; 1280×720 gav 54,0 av 55,1 ms. Workern använder nu callback-överlagringen som den installerade MediaPipe-versionen anger för hög genomströmning, och livepanelen särredovisar bildförberedelse samt återstående överförings-/schemaläggningsoverhead.
+* **30-sekundersprofil levererad:** Livepanelen har nu en separat automatisk profil med egna, icke-rullande räknare. Den fryser efter 30 sekunder och kan kopieras eller laddas ned som JSON med periodens genomsnittliga Capture/Pose/Render, tappade frames samt p50/p95 för inferens, bildprep, övrig overhead, pipeline och första render.
+* **Första 30-sekundersprofilen 2026-09-05:** 640×480/GPU gav capture 26,4 FPS, pose 15,8 Hz, inferens p50/p95 39,3/49,6 ms, pipeline p50/p95 40,3/51,5 ms och 317 tappade av 792 kameraframes. Eftersom bildprep och övrig overhead vardera låg under 1 ms men `captures − poses = dropped`, identifierades en faslåsning i backpressure-loopen: senaste observerade kameraframe markerades som tappad och motorn väntade därefter på ännu en frame trots att workern redan var ledig.
+* **Senaste-frame-buffer levererad:** Capture-loopen behåller nu exakt en väntande kameraframe och skickar den direkt när workern blir ledig; endast en äldre väntande frame som faktiskt ersätts räknas som tappad. Detta ska utnyttja inferensens uppmätta teoretiska kapacitet på cirka 20–25 Hz utan växande kö eller extra latens.
+* **Senaste-frame-buffer verifierad 2026-09-05:** Samma 640×480/GPU-profil ökade pose från 15,8 till **22,1 Hz** (+40 %) och minskade tappade frames från 317/792 till **160/822**. Inferens p50/p95 var fortsatt stabil på 38,7/48,2 ms och första render p95 69,5 ms, alltså väl under HDMI-budgeten 120 ms. Pose-målet ≥20 Hz är därmed passerat utan CPU-jämförelse.
+* **Profiler v2 levererad:** Buffertväntan och verklig `createImageBitmap`-preparering mäts nu separat; tidigare v1-värde för “Bildprep” efter senaste-frame-bufferten innehöll båda delarna. JSON-rapporten är versionshöjd och redovisar även worker-omstarter samt sex automatiska kvalitetskontroller. Motion Lab erbjuder både en snabb 30-sekundersprofil och ett komplett 10-minuters `gate-b-10m-v1` med sju sekunders starttid, stor TV-HUD och svensk röstväxling mellan slag, knäböj, duckningar och blandad rörelse.
+* **Gate B godkänd 2026-09-05:** Ett komplett `gate-b-10m-v1` i 640×480/GPU över 600,0 s gav capture **29,9 FPS**, pose **23,2 Hz**, render **119,3 FPS**, inferens p50/p95 **39,1/47,4 ms**, pose-pipeline p50/p95 **54,9/69,8 ms** och första render p50/p95 **55,5/69,5 ms**. Buffertväntan p95 var 26,1 ms medan faktisk bildprep och övrig overhead bara var 1,2 respektive 0,5 ms. Samtliga sex automatiska kontroller passerade och inga worker-omstarter inträffade under 13 918 poseframes. **Gate B och steg 10–20 markeras godkända.**
+* **Nästa checkpoint:** Bevara dator/HDMI som referens och prototypa Fas C:s valbara iPhone-kamerakälla via lokal WebRTC. Den får inte försämra eller blockera det nu godkända direktkameraläget.
+* **Tidig B+-prototyp:** En frivillig 60-sekunders micro-bossfight med kroppskalibrerade slagmål, swept collision, duck-attacker, poäng/combo/liv och lokal ljudfeedback är implementerad i Motion Lab. Arena-röst v1 ger disciplinerade svenska cues vid start, duck, combo-milstolpar, skada, halvtid, slutspurt och resultat; prioriterade cues bryter eventuell tal-kö. Starten kräver bara en spelbar överkroppspose (huvud och axlar; ben är valfria), tolererar korta enbildstapp, ger sju sekunder för att gå till spelpositionen, räknar ned 3–2–1 med röst och kalibrerar kroppen kontinuerligt fram till start. Varje duckattack livekalibreras strax ovanför spelarens aktuella axelhöjd, ger 2,35 sekunders reaktionstid och godkänns antingen när huvudet passerar linjen eller när axlarna tydligt sänks. Slagmål växlar deterministiskt mellan breda sidomål, låga mål och höga mål; avstånd, höjd, storlek och tidsfönster är kroppskalibrerade för att framtvinga sidoförflyttning, knäböj och sträckning i stället för stillastående räckvidd. Målorden `SIDAN`, `NER` och `UPP` mot-spegelvänds vid canvasritning så att de är rättvända för spelaren trots speglad kamera. Familjens första kvalitativa TV-test fick omdömet 10/10; checkpointen markeras formellt godkänd först när 10 riktiga rundor har utvärderats.
