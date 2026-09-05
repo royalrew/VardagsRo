@@ -6596,7 +6596,7 @@ button.event-row:hover {
   .p100-sidebar.open { transform: translateX(0); }
   .p100-brand > button { display: grid; place-items: center; }
   .p100-scrim { position: fixed; inset: 0; z-index: 45; display: block; background: rgba(0,0,0,.62); }
-  .p100-workspace { margin-left: 0; }
+  .p100-workspace { width: 100%; min-width: 0; max-width: 100%; margin-left: 0; overflow-x: clip; }
   .p100-topbar { grid-template-columns: auto 1fr auto; padding: 0 15px; gap: 11px; }
   .p100-menu-button { display: grid; width: 35px; height: 35px; place-items: center; }
   .p100-menu-button svg { width: 20px; }
@@ -9418,7 +9418,7 @@ button.event-row:hover {
 /* Motion Lab · en avskild, TV-läsbar experimentyta för kamerans råa
    pose-snapshots. Videon och overlayn speglas med samma transform så att
    rörelsen beter sig som en vardagsrumsspegel. */
-.p100-motion-lab { display: flex; flex-direction: column; gap: 18px; }
+.p100-motion-lab { display: flex; width: 100%; min-width: 0; max-width: 100%; overflow-x: clip; flex-direction: column; gap: 18px; }
 .p100-motion-head { margin-bottom: 4px; }
 .p100-motion-head .p100-head-actions { flex-wrap: wrap; justify-content: flex-end; }
 .p100-spin { animation: hq-spin .8s linear infinite; }
@@ -9426,7 +9426,12 @@ button.event-row:hover {
 .p100-button-bossfight:hover:not(:disabled) { background: #9bebf8; box-shadow: 0 0 28px rgba(99,223,244,.24); }
 .p100-button-bossfight:disabled { opacity: .42; cursor: not-allowed; }
 
-.p100-motion-grid { display: grid; grid-template-columns: minmax(0, 1fr) 290px; align-items: start; gap: 18px; }
+.p100-motion-grid { display: grid; width: 100%; min-width: 0; max-width: 100%; grid-template-columns: minmax(0, 1fr) 290px; align-items: start; gap: 18px; }
+.p100-motion-grid > *,
+.p100-motion-sidebar,
+.p100-motion-panel,
+.p100-motion-recording,
+.p100-motion-baseline { min-width: 0; max-width: 100%; }
 .p100-motion-stage {
   position: relative;
   overflow: hidden;
@@ -9736,6 +9741,9 @@ button.event-row:hover {
   .p100-motion-baseline-hud-instruction, .p100-motion-profile-hud-instruction { min-height: 70px; }
   .p100-motion-baseline-done { padding: 20px 14px; }
   .p100-motion-sidebar { grid-template-columns: 1fr; }
+  .p100-motion-panel, .p100-motion-recording, .p100-motion-baseline { width: 100%; }
+  .p100-motion-panel *, .p100-motion-recording *, .p100-motion-baseline * { min-width: 0; }
+  .p100-motion-profile-result span, .p100-motion-error > span, .p100-motion-recovery > span { overflow-wrap: anywhere; }
   .p100-motion-profiler-actions { grid-template-columns: 1fr; }
   .p100-motion-recording { align-items: stretch; flex-direction: column; }
   .p100-motion-recording-actions { justify-content: stretch; }
