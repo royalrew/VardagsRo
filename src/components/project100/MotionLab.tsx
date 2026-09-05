@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 
 import {
   motionArenaCue,
@@ -43,6 +44,7 @@ import {
   hasUsableFullBody,
   motionBaselinePhase,
   motionWorkerRetryDelayMs,
+  nextMotionTimestampMs,
   registerColdStartAttempt,
   registerColdStartSuccess,
   scheduleMotionVideoFrame,
@@ -51,6 +53,7 @@ import {
   type MotionBaselineSample,
   type MotionColdStartStats,
   type MotionFrameSchedulerState,
+  type MotionLandmark,
   type MotionPoseSnapshot,
   type MotionPerformanceProfileReport,
   type MotionRecordedFrame,
@@ -66,6 +69,7 @@ import {
   type MotionGameEffect,
   type MotionGameState,
 } from "@/lib/motion-game";
+import { MotionLandmarkStabilizer } from "@/lib/motion-stabilizer";
 
 const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const MODEL_ASSET =
@@ -81,6 +85,7 @@ const DARK_LUMINANCE_THRESHOLD = 45;
 type EngineStatus = "idle" | "requesting" | "loading" | "running" | "recovering" | "error";
 type Resolution = "640x480" | "1280x720";
 type PerformanceProfileMode = "quick" | "gate-b";
+type PoseExecutionMode = "worker" | "main-thread";
 
 interface GateBPhase {
   id: string;
@@ -104,6 +109,12 @@ const GATE_B_PHASES: readonly GateBPhase[] = [
 function gateBPhase(elapsedMs: number): GateBPhase {
   return GATE_B_PHASES.find((phase) => elapsedMs >= phase.startsAtMs && elapsedMs < phase.endsAtMs)
     ?? GATE_B_PHASES[GATE_B_PHASES.length - 1];
+}
+
+function needsMainThreadPose(): boolean {
+  const navigatorWithPlatform = navigator as Navigator & { platform?: string };
+  return /iPad|iPhone|iPod/i.test(navigator.userAgent)
+    || (navigatorWithPlatform.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
 interface MotionMetrics {
@@ -354,6 +365,10 @@ export function MotionLab() {
   const replayProgressRef = useRef<HTMLProgressElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const workerRef = useRef<Worker | null>(null);
+  const mainThreadPoseRef = useRef<PoseLandmarker | null>(null);
+  const mainThreadStabilizerRef = useRef(new MotionLandmarkStabilizer());
+  const mainThreadLastTimestampRef = useRef(-1);
+  const poseExecutionModeRef = useRef<PoseExecutionMode>("worker");
   const audioContextRef = useRef<AudioContext | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const replayFrameRef = useRef<number | null>(null);
@@ -430,6 +445,7 @@ export function MotionLab() {
   const [cameraAspectRatio, setCameraAspectRatio] = useState<number | null>(null);
   const [changingResolution, setChangingResolution] = useState(false);
   const [delegate, setDelegate] = useState<"GPU" | "CPU" | null>(null);
+  const [poseExecutionMode, setPoseExecutionMode] = useState<PoseExecutionMode>("worker");
   const [poseVisible, setPoseVisible] = useState(false);
   const [fullBodyVisible, setFullBodyVisible] = useState(false);
   const [luminance, setLuminance] = useState<number | null>(null);
@@ -439,6 +455,7 @@ export function MotionLab() {
   const [recordingData, setRecordingData] = useState<MotionRecording | null>(null);
   const [replaying, setReplaying] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [fullscreenAvailable, setFullscreenAvailable] = useState(false);
   const [gameView, setGameView] = useState<MotionGameState | null>(null);
   const [coldStarts, setColdStarts] = useState<MotionColdStartStats>({ attempts: 0, successes: 0 });
   const [baselineRunning, setBaselineRunning] = useState(false);
@@ -501,6 +518,11 @@ export function MotionLab() {
     workerRef.current?.postMessage({ type: "dispose" });
     workerRef.current?.terminate();
     workerRef.current = null;
+    mainThreadPoseRef.current?.close();
+    mainThreadPoseRef.current = null;
+    mainThreadStabilizerRef.current.reset();
+    mainThreadLastTimestampRef.current = -1;
+    poseExecutionModeRef.current = "worker";
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) {
@@ -516,6 +538,7 @@ export function MotionLab() {
     if (updateUi) {
       setStatus("idle");
       setDelegate(null);
+      setPoseExecutionMode("worker");
       setActualResolution(null);
       setCameraAspectRatio(null);
       setChangingResolution(false);
@@ -535,6 +558,7 @@ export function MotionLab() {
     };
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     const hydrationFrame = requestAnimationFrame(() => {
+      setFullscreenAvailable(Boolean(document.fullscreenEnabled));
       const stored = parseStoredColdStarts();
       coldStartRef.current = stored;
       setColdStarts(stored);
@@ -549,6 +573,7 @@ export function MotionLab() {
       if (workerRestartTimerRef.current !== null) clearTimeout(workerRestartTimerRef.current);
       workerGenerationRef.current += 1;
       workerRef.current?.terminate();
+      mainThreadPoseRef.current?.close();
       streamRef.current?.getTracks().forEach((track) => track.stop());
       void audioContextRef.current?.close();
       window.speechSynthesis?.cancel();
@@ -802,6 +827,66 @@ export function MotionLab() {
     }
   }
 
+  function acceptPoseSnapshot(snapshot: MotionPoseSnapshot) {
+    inferencePendingRef.current = false;
+    workerStablePosesRef.current += 1;
+    if (workerStablePosesRef.current >= 30) workerRestartAttemptsRef.current = 0;
+
+    const receivedAtMs = performance.now();
+    snapshotRef.current = snapshot;
+    if (canStartMotionGame(snapshot)) {
+      recentGamePoseRef.current = { snapshot, receivedAtMs };
+    }
+    const visible = snapshot.landmarks.length === 33;
+    if (visible !== poseVisibleRef.current) {
+      poseVisibleRef.current = visible;
+      setPoseVisible(visible);
+    }
+    const fullBody = hasUsableFullBody(snapshot.landmarks);
+    if (fullBody !== fullBodyVisibleRef.current) {
+      fullBodyVisibleRef.current = fullBody;
+      setFullBodyVisible(fullBody);
+    }
+
+    const stats = statsRef.current;
+    const pipelineMs = receivedAtMs - snapshot.capturedAtMs;
+    const bufferWaitMs = snapshot.bufferWaitMs ?? 0;
+    const preparationMs = snapshot.preparationMs ?? 0;
+    stats.poses += 1;
+    stats.inferenceSamples.push(snapshot.inferenceMs);
+    stats.bufferWaitSamples.push(bufferWaitMs);
+    stats.preparationSamples.push(preparationMs);
+    stats.overheadSamples.push(
+      Math.max(0, pipelineMs - bufferWaitMs - preparationMs - snapshot.inferenceMs),
+    );
+    stats.pipelineSamples.push(pipelineMs);
+    const performanceProfile = performanceProfileRef.current;
+    if (performanceProfile && snapshot.capturedAtMs >= performanceProfile.startedAt) {
+      performanceProfile.poses += 1;
+      performanceProfile.inferenceSamples.push(snapshot.inferenceMs);
+      performanceProfile.bufferWaitSamples.push(bufferWaitMs);
+      performanceProfile.preparationSamples.push(preparationMs);
+      performanceProfile.overheadSamples.push(
+        Math.max(0, pipelineMs - bufferWaitMs - preparationMs - snapshot.inferenceMs),
+      );
+      performanceProfile.pipelineSamples.push(pipelineMs);
+    }
+    stats.processedLandmarks += snapshot.landmarks.length;
+    stats.heldLowConfidence += snapshot.stabilization?.heldLowConfidence ?? 0;
+    stats.limitedOutliers += snapshot.stabilization?.limitedOutliers ?? 0;
+
+    if (recordingRef.current && recordedFramesRef.current.length < MAX_RECORDED_FRAMES) {
+      recordedFramesRef.current.push({
+        offsetMs: receivedAtMs - recordingStartedAtRef.current,
+        inferenceMs: snapshot.inferenceMs,
+        landmarks: snapshot.landmarks.map((landmark) => ({ ...landmark })),
+      });
+      if (recordedFramesRef.current.length % 5 === 0) {
+        setRecordedFrameCount(recordedFramesRef.current.length);
+      }
+    }
+  }
+
   function startRenderLoop() {
     const tick = (now: number) => {
       if (!activeRef.current) return;
@@ -877,6 +962,56 @@ export function MotionLab() {
           const timestampMs = decision.submitTimestampMs;
           const preparationStartedAtMs = performance.now();
           const bufferWaitMs = Math.max(0, preparationStartedAtMs - capturedAtMs);
+          if (poseExecutionModeRef.current === "main-thread") {
+            const preparationMs = performance.now() - preparationStartedAtMs;
+            window.setTimeout(() => {
+              const landmarker = mainThreadPoseRef.current;
+              if (!activeRef.current || !landmarker) {
+                inferencePendingRef.current = false;
+                return;
+              }
+              const safeTimestampMs = nextMotionTimestampMs(
+                timestampMs,
+                mainThreadLastTimestampRef.current,
+              );
+              mainThreadLastTimestampRef.current = safeTimestampMs;
+              const inferenceStartedAtMs = performance.now();
+              try {
+                let rawLandmarks: MotionLandmark[] = [];
+                landmarker.detectForVideo(video, safeTimestampMs, (result) => {
+                  rawLandmarks = (result.landmarks[0] ?? []).map((landmark) => ({
+                    x: landmark.x,
+                    y: landmark.y,
+                    z: landmark.z,
+                    visibility: landmark.visibility ?? null,
+                  }));
+                });
+                const inferenceMs = performance.now() - inferenceStartedAtMs;
+                const stabilized = mainThreadStabilizerRef.current.stabilize(
+                  rawLandmarks,
+                  safeTimestampMs,
+                );
+                acceptPoseSnapshot({
+                  capturedAtMs,
+                  bufferWaitMs,
+                  inferenceMs,
+                  preparationMs,
+                  landmarks: stabilized.landmarks,
+                  stabilization: stabilized.diagnostics,
+                  timestampMs: safeTimestampMs,
+                });
+              } catch (caught) {
+                inferencePendingRef.current = false;
+                engineReadyRef.current = false;
+                setStatus("error");
+                setError(`Mobilens posemotor stoppades: ${cameraFailureMessage(caught)}`);
+              }
+            }, 0);
+            sampleLighting(now);
+            reportMetrics(now);
+            animationFrameRef.current = requestAnimationFrame(tick);
+            return;
+          }
           void createImageBitmap(video)
             .then((frame) => {
               if (!activeRef.current || !workerRef.current) {
@@ -973,7 +1108,70 @@ export function MotionLab() {
         limitedOutliers: 0,
       };
 
-      function failOrRestartWorker(message: string, generation: number) {
+      async function launchMainThreadPose(countsAsColdStart: boolean) {
+        const generation = ++workerGenerationRef.current;
+        poseExecutionModeRef.current = "main-thread";
+        setPoseExecutionMode("main-thread");
+        setStatus("loading");
+        try {
+          const { FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
+          const vision = await FilesetResolver.forVisionTasks(WASM_ROOT);
+          const options = (preferredDelegate: "GPU" | "CPU") => ({
+            baseOptions: { modelAssetPath: MODEL_ASSET, delegate: preferredDelegate },
+            runningMode: "VIDEO" as const,
+            numPoses: 1,
+            minPoseDetectionConfidence: 0.5,
+            minPosePresenceConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+            outputSegmentationMasks: false,
+          });
+          let selectedDelegate: "GPU" | "CPU" = "GPU";
+          let landmarker: PoseLandmarker;
+          try {
+            landmarker = await PoseLandmarker.createFromOptions(vision, options("GPU"));
+          } catch {
+            selectedDelegate = "CPU";
+            landmarker = await PoseLandmarker.createFromOptions(vision, options("CPU"));
+          }
+          if (!activeRef.current || generation !== workerGenerationRef.current) {
+            landmarker.close();
+            return;
+          }
+          mainThreadPoseRef.current = landmarker;
+          mainThreadStabilizerRef.current.reset();
+          mainThreadLastTimestampRef.current = -1;
+          const recoveryStartedAt = workerRecoveryStartedAtRef.current;
+          if (recoveryStartedAt !== null) {
+            const game = gameRef.current;
+            if (game) {
+              const resumed = pauseMotionGameFor(game, performance.now() - recoveryStartedAt);
+              gameRef.current = resumed;
+              setGameView(resumed);
+            }
+            workerRecoveryStartedAtRef.current = null;
+          }
+          engineReadyRef.current = true;
+          cameraInfoRef.current.delegate = selectedDelegate;
+          setDelegate(selectedDelegate);
+          setError(null);
+          setWorkerRecoveryAttempt(null);
+          setStatus("running");
+          if (countsAsColdStart) {
+            storeColdStarts(registerColdStartSuccess(coldStartRef.current));
+          }
+        } catch (caught) {
+          if (!activeRef.current || generation !== workerGenerationRef.current) return;
+          engineReadyRef.current = false;
+          setStatus("error");
+          setError(`Mobilens posemotor kunde inte starta: ${cameraFailureMessage(caught)}`);
+        }
+      }
+
+      function failOrRestartWorker(
+        message: string,
+        generation: number,
+        countsAsColdStart: boolean,
+      ) {
         if (!activeRef.current || generation !== workerGenerationRef.current) return;
         inferencePendingRef.current = false;
         engineReadyRef.current = false;
@@ -984,6 +1182,13 @@ export function MotionLab() {
         const activeProfile = performanceProfileRef.current;
         if (activeProfile && performance.now() >= activeProfile.startedAt) {
           activeProfile.workerRestarts += 1;
+        }
+        if (/document/i.test(message)) {
+          workerRecoveryStartedAtRef.current ??= performance.now();
+          setError(null);
+          setWorkerRecoveryAttempt(null);
+          void launchMainThreadPose(countsAsColdStart);
+          return;
         }
 
         const attempt = workerRestartAttemptsRef.current + 1;
@@ -1012,6 +1217,8 @@ export function MotionLab() {
 
       function launchPoseWorker(countsAsColdStart: boolean) {
         const generation = ++workerGenerationRef.current;
+        poseExecutionModeRef.current = "worker";
+        setPoseExecutionMode("worker");
         const worker = new Worker(new URL("../../workers/pose.worker.ts", import.meta.url), {
           type: "module",
           name: "projekt100-pose",
@@ -1044,70 +1251,13 @@ export function MotionLab() {
             return;
           }
           if (message.type === "error") {
-            failOrRestartWorker(message.message, generation);
+            failOrRestartWorker(message.message, generation, countsAsColdStart);
             return;
           }
-
-          inferencePendingRef.current = false;
-          workerStablePosesRef.current += 1;
-          if (workerStablePosesRef.current >= 30) {
-            workerRestartAttemptsRef.current = 0;
-          }
-          const receivedAtMs = performance.now();
-          snapshotRef.current = message.snapshot;
-          if (canStartMotionGame(message.snapshot)) {
-            recentGamePoseRef.current = { snapshot: message.snapshot, receivedAtMs };
-          }
-          const visible = message.snapshot.landmarks.length === 33;
-          if (visible !== poseVisibleRef.current) {
-            poseVisibleRef.current = visible;
-            setPoseVisible(visible);
-          }
-          const fullBody = hasUsableFullBody(message.snapshot.landmarks);
-          if (fullBody !== fullBodyVisibleRef.current) {
-            fullBodyVisibleRef.current = fullBody;
-            setFullBodyVisible(fullBody);
-          }
-          const stats = statsRef.current;
-          const pipelineMs = receivedAtMs - message.snapshot.capturedAtMs;
-          const bufferWaitMs = message.snapshot.bufferWaitMs ?? 0;
-          const preparationMs = message.snapshot.preparationMs ?? 0;
-          stats.poses += 1;
-          stats.inferenceSamples.push(message.snapshot.inferenceMs);
-          stats.bufferWaitSamples.push(bufferWaitMs);
-          stats.preparationSamples.push(preparationMs);
-          stats.overheadSamples.push(
-            Math.max(0, pipelineMs - bufferWaitMs - preparationMs - message.snapshot.inferenceMs),
-          );
-          stats.pipelineSamples.push(pipelineMs);
-          const performanceProfile = performanceProfileRef.current;
-          if (performanceProfile && message.snapshot.capturedAtMs >= performanceProfile.startedAt) {
-            performanceProfile.poses += 1;
-            performanceProfile.inferenceSamples.push(message.snapshot.inferenceMs);
-            performanceProfile.bufferWaitSamples.push(bufferWaitMs);
-            performanceProfile.preparationSamples.push(preparationMs);
-            performanceProfile.overheadSamples.push(
-              Math.max(0, pipelineMs - bufferWaitMs - preparationMs - message.snapshot.inferenceMs),
-            );
-            performanceProfile.pipelineSamples.push(pipelineMs);
-          }
-          stats.processedLandmarks += message.snapshot.landmarks.length;
-          stats.heldLowConfidence += message.snapshot.stabilization?.heldLowConfidence ?? 0;
-          stats.limitedOutliers += message.snapshot.stabilization?.limitedOutliers ?? 0;
-
-          if (recordingRef.current && recordedFramesRef.current.length < MAX_RECORDED_FRAMES) {
-            recordedFramesRef.current.push({
-              offsetMs: receivedAtMs - recordingStartedAtRef.current,
-              inferenceMs: message.snapshot.inferenceMs,
-              landmarks: message.snapshot.landmarks.map((landmark) => ({ ...landmark })),
-            });
-            if (recordedFramesRef.current.length % 5 === 0) {
-              setRecordedFrameCount(recordedFramesRef.current.length);
-            }
-          }
+          acceptPoseSnapshot(message.snapshot);
         };
         worker.onerror = (event) => {
-          failOrRestartWorker(event.message || "okänt workerfel", generation);
+          failOrRestartWorker(event.message || "okänt workerfel", generation, countsAsColdStart);
         };
         worker.postMessage({ type: "init", wasmRoot: WASM_ROOT, modelAssetPath: MODEL_ASSET });
       }
@@ -1115,7 +1265,11 @@ export function MotionLab() {
       workerRestartAttemptsRef.current = 0;
       workerStablePosesRef.current = 0;
       workerRecoveryStartedAtRef.current = null;
-      launchPoseWorker(true);
+      if (needsMainThreadPose()) {
+        void launchMainThreadPose(true);
+      } else {
+        launchPoseWorker(true);
+      }
       startRenderLoop();
     } catch (caught) {
       const message = cameraFailureMessage(caught);
@@ -1551,21 +1705,23 @@ export function MotionLab() {
           <canvas ref={canvasRef} aria-label="Pose-overlay med kroppens landmärken" />
           <div className="p100-motion-stage-top">
             <span className={`p100-motion-live ${isLive ? "active" : ""}`}><Radio /> {isRecovering ? "Pose återansluter" : isLive ? "Kamera aktiv" : "Kamera av"}</span>
-            {delegate ? <span>{delegate}-motor</span> : null}
+            {delegate ? <span className="engine">{delegate} · {poseExecutionMode === "main-thread" ? "Mobilmotor" : "Worker"}</span> : null}
             {replaying ? <span className="replay">Replay</span> : null}
             {gameActive ? <span className="game"><Swords /> Bossfight</span> : null}
             {baselineRunning ? <span className="baseline"><Gauge /> Baseline {baselineClock(baselineElapsedMs)}</span> : null}
             {performanceProfileRunning ? <span className="profile"><Gauge /> {performanceProfileMode === "gate-b" ? `Gate B ${remainingClock(GATE_B_DURATION_MS, performanceProfileElapsedMs)}` : `Profil ${performanceProfileSecondsLeft} s`}</span> : null}
             {gameActive ? <button type="button" className="p100-motion-game-stop" onClick={stopGame} title="Avsluta rundan" aria-label="Avsluta rundan"><X /></button> : null}
-            <button
-              type="button"
-              className="p100-motion-fullscreen"
-              onClick={() => void toggleFullscreen()}
-              aria-label={fullscreen ? "Lämna fullskärm" : "Visa i fullskärm"}
-              title={fullscreen ? "Lämna fullskärm" : "Visa i fullskärm"}
-            >
-              {fullscreen ? <Minimize /> : <Maximize />}
-            </button>
+            {fullscreenAvailable ? (
+              <button
+                type="button"
+                className="p100-motion-fullscreen"
+                onClick={() => void toggleFullscreen()}
+                aria-label={fullscreen ? "Lämna fullskärm" : "Visa i fullskärm"}
+                title={fullscreen ? "Lämna fullskärm" : "Visa i fullskärm"}
+              >
+                {fullscreen ? <Minimize /> : <Maximize />}
+              </button>
+            ) : <span className="p100-motion-stage-spacer" />}
             <button
               type="button"
               className={`p100-motion-voice-toggle ${voiceGuidance ? "active" : ""}`}
@@ -1796,7 +1952,7 @@ export function MotionLab() {
             <header><span>Gate A</span><strong>Kallstarter</strong></header>
             <div><strong>{coldStarts.successes}/{coldStarts.attempts}</strong><span>Mål: minst 9 lyckade av 10 försök.</span></div>
             <button type="button" onClick={resetColdStarts}><RotateCcw /> Nollställ räknare</button>
-            <button type="button" onClick={simulateWorkerFailure} disabled={status !== "running"} title="Pausar kort och provar den automatiska återhämtningen"><RefreshCw /> Testa worker-återstart</button>
+            <button type="button" onClick={simulateWorkerFailure} disabled={status !== "running" || poseExecutionMode !== "worker"} title={poseExecutionMode === "main-thread" ? "Mobilmotorn kör avsiktligt utan Web Worker på iPhone" : "Pausar kort och provar den automatiska återhämtningen"}><RefreshCw /> {poseExecutionMode === "main-thread" ? "Mobil fallback aktiv" : "Testa worker-återstart"}</button>
           </section>
         </aside>
       </section>
