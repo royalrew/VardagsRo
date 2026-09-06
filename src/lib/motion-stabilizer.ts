@@ -102,8 +102,8 @@ export class MotionLandmarkStabilizer {
       }
 
       const speed = Math.min(distance, maxDistance) / deltaSeconds;
-      const baseAlpha = fastLandmark ? 0.62 : LEG_LANDMARKS.has(index) ? 0.38 : 0.3;
-      const alpha = clamp(baseAlpha + speed * (fastLandmark ? 0.035 : 0.055), baseAlpha, 0.92);
+      const baseAlpha = fastLandmark ? 0.72 : LEG_LANDMARKS.has(index) ? 0.60 : 0.52;
+      const alpha = clamp(baseAlpha + speed * (fastLandmark ? 0.30 : 0.40), baseAlpha, 0.96);
       const filtered: MotionLandmark = {
         x: interpolate(previous.filtered.x, reliable.x, alpha),
         y: interpolate(previous.filtered.y, reliable.y, alpha),

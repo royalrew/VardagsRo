@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { MotionLandmark } from "./motion-engine";
-import { MotionLandmarkStabilizer } from "./motion-stabilizer";
+import type { MotionLandmark } from "../motion-engine";
+import { MotionLandmarkStabilizer } from "../motion-stabilizer";
 
 function pose(overrides: Partial<MotionLandmark> = {}): MotionLandmark[] {
   return Array.from({ length: 33 }, () => ({
@@ -66,5 +66,21 @@ describe("MotionLandmarkStabilizer", () => {
     const reset = stabilizer.stabilize(jumped, 700);
     expect(reset.landmarks[23].x).toBe(1);
     expect(reset.diagnostics.limitedOutliers).toBe(0);
+  });
+
+  it("tracks knee descent during squat with minimal phase lag", () => {
+    const stabilizer = new MotionLandmarkStabilizer();
+    const initial = pose();
+    initial[25] = { ...initial[25], y: 0.5 }; // knee at 0.5
+    stabilizer.stabilize(initial, 0);
+
+    const squatting = pose();
+    squatting[25] = { ...squatting[25], y: 0.58 }; // moving down at ~0.08 in 45ms (~1.77 speed)
+
+    const result = stabilizer.stabilize(squatting, 45);
+
+    // With responsive alpha (>= 0.90), knee tracks within 90%+ of the new position immediately
+    expect(result.landmarks[25].y).toBeGreaterThanOrEqual(0.57);
+    expect(result.diagnostics.limitedOutliers).toBe(0);
   });
 });

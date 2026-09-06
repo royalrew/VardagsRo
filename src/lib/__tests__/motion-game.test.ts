@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { MotionLandmark, MotionPoseSnapshot } from "./motion-engine";
+import type { MotionLandmark, MotionPoseSnapshot } from "../motion-engine";
 import {
   MOTION_GAME_COUNTDOWN_MS,
   advanceMotionGame,
@@ -8,7 +8,7 @@ import {
   pauseMotionGameFor,
   pointToSegmentDistance,
   startMotionGame,
-} from "./motion-game";
+} from "../motion-game";
 
 function pose(timestampMs: number, overrides: Record<number, Partial<MotionLandmark>> = {}): MotionPoseSnapshot {
   const landmarks = Array.from({ length: 33 }, (_, index): MotionLandmark => ({

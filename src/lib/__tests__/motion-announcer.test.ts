@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { startMotionGame, type MotionGameState } from "./motion-game";
-import { motionArenaCue, motionArenaStartCue } from "./motion-announcer";
-import type { MotionPoseSnapshot } from "./motion-engine";
+import { startMotionGame, type MotionGameState } from "../motion-game";
+import { motionArenaCue, motionArenaStartCue } from "../motion-announcer";
+import type { MotionPoseSnapshot } from "../motion-engine";
 
 function snapshot(): MotionPoseSnapshot {
   const landmarks = Array.from({ length: 33 }, () => ({

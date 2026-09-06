@@ -4,8 +4,8 @@ import {
   getCleaningAreaForPerson,
   getKidsChoresOverview,
   taskForCalendarDate,
-} from "./kids-chores";
-import type { FamilyPerson, FamilyTask } from "./types";
+} from "../kids-chores";
+import type { FamilyPerson, FamilyTask } from "../types";
 
 describe("kids-chores", () => {
   const people: FamilyPerson[] = [

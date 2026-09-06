@@ -8,14 +8,14 @@ import {
   parseSwedishQuestion,
   selectRelevantEvents,
   selectRelevantTasks,
-} from "./question-engine";
+} from "../question-engine";
 import type {
   FamilyDocument,
   FamilyEvent,
   FamilyPerson,
   FamilyTask,
   QuestionPlan,
-} from "./types";
+} from "../types";
 
 const HOUSEHOLD_ID = "household-1";
 

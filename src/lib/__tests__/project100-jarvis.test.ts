@@ -4,7 +4,7 @@ import {
   buildJarvisSystemPrompt,
   formatPromptContextSummary,
   type Project100JarvisContext,
-} from "./project100-jarvis";
+} from "../project100-jarvis";
 
 describe("project100-jarvis domain helpers", () => {
   const mockContext: Project100JarvisContext = {

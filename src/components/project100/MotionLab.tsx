@@ -2,26 +2,12 @@
 
 import {
   Camera,
-  Check,
-  CircleStop,
-  Copy,
-  Download,
   Gauge,
-  Heart,
-  Maximize,
-  Minimize,
   Play,
-  Radio,
   RefreshCw,
-  RotateCcw,
-  ShieldCheck,
-  Square,
   Swords,
   Video,
   VideoOff,
-  Volume2,
-  VolumeX,
-  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -36,7 +22,6 @@ import {
 import {
   MOTION_BASELINE_PROTOCOL,
   MOTION_WORKER_MAX_RESTARTS,
-  POSE_CONNECTIONS,
   buildMotionBaselineReport,
   buildMotionPerformanceProfile,
   cameraFailureMessage,
@@ -63,16 +48,69 @@ import {
 import {
   advanceMotionGame,
   canStartMotionGame,
-  motionGameCountdown,
-  motionGameSecondsRemaining,
   pauseMotionGameFor,
   startMotionGame,
   type MotionGameDifficulty,
   type MotionGameEffect,
   type MotionGameState,
-  type MotionGameTarget,
 } from "@/lib/motion-game";
+import {
+  advanceSquatTracker,
+  buildSquatTestReport,
+  createSquatTrackerState,
+  measureSquatAngles,
+  squatVoiceCue,
+  type SquatCueSound,
+  type SquatTrackerState,
+} from "@/lib/motion-squat";
+import {
+  advanceWorkoutSession,
+  buildWorkoutSessionReport,
+  createWorkoutCoachDisciplineState,
+  createWorkoutSession,
+  getRestSecondsRemaining,
+  getWorkoutRepSpeechCue,
+  skipWorkoutRest,
+  startWorkoutSession,
+  type WorkoutCoachDisciplineState,
+  type WorkoutSessionReport,
+  type WorkoutSessionState,
+} from "@/lib/motion-workout";
 import { MotionLandmarkStabilizer } from "@/lib/motion-stabilizer";
+
+import {
+  angleDegrees,
+  baselineClock,
+  milliseconds,
+  remainingClock,
+  rounded,
+} from "./motion/motion-formatting";
+import {
+  GATE_B_COUNTDOWN_MS,
+  GATE_B_DURATION_MS,
+  GATE_B_PHASES,
+  GateBPhase,
+  gateBPhase,
+} from "./motion/motion-gate-b";
+import { drawSnapshot, drawMotionGame } from "./motion/MotionCanvasRenderer";
+import {
+  ensureAudioContext,
+  playGameSound as playSynthGameSound,
+  playSquatSound as playSynthSquatSound,
+} from "./motion/MotionSoundPlayer";
+import { MotionStageTopBar } from "./motion/MotionStageTopBar";
+import { MotionCameraControls, type Resolution } from "./motion/MotionCameraControls";
+import { MotionWorkoutOverlay } from "./motion/MotionWorkoutOverlay";
+import { MotionWorkoutPanel, type RestPreset } from "./motion/MotionWorkoutPanel";
+import { MotionArenaOverlay } from "./motion/MotionArenaOverlay";
+import { MotionDiagnosticsOverlay, type BaselineNoticeState } from "./motion/MotionDiagnosticsOverlay";
+import {
+  MotionDiagnosticsPanel,
+  type EngineStatus,
+  type MotionMetrics,
+  type PerformanceProfileMode,
+  type PoseExecutionMode,
+} from "./motion/MotionDiagnosticsPanel";
 
 const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const MODEL_ASSET =
@@ -81,38 +119,7 @@ const COLD_START_STORAGE_KEY = "projekt100.motion-lab.cold-starts.v1";
 const MAX_RECORDED_FRAMES = 18_000;
 const BASELINE_DURATION_MS = 180_000;
 const QUICK_PROFILE_DURATION_MS = 30_000;
-const GATE_B_DURATION_MS = 600_000;
-const GATE_B_COUNTDOWN_MS = 7_000;
 const DARK_LUMINANCE_THRESHOLD = 45;
-
-type EngineStatus = "idle" | "requesting" | "loading" | "running" | "recovering" | "error";
-type Resolution = "640x480" | "1280x720";
-type PerformanceProfileMode = "quick" | "gate-b";
-type PoseExecutionMode = "worker" | "main-thread";
-
-interface GateBPhase {
-  id: string;
-  startsAtMs: number;
-  endsAtMs: number;
-  title: string;
-  instruction: string;
-}
-
-const GATE_B_PHASES: readonly GateBPhase[] = [
-  { id: "punch-1", startsAtMs: 0, endsAtMs: 60_000, title: "Slag", instruction: "Stå framifrån och växla lugna raka slag med båda händerna." },
-  { id: "squat-1", startsAtMs: 60_000, endsAtMs: 120_000, title: "Knäböj", instruction: "Gör kontrollerade knäböj. Håll hela kroppen kvar i bild." },
-  { id: "duck-1", startsAtMs: 120_000, endsAtMs: 180_000, title: "Duckningar", instruction: "Växla stående position med tydliga duckningar och res dig helt." },
-  { id: "mixed-1", startsAtMs: 180_000, endsAtMs: 300_000, title: "Blandad rörelse", instruction: "Blanda slag, sidosteg, knäböj och duckningar i lugnt tempo." },
-  { id: "punch-2", startsAtMs: 300_000, endsAtMs: 360_000, title: "Slag igen", instruction: "Växla höga, raka och breda slag. Stanna framför kameran." },
-  { id: "squat-2", startsAtMs: 360_000, endsAtMs: 420_000, title: "Knäböj igen", instruction: "Fortsätt med kontrollerade knäböj och full resning." },
-  { id: "duck-2", startsAtMs: 420_000, endsAtMs: 480_000, title: "Duckningar igen", instruction: "Ducka tydligt, res dig och lägg in lugna sidosteg." },
-  { id: "mixed-2", startsAtMs: 480_000, endsAtMs: 600_000, title: "Sluttest", instruction: "Blanda alla rörelser. Fortsätt tills rösten säger att testet är klart." },
-] as const;
-
-function gateBPhase(elapsedMs: number): GateBPhase {
-  return GATE_B_PHASES.find((phase) => elapsedMs >= phase.startsAtMs && elapsedMs < phase.endsAtMs)
-    ?? GATE_B_PHASES[GATE_B_PHASES.length - 1];
-}
 
 function needsMainThreadPose(): boolean {
   const navigatorWithPlatform = navigator as Navigator & { platform?: string };
@@ -120,26 +127,6 @@ function needsMainThreadPose(): boolean {
     || (navigatorWithPlatform.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
-interface MotionMetrics {
-  captureFps: number;
-  poseHz: number;
-  renderFps: number;
-  inferenceP50: number | null;
-  inferenceP95: number | null;
-  bufferWaitP50: number | null;
-  bufferWaitP95: number | null;
-  preparationP50: number | null;
-  preparationP95: number | null;
-  overheadP50: number | null;
-  overheadP95: number | null;
-  pipelineP50: number | null;
-  pipelineP95: number | null;
-  firstRenderP50: number | null;
-  firstRenderP95: number | null;
-  heldLowConfidencePercent: number;
-  limitedOutlierPercent: number;
-  droppedFrames: number;
-}
 
 interface RunningPerformanceProfile {
   mode: PerformanceProfileMode;
@@ -196,235 +183,6 @@ const EMPTY_METRICS: MotionMetrics = {
   droppedFrames: 0,
 };
 
-function rounded(value: number): number {
-  return Math.round(value * 10) / 10;
-}
-
-function milliseconds(value: number | null): string {
-  return value === null ? "—" : `${rounded(value)} ms`;
-}
-
-function baselineClock(elapsedMs: number): string {
-  const remainingSeconds = Math.max(0, Math.ceil((BASELINE_DURATION_MS - elapsedMs) / 1000));
-  const minutes = Math.floor(remainingSeconds / 60);
-  return `${minutes}:${String(remainingSeconds % 60).padStart(2, "0")}`;
-}
-
-function elapsedClock(elapsedMs: number): string {
-  const elapsedSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
-  return `${Math.floor(elapsedSeconds / 60)}:${String(elapsedSeconds % 60).padStart(2, "0")}`;
-}
-
-function remainingClock(durationMs: number, elapsedMs: number): string {
-  const remainingSeconds = Math.max(0, Math.ceil((durationMs - Math.max(0, elapsedMs)) / 1_000));
-  return `${Math.floor(remainingSeconds / 60)}:${String(remainingSeconds % 60).padStart(2, "0")}`;
-}
-
-function drawSnapshot(canvas: HTMLCanvasElement, snapshot: MotionPoseSnapshot | null) {
-  const context = canvas.getContext("2d");
-  if (!context) return;
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  if (!snapshot || snapshot.landmarks.length === 0) return;
-
-  context.lineCap = "round";
-  context.lineJoin = "round";
-  context.lineWidth = Math.max(2, canvas.width / 320);
-  context.strokeStyle = "rgba(200, 244, 93, .88)";
-  context.shadowBlur = 10;
-  context.shadowColor = "rgba(200, 244, 93, .34)";
-
-  for (const [fromIndex, toIndex] of POSE_CONNECTIONS) {
-    const from = snapshot.landmarks[fromIndex];
-    const to = snapshot.landmarks[toIndex];
-    if (!from || !to || (from.visibility ?? 1) < 0.45 || (to.visibility ?? 1) < 0.45) continue;
-    context.beginPath();
-    context.moveTo(from.x * canvas.width, from.y * canvas.height);
-    context.lineTo(to.x * canvas.width, to.y * canvas.height);
-    context.stroke();
-  }
-
-  context.shadowBlur = 8;
-  context.fillStyle = "#f1ffd0";
-  for (const landmark of snapshot.landmarks) {
-    if ((landmark.visibility ?? 1) < 0.45) continue;
-    context.beginPath();
-    context.arc(
-      landmark.x * canvas.width,
-      landmark.y * canvas.height,
-      Math.max(2.5, canvas.width / 230),
-      0,
-      Math.PI * 2,
-    );
-    context.fill();
-  }
-  context.shadowBlur = 0;
-}
-
-function drawMotionGame(
-  canvas: HTMLCanvasElement,
-  game: MotionGameState | null,
-  nowMs: number,
-  arenaLang: MotionArenaLanguage = "en",
-) {
-  if (!game || game.status === "finished") return;
-  const context = canvas.getContext("2d");
-  if (!context) return;
-  context.save();
-
-  if (game.duck) {
-    const active = nowMs >= game.duck.activeAt;
-    const y = game.duck.thresholdY * canvas.height;
-    const bandHeight = Math.max(13, canvas.height * 0.035);
-    const gradient = context.createLinearGradient(0, y, canvas.width, y);
-    gradient.addColorStop(0, "rgba(255, 91, 91, 0)");
-    gradient.addColorStop(0.18, active ? "rgba(255, 91, 91, .75)" : "rgba(255, 194, 92, .55)");
-    gradient.addColorStop(0.82, active ? "rgba(255, 91, 91, .75)" : "rgba(255, 194, 92, .55)");
-    gradient.addColorStop(1, "rgba(255, 91, 91, 0)");
-    context.fillStyle = gradient;
-    context.shadowBlur = active ? 24 : 12;
-    context.shadowColor = active ? "rgba(255, 70, 70, .8)" : "rgba(255, 194, 92, .6)";
-    context.fillRect(0, y - bandHeight / 2, canvas.width, bandHeight);
-  }
-
-  // Om båda målen i en dual strike är aktiva, rita en neon-laserkoppling mellan dem
-  if (game.target && game.secondaryTarget && game.target.kind === "dual") {
-    const ax = game.target.x * canvas.width;
-    const ay = game.target.y * canvas.height;
-    const bx = game.secondaryTarget.x * canvas.width;
-    const by = game.secondaryTarget.y * canvas.height;
-    const isArming = Boolean(game.target.activeAt && nowMs < game.target.activeAt);
-    context.save();
-    context.strokeStyle = isArming ? "rgba(255, 210, 80, 0.85)" : "rgba(255, 120, 240, 0.75)";
-    context.shadowBlur = isArming ? 24 : 18;
-    context.shadowColor = isArming ? "rgba(255, 190, 50, 0.95)" : "rgba(255, 100, 230, 0.85)";
-    context.lineWidth = Math.max(3, canvas.height / 200);
-    context.setLineDash(isArming ? [4, 4] : [8, 8]);
-    context.beginPath();
-    context.moveTo(ax, ay);
-    context.lineTo(bx, by);
-    context.stroke();
-    context.restore();
-  }
-
-  const renderSingleTarget = (tgt: MotionGameTarget, isSecondary = false) => {
-    const x = tgt.x * canvas.width;
-    const y = tgt.y * canvas.height;
-    const baseRadius = tgt.radius * canvas.height;
-    const pulse = 1 + Math.sin((nowMs - tgt.spawnedAt) / 85) * 0.08;
-    const life = Math.max(0, (tgt.expiresAt - nowMs) / (tgt.expiresAt - tgt.spawnedAt));
-
-    const isKick = tgt.kind === "kick";
-    const isDual = tgt.kind === "dual";
-    const isArming = Boolean(tgt.activeAt && nowMs < tgt.activeAt);
-
-    context.save();
-    if (isKick) {
-      context.shadowBlur = 32;
-      context.shadowColor = "rgba(255, 200, 50, 0.9)";
-      context.fillStyle = "rgba(120, 80, 10, 0.78)";
-      context.strokeStyle = "#ffd040";
-    } else if (isDual) {
-      context.shadowBlur = 32;
-      context.shadowColor = isArming
-        ? "rgba(255, 200, 80, 0.9)"
-        : isSecondary
-          ? "rgba(255, 100, 230, 0.9)"
-          : "rgba(100, 210, 255, 0.9)";
-      context.fillStyle = isArming
-        ? "rgba(70, 50, 10, 0.78)"
-        : isSecondary
-          ? "rgba(110, 20, 95, 0.78)"
-          : "rgba(19, 84, 105, 0.78)";
-      context.strokeStyle = isArming ? "#ffd040" : isSecondary ? "#ff88ec" : "#7de8ff";
-    } else {
-      context.shadowBlur = 30;
-      context.shadowColor = "rgba(82, 224, 255, .8)";
-      context.fillStyle = "rgba(19, 84, 105, .72)";
-      context.strokeStyle = "#7de8ff";
-    }
-
-    context.lineWidth = Math.max(3, canvas.height / 180);
-    context.beginPath();
-    context.arc(x, y, baseRadius * pulse, 0, Math.PI * 2);
-    context.fill();
-    context.stroke();
-
-    context.shadowBlur = 12;
-    context.fillStyle = isKick ? "#fff8db" : isDual && isSecondary ? "#ffe8fb" : "#e5fbff";
-    context.beginPath();
-    context.arc(x, y, baseRadius * 0.28, 0, Math.PI * 2);
-    context.fill();
-
-    context.shadowBlur = 0;
-    context.strokeStyle = isKick
-      ? "rgba(255, 208, 64, 0.55)"
-      : isDual && isSecondary
-        ? "rgba(255, 136, 236, 0.55)"
-        : "rgba(125, 232, 255, .5)";
-    context.lineWidth = Math.max(2, canvas.height / 260);
-    context.beginPath();
-    context.arc(x, y, baseRadius * 1.25, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * life);
-    context.stroke();
-
-    context.fillStyle = "rgba(229, 251, 255, .92)";
-    context.font = `800 ${Math.max(11, canvas.height / 42)}px system-ui`;
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-
-    let movementLabel = "";
-    if (isKick) {
-      movementLabel = arenaLang === "sv" ? "SPARKA" : "KICK";
-    } else if (isDual) {
-      if (isArming) {
-        movementLabel = arenaLang === "sv" ? "REDO!" : "READY!";
-      } else if (tgt.requiredLimb === "leftHand") {
-        movementLabel = arenaLang === "sv" ? "VÄNSTER!" : "LEFT!";
-      } else if (tgt.requiredLimb === "rightHand") {
-        movementLabel = arenaLang === "sv" ? "HÖGER!" : "RIGHT!";
-      } else {
-        movementLabel = arenaLang === "sv" ? "BÅDA" : "DUAL";
-      }
-    } else {
-      movementLabel =
-        arenaLang === "sv"
-          ? (tgt.kind === "low" ? "NER" : tgt.kind === "high" ? "UPP" : "SIDAN")
-          : (tgt.kind === "low" ? "DOWN" : tgt.kind === "high" ? "UP" : "SIDE");
-    }
-
-    // Canvasen spegelvänds tillsammans med kameran. Spegelvänd texten en gång här
-    // så att den blir rättvänd efter canvasens CSS-transform.
-    context.save();
-    context.translate(x, 0);
-    context.scale(-1, 1);
-    context.fillText(movementLabel, 0, y + baseRadius * 1.7);
-    context.restore();
-    context.restore();
-  };
-
-  if (game.target) renderSingleTarget(game.target, false);
-  if (game.secondaryTarget) renderSingleTarget(game.secondaryTarget, true);
-
-  if (game.effect && nowMs - game.effect.at < 480) {
-    const age = (nowMs - game.effect.at) / 480;
-    const radius = canvas.height * (0.045 + age * 0.14);
-    const color =
-      game.effect.type === "damage" || game.effect.type === "miss"
-        ? `rgba(255, 100, 91, ${1 - age})`
-        : game.effect.type === "duck"
-          ? `rgba(200, 244, 93, ${1 - age})`
-          : game.effect.type === "kick"
-            ? `rgba(255, 208, 64, ${1 - age})`
-            : game.effect.type === "double"
-              ? `rgba(255, 120, 240, ${1 - age})`
-              : `rgba(125, 232, 255, ${1 - age})`;
-    context.strokeStyle = color;
-    context.lineWidth = Math.max(3, canvas.height / 150) * (1 - age * 0.6);
-    context.beginPath();
-    context.arc(game.effect.x * canvas.width, game.effect.y * canvas.height, radius, 0, Math.PI * 2);
-    context.stroke();
-  }
-  context.restore();
-}
 
 function parseStoredColdStarts(): MotionColdStartStats {
   try {
@@ -463,6 +221,7 @@ export function MotionLab() {
   const animationFrameRef = useRef<number | null>(null);
   const replayFrameRef = useRef<number | null>(null);
   const reportCopiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const squatReportCopiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bodyOverflowBeforeFullscreenRef = useRef("");
   const workerRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const workerGenerationRef = useRef(0);
@@ -477,6 +236,13 @@ export function MotionLab() {
   const recordingStartedAtRef = useRef(0);
   const recordedFramesRef = useRef<MotionRecordedFrame[]>([]);
   const snapshotRef = useRef<MotionPoseSnapshot | null>(null);
+  const squatTrackingEnabledRef = useRef(false);
+  const squatTrackerRef = useRef(createSquatTrackerState());
+  const squatProtocolRef = useRef<"workout-step-31" | "symmetry-step-26" | "tempo-step-25" | "rom-step-24">("workout-step-31");
+  const workoutSessionRef = useRef<WorkoutSessionState>(createWorkoutSession());
+  const coachDisciplineRef = useRef<WorkoutCoachDisciplineState>(createWorkoutCoachDisciplineState());
+  const lastSquatUiAtRef = useRef(0);
+  const lastSquatCoachAtRef = useRef(0);
   const recentGamePoseRef = useRef<{
     snapshot: MotionPoseSnapshot;
     receivedAtMs: number;
@@ -565,6 +331,46 @@ export function MotionLab() {
   const [performanceProfileElapsedMs, setPerformanceProfileElapsedMs] = useState(0);
   const [performanceProfileReport, setPerformanceProfileReport] = useState<MotionPerformanceProfileReport | null>(null);
   const [performanceProfileCopied, setPerformanceProfileCopied] = useState(false);
+  const [squatTrackingEnabled, setSquatTrackingEnabled] = useState(false);
+  const [squatProtocol, setSquatProtocol] = useState<"workout-step-31" | "symmetry-step-26" | "tempo-step-25" | "rom-step-24">("workout-step-31");
+  const [workoutSession, setWorkoutSession] = useState<WorkoutSessionState>(() => createWorkoutSession());
+  const [workoutReportCopied, setWorkoutReportCopied] = useState(false);
+  type RestPreset = "30" | "45" | "60" | "dynamic";
+  const [restPreset, setRestPreset] = useState<RestPreset>("45");
+  const [squatView, setSquatView] = useState<SquatTrackerState>(() => createSquatTrackerState());
+  const [squatCoachCue, setSquatCoachCue] = useState<string>("Pass 3×10 Knäböj: 3 set med 10 reps och vila. Allt loggas automatiskt.");
+  const [squatReportCopied, setSquatReportCopied] = useState(false);
+
+  function changeRestPreset(preset: RestPreset) {
+    setRestPreset(preset);
+    const restDurationSeconds = preset === "30" ? 30 : preset === "45" ? 45 : preset === "60" ? 60 : [30, 45, 60];
+    workoutSessionRef.current = {
+      ...workoutSessionRef.current,
+      config: {
+        ...workoutSessionRef.current.config,
+        restDurationSeconds,
+      },
+    };
+    setWorkoutSession({ ...workoutSessionRef.current });
+  }
+
+  function changeSquatProtocol(nextProtocol: "workout-step-31" | "symmetry-step-26" | "tempo-step-25" | "rom-step-24") {
+    squatProtocolRef.current = nextProtocol;
+    setSquatProtocol(nextProtocol);
+    resetSquatTracking();
+    if (nextProtocol === "workout-step-31") {
+      const restDurationSeconds = restPreset === "30" ? 30 : restPreset === "45" ? 45 : restPreset === "60" ? 60 : [30, 45, 60];
+      workoutSessionRef.current = createWorkoutSession({ restDurationSeconds });
+      setWorkoutSession(workoutSessionRef.current);
+      setSquatCoachCue("Pass 3×10 Knäböj: 3 set med 10 reps och vila. Allt loggas automatiskt.");
+    } else if (nextProtocol === "symmetry-step-26") {
+      setSquatCoachCue("Steg 26: Gör rep 1 med jämn balans, rep 2 med lätt förskjutning åt ena hållet, rep 3 mot andra sidan.");
+    } else if (nextProtocol === "tempo-step-25") {
+      setSquatCoachCue("Steg 25: Gör 1 vanlig rep, 1 långsam kontrollerad (3s ned), och 1 pausknäböj (2s botten).");
+    } else {
+      setSquatCoachCue("10 mot stolen (halva), därefter 10 djupa utan stol (fulla).");
+    }
+  }
 
   function storeColdStarts(next: MotionColdStartStats) {
     coldStartRef.current = next;
@@ -644,6 +450,10 @@ export function MotionLab() {
       setGameView(null);
       setMetrics(EMPTY_METRICS);
       setWorkerRecoveryAttempt(null);
+      squatTrackingEnabledRef.current = false;
+      squatTrackerRef.current = createSquatTrackerState();
+      setSquatTrackingEnabled(false);
+      setSquatView(squatTrackerRef.current);
     }
   }
 
@@ -685,6 +495,7 @@ export function MotionLab() {
       if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current);
       if (replayFrameRef.current !== null) cancelAnimationFrame(replayFrameRef.current);
       if (reportCopiedTimerRef.current !== null) clearTimeout(reportCopiedTimerRef.current);
+      if (squatReportCopiedTimerRef.current !== null) clearTimeout(squatReportCopiedTimerRef.current);
       if (workerRestartTimerRef.current !== null) clearTimeout(workerRestartTimerRef.current);
       workerGenerationRef.current += 1;
       workerRef.current?.terminate();
@@ -695,170 +506,52 @@ export function MotionLab() {
     };
   }, []);
 
+  useEffect(() => {
+    if (workoutSession.status !== "resting" || workoutSession.restStartedAtMs === null) return;
+    const interval = setInterval(() => {
+      const now = performance.now();
+      const res = advanceWorkoutSession(workoutSessionRef.current, squatTrackerRef.current, now);
+      if (res.session !== workoutSessionRef.current) {
+        workoutSessionRef.current = res.session;
+        setWorkoutSession(res.session);
+        if (res.cue) {
+          if (res.cue.sound === "workout-complete") {
+            playGameSound(null, true);
+          } else if (res.cue.sound === "rest-end") {
+            playSquatSound("rep");
+          } else if (res.cue.sound === "rest-warning") {
+            playSquatSound("half-depth");
+          }
+          speakSquatInstruction(res.cue.text, res.cue.priority);
+          setSquatCoachCue(res.cue.text);
+        }
+        if (res.shouldResetSquatTracker) resetSquatTracking();
+      } else {
+        setWorkoutSession({ ...workoutSessionRef.current });
+      }
+    }, 250);
+    return () => clearInterval(interval);
+  }, [workoutSession.status, workoutSession.restStartedAtMs]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.code === "Space" || event.key === " ") {
+        if (
+          squatTrackingEnabledRef.current &&
+          squatProtocolRef.current === "workout-step-31" &&
+          workoutSessionRef.current.status === "resting"
+        ) {
+          event.preventDefault();
+          handleSkipRest();
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   function playGameSound(effect: MotionGameEffect | null, finished = false) {
-    const audioContext = audioContextRef.current;
-    if (!audioContext) return;
-    const now = audioContext.currentTime;
-
-    if (finished) {
-      // Fanfar / rundan avklarad
-      const osc1 = audioContext.createOscillator();
-      const osc2 = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      osc1.type = "triangle";
-      osc1.frequency.setValueAtTime(523.25, now);
-      osc1.frequency.exponentialRampToValueAtTime(1046.5, now + 0.32);
-      osc2.type = "sine";
-      osc2.frequency.setValueAtTime(659.25, now);
-      osc2.frequency.exponentialRampToValueAtTime(1318.5, now + 0.32);
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.24, now + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.36);
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(audioContext.destination);
-      osc1.start(now);
-      osc2.start(now);
-      osc1.stop(now + 0.38);
-      osc2.stop(now + 0.38);
-      return;
-    }
-
-    if (!effect) return;
-
-    if (effect.type === "hit") {
-      // Slagträff: Köttig boxningssmäll med sub-thud, crack och neon-kross
-      // 1. Köttig bastransient (thud från 260 Hz -> 65 Hz)
-      const subOsc = audioContext.createOscillator();
-      const subGain = audioContext.createGain();
-      subOsc.type = "triangle";
-      subOsc.frequency.setValueAtTime(260, now);
-      subOsc.frequency.exponentialRampToValueAtTime(65, now + 0.07);
-      subGain.gain.setValueAtTime(0.0001, now);
-      subGain.gain.exponentialRampToValueAtTime(0.42, now + 0.006);
-      subGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
-      subOsc.connect(subGain);
-      subGain.connect(audioContext.destination);
-      subOsc.start(now);
-      subOsc.stop(now + 0.12);
-
-      // 2. Skarp "smack/crack"-snärt (sawtooth från 880 Hz -> 150 Hz)
-      const snapOsc = audioContext.createOscillator();
-      const snapGain = audioContext.createGain();
-      snapOsc.type = "sawtooth";
-      snapOsc.frequency.setValueAtTime(880, now);
-      snapOsc.frequency.exponentialRampToValueAtTime(150, now + 0.038);
-      snapGain.gain.setValueAtTime(0.0001, now);
-      snapGain.gain.exponentialRampToValueAtTime(0.28, now + 0.003);
-      snapGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
-      snapOsc.connect(snapGain);
-      snapGain.connect(audioContext.destination);
-      snapOsc.start(now);
-      snapOsc.stop(now + 0.06);
-
-      // 3. Cyber neon-resonans (kristallklar energi-ringning)
-      const ringOsc = audioContext.createOscillator();
-      const ringGain = audioContext.createGain();
-      ringOsc.type = "sine";
-      ringOsc.frequency.setValueAtTime(940, now);
-      ringOsc.frequency.exponentialRampToValueAtTime(560, now + 0.1);
-      ringGain.gain.setValueAtTime(0.0001, now);
-      ringGain.gain.exponentialRampToValueAtTime(0.14, now + 0.008);
-      ringGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
-      ringOsc.connect(ringGain);
-      ringGain.connect(audioContext.destination);
-      ringOsc.start(now);
-      ringOsc.stop(now + 0.14);
-    } else if (effect.type === "kick") {
-      // Spark: Tung lågbas-duns (180 Hz -> 45 Hz) med svepande snärt
-      const subOsc = audioContext.createOscillator();
-      const subGain = audioContext.createGain();
-      subOsc.type = "sine";
-      subOsc.frequency.setValueAtTime(190, now);
-      subOsc.frequency.exponentialRampToValueAtTime(45, now + 0.16);
-      subGain.gain.setValueAtTime(0.0001, now);
-      subGain.gain.exponentialRampToValueAtTime(0.55, now + 0.008);
-      subGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
-      subOsc.connect(subGain);
-      subGain.connect(audioContext.destination);
-      subOsc.start(now);
-      subOsc.stop(now + 0.24);
-
-      const snapOsc = audioContext.createOscillator();
-      const snapGain = audioContext.createGain();
-      snapOsc.type = "triangle";
-      snapOsc.frequency.setValueAtTime(440, now);
-      snapOsc.frequency.exponentialRampToValueAtTime(80, now + 0.08);
-      snapGain.gain.setValueAtTime(0.0001, now);
-      snapGain.gain.exponentialRampToValueAtTime(0.32, now + 0.005);
-      snapGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
-      snapOsc.connect(snapGain);
-      snapGain.connect(audioContext.destination);
-      snapOsc.start(now);
-      snapOsc.stop(now + 0.13);
-    } else if (effect.type === "double") {
-      // Dubbelslag: Dubbel explosion och tvåklangs neonackord
-      const chord1 = audioContext.createOscillator();
-      const chord2 = audioContext.createOscillator();
-      const thump = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-
-      chord1.type = "sine";
-      chord1.frequency.setValueAtTime(587.33, now); // D5
-      chord1.frequency.exponentialRampToValueAtTime(880, now + 0.16);
-
-      chord2.type = "triangle";
-      chord2.frequency.setValueAtTime(880, now); // A5
-      chord2.frequency.exponentialRampToValueAtTime(1174.66, now + 0.16);
-
-      thump.type = "triangle";
-      thump.frequency.setValueAtTime(310, now);
-      thump.frequency.exponentialRampToValueAtTime(75, now + 0.11);
-
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.42, now + 0.008);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
-
-      chord1.connect(gain);
-      chord2.connect(gain);
-      thump.connect(gain);
-      gain.connect(audioContext.destination);
-
-      chord1.start(now);
-      chord2.start(now);
-      thump.start(now);
-      chord1.stop(now + 0.25);
-      chord2.stop(now + 0.25);
-      thump.stop(now + 0.25);
-    } else if (effect.type === "duck") {
-      // Duck / dodge: Swoosh-svep
-      const osc = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(380, now);
-      osc.frequency.exponentialRampToValueAtTime(840, now + 0.14);
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.2, now + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
-      osc.connect(gain);
-      gain.connect(audioContext.destination);
-      osc.start(now);
-      osc.stop(now + 0.2);
-    } else if (effect.type === "damage" || effect.type === "miss") {
-      // Miss / skada: Mörk krasch/brum
-      const osc = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      osc.type = "sawtooth";
-      osc.frequency.setValueAtTime(160, now);
-      osc.frequency.exponentialRampToValueAtTime(60, now + 0.16);
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.24, now + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
-      osc.connect(gain);
-      gain.connect(audioContext.destination);
-      osc.start(now);
-      osc.stop(now + 0.2);
-    }
+    playSynthGameSound(audioContextRef.current, effect, finished);
   }
 
   function getBestVoice(lang: MotionArenaLanguage): SpeechSynthesisVoice | null {
@@ -890,6 +583,25 @@ export function MotionLab() {
     const voice = getBestVoice("sv");
     if (voice) utterance.voice = voice;
     utterance.rate = 0.92;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function playSquatSound(sound?: SquatCueSound) {
+    playSynthSquatSound(audioContextRef.current, sound);
+  }
+
+  function speakSquatInstruction(text: string, priority = false) {
+    setSquatCoachCue(text);
+    if (!voiceGuidanceRef.current || !("speechSynthesis" in window)) return;
+    // Steg 33: Always cancel any previous utterance to eliminate backlog/queuing latency
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "sv-SE";
+    const voice = getBestVoice("sv");
+    if (voice) utterance.voice = voice;
+    utterance.rate = priority ? 1.12 : 1.18;
     utterance.pitch = 1;
     utterance.volume = 1;
     window.speechSynthesis.speak(utterance);
@@ -939,7 +651,7 @@ export function MotionLab() {
     voiceGuidanceRef.current = enabled;
     setVoiceGuidance(enabled);
     if (enabled) {
-      speakBaselineInstruction("Röst på. Jag guidar baslinjen och bossfighten.");
+      speakBaselineInstruction("Röst på. Jag guidar squat-testet, baslinjen och bossfighten.");
     } else {
       window.speechSynthesis?.cancel();
     }
@@ -1129,6 +841,231 @@ export function MotionLab() {
     }
   }
 
+  function resetSquatTracking(resetWorkout = false) {
+    const next = createSquatTrackerState();
+    squatTrackerRef.current = next;
+    lastSquatUiAtRef.current = 0;
+    setSquatView(next);
+    setSquatReportCopied(false);
+    if (resetWorkout && squatProtocolRef.current === "workout-step-31") {
+      workoutSessionRef.current = createWorkoutSession();
+      setWorkoutSession(workoutSessionRef.current);
+    }
+  }
+
+  function handleSkipRest() {
+    const nextSession = skipWorkoutRest(workoutSessionRef.current, performance.now());
+    workoutSessionRef.current = nextSession;
+    setWorkoutSession(nextSession);
+    coachDisciplineRef.current = createWorkoutCoachDisciplineState();
+    resetSquatTracking();
+    if (nextSession.status === "completed") {
+      playGameSound(null, true);
+      speakSquatInstruction("Träningspasset är slutfört! Alla set avklarade.", true);
+    } else {
+      speakSquatInstruction(`Startar set ${nextSession.currentSetIndex + 1}! Gör dig redo.`, true);
+    }
+  }
+
+  async function copySquatReport() {
+    let reportJson: string;
+    if (squatProtocolRef.current === "workout-step-31") {
+      reportJson = JSON.stringify(buildWorkoutSessionReport(workoutSessionRef.current), null, 2);
+    } else {
+      reportJson = JSON.stringify(
+        buildSquatTestReport(squatTrackerRef.current, new Date().toISOString(), squatProtocolRef.current),
+        null,
+        2,
+      );
+    }
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(reportJson);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = reportJson;
+        document.body.appendChild(textArea);
+        textArea.select();
+        const copied = document.execCommand("copy");
+        textArea.remove();
+        if (!copied) throw new Error("copy failed");
+      }
+      setSquatReportCopied(true);
+      if (squatReportCopiedTimerRef.current !== null) clearTimeout(squatReportCopiedTimerRef.current);
+      squatReportCopiedTimerRef.current = setTimeout(() => setSquatReportCopied(false), 2_000);
+    } catch {
+      setError("Squat-rapporten kunde inte kopieras. Landmark-filen kan fortfarande laddas ned.");
+    }
+  }
+
+  function downloadSquatReport() {
+    if (squatProtocolRef.current === "workout-step-31") {
+      const report = buildWorkoutSessionReport(workoutSessionRef.current);
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `motion-workout-report-${new Date().toISOString().replaceAll(":", "-")}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    const report = buildSquatTestReport(squatTrackerRef.current, new Date().toISOString(), squatProtocolRef.current);
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `motion-squat-test-${report.createdAt.replaceAll(":", "-")}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function toggleSquatTracking() {
+    const enabled = !squatTrackingEnabledRef.current;
+    squatTrackingEnabledRef.current = enabled;
+    setSquatTrackingEnabled(enabled);
+    if (enabled) {
+      resetSquatTracking();
+      if (!audioContextRef.current) audioContextRef.current = new AudioContext();
+      void audioContextRef.current.resume();
+      if (!voiceGuidanceRef.current) {
+        voiceGuidanceRef.current = true;
+        setVoiceGuidance(true);
+      }
+      lastSquatCoachAtRef.current = performance.now();
+      if (squatProtocolRef.current === "workout-step-31") {
+        workoutSessionRef.current = startWorkoutSession(createWorkoutSession(), performance.now());
+        setWorkoutSession(workoutSessionRef.current);
+        coachDisciplineRef.current = createWorkoutCoachDisciplineState();
+        speakSquatInstruction(
+          "Träningspass 3 gånger 10 knäböj startar! Gör dig redo för set 1.",
+          true,
+        );
+      } else if (squatProtocolRef.current === "symmetry-step-26") {
+        speakSquatInstruction(
+          "Steg 26 Symmetritest startar. Gör första repetitionen med jämn belastning, och därefter två repetitioner med lätt sidoförskjutning.",
+          true,
+        );
+      } else if (squatProtocolRef.current === "tempo-step-25") {
+        speakSquatInstruction(
+          "Steg 25 Tempo-test startar. Gör 1 vanlig repetition, 1 långsam kontrollerad med 3 sekunder nedåt, och 1 pausknäböj med 2 sekunder i botten. Jag mäter varje fas.",
+          true,
+        );
+      } else {
+        speakSquatInstruction(
+          "Personligt ROM-test startar. Gör tio repetitioner mot stolen för halva böj, och därefter tio djupa utan stol. Jag guidar varje rep.",
+          true,
+        );
+      }
+    } else {
+      window.speechSynthesis?.cancel();
+    }
+  }
+
+  function acceptSquatSnapshot(snapshot: MotionPoseSnapshot) {
+    if (!squatTrackingEnabledRef.current) return;
+    const canvas = canvasRef.current;
+    const aspectRatio = canvas && canvas.height > 0 ? canvas.width / canvas.height : 1;
+    const previous = squatTrackerRef.current;
+    const next = advanceSquatTracker(
+      previous,
+      measureSquatAngles(snapshot.landmarks, aspectRatio),
+      snapshot.timestampMs,
+    );
+    if (next === previous) return;
+    squatTrackerRef.current = next;
+    const now = performance.now();
+
+    // 1. Workout Session Mode (Steg 31)
+    if (squatProtocolRef.current === "workout-step-31") {
+      const workoutResult = advanceWorkoutSession(workoutSessionRef.current, next, now);
+      if (workoutResult.session !== workoutSessionRef.current) {
+        workoutSessionRef.current = workoutResult.session;
+        setWorkoutSession(workoutResult.session);
+      }
+      if (workoutResult.cue) {
+        if (workoutResult.cue.sound === "workout-complete") {
+          playGameSound(null, true);
+        } else if (workoutResult.cue.sound === "set-complete") {
+          playSquatSound("milestone");
+        } else if (workoutResult.cue.sound === "rest-end") {
+          playSquatSound("rep");
+        }
+        speakSquatInstruction(workoutResult.cue.text, workoutResult.cue.priority);
+        setSquatCoachCue(workoutResult.cue.text);
+        lastSquatCoachAtRef.current = now;
+      }
+      if (workoutResult.shouldResetSquatTracker) {
+        coachDisciplineRef.current = createWorkoutCoachDisciplineState();
+        resetSquatTracking();
+        return;
+      }
+
+      // Spoken counting and sound during active workout set (Steg 33, 34 & 35)
+      if (workoutSessionRef.current.status === "active-set" && next.reps > previous.reps) {
+        playSquatSound("rep");
+        const speechCue = getWorkoutRepSpeechCue(
+          next.reps,
+          workoutSessionRef.current.config.targetRepsPerSet,
+          next.lastRep,
+          coachDisciplineRef.current,
+        );
+        coachDisciplineRef.current = speechCue.nextDiscipline;
+        speakSquatInstruction(speechCue.text, speechCue.isMilestone);
+        setSquatCoachCue(
+          `Set ${workoutSessionRef.current.currentSetIndex + 1}: ${speechCue.displayCue} (${next.reps}/${workoutSessionRef.current.config.targetRepsPerSet})`,
+        );
+        lastSquatCoachAtRef.current = now;
+      } else if (
+        workoutSessionRef.current.status === "active-set"
+        && (previous.phase !== "bottom" && next.phase === "bottom")
+      ) {
+        playSquatSound("full-depth");
+      }
+
+      if (
+        next.phase !== previous.phase
+        || next.reps !== previous.reps
+        || next.tracking !== previous.tracking
+        || now - lastSquatUiAtRef.current >= 100
+      ) {
+        lastSquatUiAtRef.current = now;
+        setSquatView(next);
+      }
+      return;
+    }
+
+    // 2. Single-protocol evaluation modes (ROM, Tempo, Symmetry)
+    const voiceCue = squatVoiceCue(previous, next, squatProtocolRef.current);
+    if (voiceCue) {
+      if (voiceCue.sound) playSquatSound(voiceCue.sound);
+      speakSquatInstruction(voiceCue.text, voiceCue.priority);
+      setSquatCoachCue(voiceCue.text);
+      lastSquatCoachAtRef.current = now;
+    } else if (
+      next.tracking
+      && next.phase === "standing"
+      && next.reps < (squatProtocolRef.current === "rom-step-24" ? 20 : 3)
+      && now - lastSquatCoachAtRef.current >= 7_000
+    ) {
+      lastSquatCoachAtRef.current = now;
+      speakSquatInstruction("Kör nästa repetition när du är redo.", false);
+    } else if (next.phase !== "standing") {
+      lastSquatCoachAtRef.current = now;
+    }
+
+    if (
+      next.phase !== previous.phase
+      || next.reps !== previous.reps
+      || next.tracking !== previous.tracking
+      || now - lastSquatUiAtRef.current >= 100
+    ) {
+      lastSquatUiAtRef.current = now;
+      setSquatView(next);
+    }
+  }
+
   function acceptPoseSnapshot(snapshot: MotionPoseSnapshot) {
     inferencePendingRef.current = false;
     workerStablePosesRef.current += 1;
@@ -1136,6 +1073,7 @@ export function MotionLab() {
 
     const receivedAtMs = performance.now();
     snapshotRef.current = snapshot;
+    acceptSquatSnapshot(snapshot);
     if (canStartMotionGame(snapshot)) {
       recentGamePoseRef.current = { snapshot, receivedAtMs };
     }
@@ -1608,19 +1546,22 @@ export function MotionLab() {
     if (!recordingData || recordingData.frames.length === 0) return;
     gameRef.current = null;
     setGameView(null);
+    if (squatTrackingEnabledRef.current) resetSquatTracking();
     cancelReplay();
     replayingRef.current = true;
     setReplaying(true);
     let frameIndex = 0;
     const startedAt = performance.now();
     const firstFrame = recordingData.frames[0];
-    snapshotRef.current = {
+    const firstSnapshot: MotionPoseSnapshot = {
       capturedAtMs: startedAt,
       timestampMs: 0,
       inferenceMs: firstFrame.inferenceMs,
       landmarks: firstFrame.landmarks,
     };
-    if (canvasRef.current) drawSnapshot(canvasRef.current, snapshotRef.current);
+    snapshotRef.current = firstSnapshot;
+    acceptSquatSnapshot(firstSnapshot);
+    if (canvasRef.current) drawSnapshot(canvasRef.current, firstSnapshot);
     const replayTick = (now: number) => {
       if (!replayingRef.current) return;
       const elapsed = now - startedAt;
@@ -1631,13 +1572,15 @@ export function MotionLab() {
         frameIndex += 1;
       }
       const frame = recordingData.frames[frameIndex];
-      snapshotRef.current = {
+      const replaySnapshot: MotionPoseSnapshot = {
         capturedAtMs: now,
         timestampMs: frame.offsetMs,
         inferenceMs: frame.inferenceMs,
         landmarks: frame.landmarks,
       };
-      if (canvasRef.current) drawSnapshot(canvasRef.current, snapshotRef.current);
+      snapshotRef.current = replaySnapshot;
+      acceptSquatSnapshot(replaySnapshot);
+      if (canvasRef.current) drawSnapshot(canvasRef.current, replaySnapshot);
       if (replayProgressRef.current) {
         replayProgressRef.current.value =
           recordingData.durationMs <= 0 ? 1 : Math.min(1, elapsed / recordingData.durationMs);
@@ -1963,7 +1906,6 @@ export function MotionLab() {
   const isRecovering = status === "recovering";
   const isLive = status === "running" || isRecovering;
   const gameActive = gameView?.status === "countdown" || gameView?.status === "running";
-  const gameSeconds = gameView ? motionGameSecondsRemaining(gameView) : 60;
   const [requestedWidth, requestedHeight] = resolution.split("x");
   const lightOkay = luminance !== null && luminance >= DARK_LUMINANCE_THRESHOLD;
   const baselineProgress = Math.min(100, (baselineElapsedMs / BASELINE_DURATION_MS) * 100);
@@ -1982,34 +1924,16 @@ export function MotionLab() {
     100,
     (Math.max(0, performanceProfileElapsedMs) / performanceProfileDurationMs) * 100,
   );
-  const performanceGatePhase = gateBPhase(Math.max(0, performanceProfileElapsedMs));
-  const performanceGatePhaseIndex = GATE_B_PHASES.findIndex(
-    (phase) => phase.id === performanceGatePhase.id,
-  );
-  const nextPerformanceGatePhase = GATE_B_PHASES[performanceGatePhaseIndex + 1] ?? null;
-  const performanceGatePhaseSecondsLeft = Math.max(
-    0,
-    Math.ceil((performanceGatePhase.endsAtMs - Math.max(0, performanceProfileElapsedMs)) / 1_000),
-  );
   const baselinePassedChecks = baselineReport
     ? Object.values(baselineReport.checks).filter(Boolean).length
     : 0;
   const baselinePhase = motionBaselinePhase(baselineElapsedMs);
-  const baselinePhaseIndex = MOTION_BASELINE_PROTOCOL.findIndex(
-    (phase) => phase.id === baselinePhase.id,
-  );
-  const nextBaselinePhase = MOTION_BASELINE_PROTOCOL[baselinePhaseIndex + 1] ?? null;
-  const baselinePhaseSecondsLeft = Math.max(
-    0,
-    Math.ceil((baselinePhase.endsAtMs - baselineElapsedMs) / 1000),
-  );
-  const showNextBaselinePhase = baselineRunning && nextBaselinePhase && baselinePhaseSecondsLeft <= 7;
 
   return (
     <div className="p100-motion-lab">
       <header className="p100-page-head p100-motion-head">
         <div>
-          <span>Motion Engine · Steg 2–7</span>
+          <span>Motion Engine · Fas C · Steg 21–23</span>
           <h1>Motion Lab</h1>
           <p>Ställ dig framför kameran. Kroppen blir indata och allt bildmaterial stannar i webbläsaren.</p>
         </div>
@@ -2019,7 +1943,7 @@ export function MotionLab() {
             className="p100-button p100-button-bossfight"
             type="button"
             onClick={startGame}
-            disabled={replaying || gameActive || baselineRunning || performanceProfileRunning}
+            disabled={replaying || gameActive || baselineRunning || performanceProfileRunning || squatTrackingEnabled}
             title={!isLive ? "Tryck för att se vad som saknas" : !poseVisible ? "Tryck för hjälp med kroppspositionen" : baselineRunning ? "Baslinjemätningen pågår" : performanceProfileRunning ? "Prestandamätningen pågår" : gameActive ? "Bossfighten pågår" : "Starta bossfight"}
           >
             <Swords /> {gameActive ? "Bossfight pågår" : "Starta bossfight"}
@@ -2040,33 +1964,27 @@ export function MotionLab() {
         <div ref={stageRef} className={`p100-motion-stage ${replaying ? "replaying" : ""} ${gameActive ? "game-active" : ""} ${viewportFullscreen ? "viewport-fullscreen" : ""}`} style={{ aspectRatio: cameraAspectRatio ?? `${requestedWidth} / ${requestedHeight}` }}>
           <video ref={videoRef} muted playsInline aria-label="Spegelvänd kamerabild" />
           <canvas ref={canvasRef} aria-label="Pose-overlay med kroppens landmärken" />
-          <div className="p100-motion-stage-top">
-            <span className={`p100-motion-live ${isLive ? "active" : ""}`}><Radio /> {isRecovering ? "Pose återansluter" : isLive ? "Kamera aktiv" : "Kamera av"}</span>
-            {delegate ? <span className="engine">{delegate} · {poseExecutionMode === "main-thread" ? "Mobilmotor" : "Worker"}</span> : null}
-            {replaying ? <span className="replay">Replay</span> : null}
-            {gameActive ? <span className="game"><Swords /> Bossfight</span> : null}
-            {baselineRunning ? <span className="baseline"><Gauge /> Baseline {baselineClock(baselineElapsedMs)}</span> : null}
-            {performanceProfileRunning ? <span className="profile"><Gauge /> {performanceProfileMode === "gate-b" ? `Gate B ${remainingClock(GATE_B_DURATION_MS, performanceProfileElapsedMs)}` : `Profil ${performanceProfileSecondsLeft} s`}</span> : null}
-            {gameActive ? <button type="button" className="p100-motion-game-stop" onClick={stopGame} title="Avsluta rundan" aria-label="Avsluta rundan"><X /></button> : null}
-            <button
-              type="button"
-              className="p100-motion-fullscreen"
-              onClick={() => void toggleFullscreen()}
-              aria-label={fullscreen ? "Lämna helskärm" : "Visa i helskärm"}
-              title={fullscreen ? "Lämna helskärm" : "Visa i helskärm"}
-            >
-              {fullscreen ? <Minimize /> : <Maximize />}<span>{fullscreen ? "Stäng" : "Helskärm"}</span>
-            </button>
-            <button
-              type="button"
-              className={`p100-motion-voice-toggle ${voiceGuidance ? "active" : ""}`}
-              onClick={toggleVoiceGuidance}
-              aria-pressed={voiceGuidance}
-              title={voiceGuidance ? "Stäng av röstguide och Arena-röst" : "Slå på röstguide och Arena-röst"}
-            >
-              {voiceGuidance ? <Volume2 /> : <VolumeX />}<span>Röst</span>
-            </button>
-          </div>
+          <MotionStageTopBar
+            isLive={isLive}
+            isRecovering={isRecovering}
+            delegate={delegate}
+            poseExecutionMode={poseExecutionMode}
+            replaying={replaying}
+            gameActive={gameActive}
+            squatTrackingEnabled={squatTrackingEnabled}
+            squatReps={squatView.reps}
+            baselineRunning={baselineRunning}
+            baselineElapsedMs={baselineElapsedMs}
+            performanceProfileRunning={performanceProfileRunning}
+            performanceProfileMode={performanceProfileMode}
+            performanceProfileElapsedMs={performanceProfileElapsedMs}
+            performanceProfileSecondsLeft={performanceProfileSecondsLeft}
+            fullscreen={fullscreen}
+            voiceGuidance={voiceGuidance}
+            onStopGame={stopGame}
+            onToggleFullscreen={toggleFullscreen}
+            onToggleVoiceGuidance={toggleVoiceGuidance}
+          />
           {status === "idle" ? (
             <div className="p100-motion-stage-empty">
               <span><Video /></span>
@@ -2085,157 +2003,55 @@ export function MotionLab() {
           {isLive && !isRecovering && (!poseVisible || !fullBodyVisible) && !replaying && !gameActive && !performanceProfileRunning ? (
             <div className="p100-motion-guide">
               <strong>{poseVisible ? "Hela kroppen behöver synas" : "Ingen kropp hittad ännu"}</strong>
-              <span>Backa, centrera dig och se till att huvud, höfter och knän ryms i bild.</span>
+              <span>Backa, centrera dig och se till att huvud, höfter, knän, anklar och båda fötterna ryms i bild.</span>
             </div>
           ) : null}
-          {baselineRunning ? (
-            <div className="p100-motion-baseline-hud" aria-live="polite">
-              <div className="p100-motion-baseline-hud-time">
-                <span><Gauge /> Baslinjemätning pågår</span>
-                <strong>{baselineClock(baselineElapsedMs)}</strong>
-                <small>{Math.floor(baselineProgress)}% · stoppar automatiskt vid 3:00</small>
-              </div>
-              <div className="p100-motion-baseline-hud-instruction">
-                <small>Moment {baselinePhaseIndex + 1}/{MOTION_BASELINE_PROTOCOL.length} · kamera {baselinePhase.cameraView}</small>
-                <strong>{baselinePhase.title}</strong>
-                <p>{baselinePhase.instruction}</p>
-              </div>
-              {showNextBaselinePhase ? (
-                <div className="p100-motion-baseline-next">
-                  <small>Nästa om {baselinePhaseSecondsLeft} sek</small>
-                  <strong>{nextBaselinePhase.title} · {nextBaselinePhase.cameraView}</strong>
-                </div>
-              ) : null}
-              <div className="p100-motion-baseline-hud-progress"><span style={{ width: `${baselineProgress}%` }} /></div>
-            </div>
+          {squatTrackingEnabled && !gameActive && !baselineRunning && !performanceProfileRunning ? (
+            <MotionWorkoutOverlay
+              workoutSession={workoutSession}
+              squatView={squatView}
+              squatProtocol={squatProtocol}
+              squatCoachCue={squatCoachCue}
+              onSkipRest={handleSkipRest}
+              nowMs={performance.now()}
+            />
           ) : null}
-          {performanceProfileRunning && performanceProfileMode === "gate-b" ? (
-            <div className="p100-motion-profile-hud" aria-live="polite">
-              {performanceProfileCountdown > 0 ? (
-                <div className="p100-motion-profile-countdown">
-                  <small>Gå till din plats · testet startar om</small>
-                  <strong>{performanceProfileCountdown}</strong>
-                  <span>Stå framifrån med hela kroppen i bild</span>
-                </div>
-              ) : (
-                <>
-                  <div className="p100-motion-profile-hud-time">
-                    <span><Gauge /> Gate B · 10 minuter</span>
-                    <strong>{remainingClock(GATE_B_DURATION_MS, performanceProfileElapsedMs)}</strong>
-                    <small>{Math.floor(performanceProfileProgress)}% · rapport skapas automatiskt</small>
-                  </div>
-                  <div className="p100-motion-profile-hud-instruction">
-                    <small>Moment {performanceGatePhaseIndex + 1}/{GATE_B_PHASES.length}</small>
-                    <strong>{performanceGatePhase.title}</strong>
-                    <p>{performanceGatePhase.instruction}</p>
-                  </div>
-                  {nextPerformanceGatePhase && performanceGatePhaseSecondsLeft <= 7 ? (
-                    <div className="p100-motion-baseline-next">
-                      <small>Nästa om {performanceGatePhaseSecondsLeft} sek</small>
-                      <strong>{nextPerformanceGatePhase.title}</strong>
-                    </div>
-                  ) : null}
-                  <div className="p100-motion-baseline-hud-progress"><span style={{ width: `${performanceProfileProgress}%` }} /></div>
-                </>
-              )}
-            </div>
-          ) : null}
-          {baselineNotice && baselineReport ? (
-            <div className={`p100-motion-baseline-done ${baselineNotice.complete ? "complete" : "partial"}`} role="status">
-              <button type="button" className="close" onClick={() => setBaselineNotice(null)} aria-label="Stäng meddelandet"><X /></button>
-              <span className="icon">{baselineNotice.complete ? <Check /> : <CircleStop />}</span>
-              <small>{baselineNotice.complete ? "Automatisk mätning slutförd" : "Delrapport skapad"}</small>
-              <strong>{baselineNotice.complete ? "3 minuter klara!" : `Stoppad efter ${elapsedClock(baselineNotice.durationMs)}`}</strong>
-              <p>{baselineNotice.complete ? "Rapporten är färdig att ladda ned eller kopiera." : "Starta igen och låt timern nå 0:00 för en fullständig rapport."}</p>
-              <div>
-                <button type="button" onClick={downloadBaselineReport}><Download /> Ladda ned rapport (.json)</button>
-                <button type="button" onClick={() => void copyBaselineReport()}>{reportCopied ? <Check /> : <Copy />} {reportCopied ? "Kopierad" : "Kopiera"}</button>
-              </div>
-            </div>
-          ) : null}
-          {gameView && gameActive ? (
-            <div className="p100-motion-game-hud">
-              <div className="p100-motion-game-health" aria-label={`${gameView.hearts} liv kvar`}>
-                <div className="hearts">
-                  {[0, 1, 2].map((heart) => (
-                    <Heart key={heart} className={heart < gameView.hearts ? "alive" : ""} />
-                  ))}
-                </div>
-              </div>
-              <div className="p100-motion-game-stats">
-                <div className="stat combo">
-                  <small>Combo</small>
-                  <strong>×{gameView.combo}</strong>
-                </div>
-                <div className="stat score">
-                  <small>{arenaLanguage === "sv" ? "Poäng" : "Score"}</small>
-                  <strong>{gameView.score.toLocaleString(arenaLanguage === "sv" ? "sv-SE" : "en-US")}</strong>
-                </div>
-                <div className="stat time">
-                  <small>{arenaLanguage === "sv" ? "Tid" : "Time"}</small>
-                  <strong>{gameSeconds}</strong>
-                </div>
-              </div>
-            </div>
-          ) : null}
-          {gameView?.status === "countdown" ? (
-            <div className="p100-motion-countdown">
-              <small>{arenaLanguage === "sv" ? "Gå till din plats · kalibrerar live" : "Take your position · live calibration"}</small>
-              <strong>{motionGameCountdown(gameView)}</strong>
-              <span>{arenaLanguage === "sv" ? "Slå målen. Ducka under den röda vågen." : "Strike targets. Duck under the red wave."}</span>
-            </div>
-          ) : null}
-          {gameView?.duck ? (
-            <div className={`p100-motion-duck-callout ${gameView.nowMs >= gameView.duck.activeAt ? "active" : ""}`}>
-              <strong>{gameView.nowMs >= gameView.duck.activeAt ? (arenaLanguage === "sv" ? "DUCKA!" : "DUCK!") : (arenaLanguage === "sv" ? "GÖR DIG REDO" : "GET READY")}</strong>
-            </div>
-          ) : null}
-          {isLive && !isRecovering && poseVisible && !replaying && !gameView && !baselineRunning && !performanceProfileRunning ? (
-            <button type="button" className="p100-motion-game-launch" onClick={startGame}>
-              <Swords />{" "}
-              {arenaLanguage === "sv"
-                ? `Starta 60 s bossfight (${difficulty === "easy" ? "Lätt" : difficulty === "hard" ? "Svår" : "Medel"})`
-                : `Start 60s Boss Fight (${difficulty === "easy" ? "Easy" : difficulty === "hard" ? "Hard" : "Medium"})`}
-            </button>
-          ) : null}
-          {gameView?.status === "finished" ? (
-            <div className="p100-motion-game-result" role="dialog" aria-label="Resultat från bossfight">
-              <small>{gameView.finishReason === "hearts" ? (arenaLanguage === "sv" ? "Neonväktaren vann den här gången" : "Neon Guardian won this round") : (arenaLanguage === "sv" ? "Rundan klar" : "Round clear")}</small>
-              <strong>{gameView.score.toLocaleString(arenaLanguage === "sv" ? "sv-SE" : "en-US")} {arenaLanguage === "sv" ? "poäng" : "pts"}</strong>
-              <p>{gameView.hits} {arenaLanguage === "sv" ? "träffar" : "hits"} · {gameView.dodges} {arenaLanguage === "sv" ? "duckningar" : "dodges"} · {arenaLanguage === "sv" ? "bästa combo" : "best combo"} ×{gameView.bestCombo}</p>
-              <div className="p100-motion-game-result-actions">
-                <button type="button" className="p100-motion-game-result-primary" onClick={startGame}>
-                  <RefreshCw /> {arenaLanguage === "sv" ? "Kör igen" : "Play again"}
-                </button>
-                {fullscreen ? (
-                  <button
-                    type="button"
-                    className="p100-motion-game-result-secondary fullscreen-exit"
-                    onClick={() => void toggleFullscreen()}
-                    title={arenaLanguage === "sv" ? "Lämna helskärm" : "Exit fullscreen"}
-                    aria-label={arenaLanguage === "sv" ? "Avsluta helskärm" : "Exit fullscreen"}
-                  >
-                    <Minimize /> {arenaLanguage === "sv" ? "Avsluta helskärm" : "Exit fullscreen"}
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="p100-motion-game-result-secondary"
-                  onClick={stopGame}
-                  title={arenaLanguage === "sv" ? "Stäng rundan och gå tillbaka till labbet" : "Close round and return to lab"}
-                  aria-label={arenaLanguage === "sv" ? "Avsluta runda" : "Close round"}
-                >
-                  <CircleStop /> {arenaLanguage === "sv" ? "Avsluta runda" : "Close round"}
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {replaying && recordingData ? (
-            <div className="p100-motion-replay-hud" aria-live="polite">
-              <div><Play /><strong>Landmark-replay</strong><span>{recordingData.frameCount} frames · {(recordingData.durationMs / 1000).toFixed(1)} s</span></div>
-              <progress ref={replayProgressRef} max={1} aria-label="Replay-förlopp" />
-            </div>
-          ) : null}
+          <MotionArenaOverlay
+            gameView={gameView}
+            gameActive={gameActive}
+            arenaLanguage={arenaLanguage}
+            difficulty={difficulty}
+            fullscreen={fullscreen}
+            isLive={isLive}
+            isRecovering={isRecovering}
+            poseVisible={poseVisible}
+            replaying={replaying}
+            baselineRunning={baselineRunning}
+            performanceProfileRunning={performanceProfileRunning}
+            squatTrackingEnabled={squatTrackingEnabled}
+            onStartGame={startGame}
+            onStopGame={stopGame}
+            onToggleFullscreen={toggleFullscreen}
+          />
+          <MotionDiagnosticsOverlay
+            baselineRunning={baselineRunning}
+            baselineElapsedMs={baselineElapsedMs}
+            baselineProgress={baselineProgress}
+            performanceProfileRunning={performanceProfileRunning}
+            performanceProfileMode={performanceProfileMode}
+            performanceProfileCountdown={performanceProfileCountdown}
+            performanceProfileProgress={performanceProfileProgress}
+            performanceProfileElapsedMs={performanceProfileElapsedMs}
+            baselineNotice={baselineNotice}
+            baselineReport={baselineReport}
+            reportCopied={reportCopied}
+            replaying={replaying}
+            recordingData={recordingData}
+            replayProgressRef={replayProgressRef}
+            onCloseBaselineNotice={() => setBaselineNotice(null)}
+            onDownloadBaselineReport={downloadBaselineReport}
+            onCopyBaselineReport={copyBaselineReport}
+          />
           {isRecovering ? (
             <div className="p100-motion-recovery" role="status" aria-live="polite">
               <RefreshCw className="p100-spin" />
@@ -2249,210 +2065,89 @@ export function MotionLab() {
         </div>
 
         <aside className="p100-motion-sidebar">
-          <section className="p100-motion-panel">
-            <header><span>Input</span><strong>Kameraläge</strong></header>
-            <label className="p100-motion-select">
-              <span>Önskad upplösning</span>
-              <select value={resolution} onChange={(event) => void changeResolution(event.target.value as Resolution)} disabled={isStarting || isRecovering || changingResolution || baselineRunning || performanceProfileRunning}>
-                <option value="640x480">640 × 480 · baseline</option>
-                <option value="1280x720">1280 × 720 · kvalitet</option>
-              </select>
-              <small>{changingResolution ? "Byter kameraläge…" : actualResolution ? `Kameran levererar ${actualResolution}` : "Aktiveras när kameran startar"}</small>
-            </label>
-            <label className="p100-motion-select">
-              <span>Arena-röst & Announcer</span>
-              <select
-                value={arenaLanguage}
-                onChange={(event) => changeArenaLanguage(event.target.value as MotionArenaLanguage)}
-              >
-                <option value="en">Engelska (Arcade Announcer · 0 ms)</option>
-                <option value="sv">Svenska (Klassisk)</option>
-              </select>
-              <small>Lokal webbläsarsyntes utan API-kostnad.</small>
-            </label>
-            <label className="p100-motion-select">
-              <span>Svårighetsgrad</span>
-              <select
-                value={difficulty}
-                onChange={(event) => changeDifficulty(event.target.value as MotionGameDifficulty)}
-              >
-                <option value="easy">Lätt (Stora noder · längre tid)</option>
-                <option value="medium">Medel (Klassisk balans · sparkar)</option>
-                <option value="hard">Svår (Snabba noder · dubbelslag · sparkar)</option>
-              </select>
-              <small>
-                {difficulty === "easy"
-                  ? "För nybörjare eller mindre barn. Gott om tid på varje mål."
-                  : difficulty === "medium"
-                    ? "Balanserat tempo med sparkar när hela kroppen syns."
-                    : "Maximal utmaning: kräver dubbelslag med båda händerna samtidigt!"}
-              </small>
-            </label>
-            <div className="p100-motion-readiness">
-              <span className={isLive ? "ok" : ""}><i /> Kamera</span>
-              <span className={status === "running" ? "ok" : ""}><i /> Worker</span>
-              <span className={poseVisible ? "ok" : ""}><i /> 33 landmarks</span>
-              <span className={fullBodyVisible ? "ok" : ""}><i /> Hel kropp</span>
-              <span className={lightOkay ? "ok" : luminance === null ? "" : "warn"}><i /> {luminance === null ? "Ljus väntar" : lightOkay ? "Ljus bra" : "Mer ljus"}</span>
-            </div>
-          </section>
+          <MotionCameraControls
+            resolution={resolution}
+            actualResolution={actualResolution}
+            changingResolution={changingResolution}
+            arenaLanguage={arenaLanguage}
+            difficulty={difficulty}
+            isLive={isLive}
+            status={status}
+            poseVisible={poseVisible}
+            fullBodyVisible={fullBodyVisible}
+            lightOkay={lightOkay}
+            luminance={luminance}
+            disabled={isStarting || isRecovering || changingResolution || baselineRunning || performanceProfileRunning}
+            onChangeResolution={changeResolution}
+            onChangeArenaLanguage={changeArenaLanguage}
+            onChangeDifficulty={changeDifficulty}
+          />
 
-          <section className="p100-motion-panel p100-motion-benchmark">
-            <header><span>Live telemetry</span><strong>Pipeline</strong></header>
-            <div className="p100-motion-metric-grid">
-              <article><small>Capture</small><strong>{metrics.captureFps}</strong><span>FPS</span></article>
-              <article><small>Pose</small><strong>{metrics.poseHz}</strong><span>Hz</span></article>
-              <article><small>Render</small><strong>{metrics.renderFps}</strong><span>FPS</span></article>
-              <article><small>Tappade</small><strong>{metrics.droppedFrames}</strong><span>frames</span></article>
-            </div>
-            <dl className="p100-motion-latency">
-              <div><dt>Inferens p50</dt><dd>{milliseconds(metrics.inferenceP50)}</dd></div>
-              <div><dt>Inferens p95</dt><dd>{milliseconds(metrics.inferenceP95)}</dd></div>
-              <div><dt>Buffertväntan p50</dt><dd>{milliseconds(metrics.bufferWaitP50)}</dd></div>
-              <div><dt>Buffertväntan p95</dt><dd>{milliseconds(metrics.bufferWaitP95)}</dd></div>
-              <div><dt>Bildprep p50</dt><dd>{milliseconds(metrics.preparationP50)}</dd></div>
-              <div><dt>Bildprep p95</dt><dd>{milliseconds(metrics.preparationP95)}</dd></div>
-              <div><dt>Övrig overhead p50</dt><dd>{milliseconds(metrics.overheadP50)}</dd></div>
-              <div><dt>Övrig overhead p95</dt><dd>{milliseconds(metrics.overheadP95)}</dd></div>
-              <div><dt>Pose-pipeline p50</dt><dd>{milliseconds(metrics.pipelineP50)}</dd></div>
-              <div><dt>Pose-pipeline p95</dt><dd>{milliseconds(metrics.pipelineP95)}</dd></div>
-              <div><dt>Första render p50</dt><dd>{milliseconds(metrics.firstRenderP50)}</dd></div>
-              <div><dt>Första render p95</dt><dd>{milliseconds(metrics.firstRenderP95)}</dd></div>
-              <div><dt>Låg confidence hållen</dt><dd>{metrics.heldLowConfidencePercent}%</dd></div>
-              <div><dt>Outliers begränsade</dt><dd>{metrics.limitedOutlierPercent}%</dd></div>
-            </dl>
-            <div className="p100-motion-profiler">
-              {performanceProfileRunning ? (
-                <button type="button" className="running" onClick={() => finishPerformanceProfile()}>
-                  <CircleStop /> Stoppa · {performanceProfileCountdown > 0 ? `${performanceProfileCountdown} s till start` : remainingClock(performanceProfileDurationMs, performanceProfileElapsedMs)}
-                </button>
-              ) : (
-                <div className="p100-motion-profiler-actions">
-                  <button
-                    type="button"
-                    onClick={() => startPerformanceProfile("quick")}
-                    disabled={!isLive || isRecovering || baselineRunning || replaying || gameActive}
-                  >
-                    <Gauge /> Snabbprofil · 30 s
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => startPerformanceProfile("gate-b")}
-                    disabled={!isLive || isRecovering || baselineRunning || replaying || gameActive}
-                  >
-                    <Play /> Gate B · 10 min
-                  </button>
-                </div>
-              )}
-              {performanceProfileReport ? (
-                <div className="p100-motion-profile-result">
-                  <small>{performanceProfileReport.protocol === "gate-b-10m-v1" ? "Fryst Gate B-resultat" : "Fryst 30-sekundersresultat"}</small>
-                  <strong>{performanceProfileReport.summary.poseHzAverage} Hz · {performanceProfileReport.summary.inferenceP95} ms p95</strong>
-                  <span>Capture {performanceProfileReport.summary.captureFpsAverage} · Render {performanceProfileReport.summary.renderFpsAverage} FPS</span>
-                  <span>Buffert {performanceProfileReport.summary.bufferWaitP95} ms · Bildprep {performanceProfileReport.summary.preparationP95} ms · Övrigt {performanceProfileReport.summary.overheadP95} ms p95</span>
-                  <span>{Object.values(performanceProfileReport.checks).filter(Boolean).length}/6 kvalitetskontroller · {performanceProfileReport.counts.droppedFrames} tappade · {performanceProfileReport.counts.workerRestarts} worker-omstarter</span>
-                  <div>
-                    <button type="button" onClick={() => void copyPerformanceProfile()}>{performanceProfileCopied ? <Check /> : <Copy />} {performanceProfileCopied ? "Kopierad" : "Kopiera JSON"}</button>
-                    <button type="button" onClick={downloadPerformanceProfile}><Download /> Ladda ned</button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </section>
+          <MotionWorkoutPanel
+            workoutSession={workoutSession}
+            squatView={squatView}
+            squatProtocol={squatProtocol}
+            squatTrackingEnabled={squatTrackingEnabled}
+            restPreset={restPreset}
+            squatReportCopied={squatReportCopied}
+            nowMs={performance.now()}
+            onChangeRestPreset={changeRestPreset}
+            onToggleSquatTracking={toggleSquatTracking}
+            onResetSquatTracking={resetSquatTracking}
+            onCopySquatReport={copySquatReport}
+            onDownloadSquatReport={downloadSquatReport}
+            onSkipRest={handleSkipRest}
+          />
 
-          <section className="p100-motion-panel p100-motion-cold-starts">
-            <header><span>Gate A</span><strong>Kallstarter</strong></header>
-            <div><strong>{coldStarts.successes}/{coldStarts.attempts}</strong><span>Mål: minst 9 lyckade av 10 försök.</span></div>
-            <button type="button" onClick={resetColdStarts}><RotateCcw /> Nollställ räknare</button>
-            <button type="button" onClick={simulateWorkerFailure} disabled={status !== "running" || poseExecutionMode !== "worker"} title={poseExecutionMode === "main-thread" ? "Mobilmotorn kör avsiktligt utan Web Worker på iPhone" : "Pausar kort och provar den automatiska återhämtningen"}><RefreshCw /> {poseExecutionMode === "main-thread" ? "Mobil fallback aktiv" : "Testa worker-återstart"}</button>
-          </section>
+          <MotionDiagnosticsPanel
+            metrics={metrics}
+            performanceProfileRunning={performanceProfileRunning}
+            performanceProfileMode={performanceProfileMode}
+            performanceProfileCountdown={performanceProfileCountdown}
+            performanceProfileDurationMs={performanceProfileDurationMs}
+            performanceProfileElapsedMs={performanceProfileElapsedMs}
+            performanceProfileReport={performanceProfileReport}
+            performanceProfileCopied={performanceProfileCopied}
+            onStartPerformanceProfile={startPerformanceProfile}
+            onFinishPerformanceProfile={finishPerformanceProfile}
+            onCopyPerformanceProfile={copyPerformanceProfile}
+            onDownloadPerformanceProfile={downloadPerformanceProfile}
+            coldStarts={coldStarts}
+            onResetColdStarts={resetColdStarts}
+            onSimulateWorkerFailure={simulateWorkerFailure}
+            status={status}
+            poseExecutionMode={poseExecutionMode}
+            recording={recording}
+            recordedFrameCount={recordedFrameCount}
+            recordingData={recordingData}
+            replaying={replaying}
+            onBeginRecording={beginRecording}
+            onFinishRecording={finishRecording}
+            onReplayRecording={replayRecording}
+            onCancelReplay={cancelReplay}
+            onDownloadRecording={downloadRecording}
+            baselineRunning={baselineRunning}
+            baselineElapsedMs={baselineElapsedMs}
+            baselineProgress={baselineProgress}
+            baselinePhaseId={baselinePhase.id}
+            baselineReport={baselineReport}
+            baselinePassedChecks={baselinePassedChecks}
+            voiceGuidance={voiceGuidance}
+            reportCopied={reportCopied}
+            luminance={luminance}
+            lightOkay={lightOkay}
+            fullBodyVisible={fullBodyVisible}
+            onToggleVoiceGuidance={toggleVoiceGuidance}
+            onStartBaseline={startBaseline}
+            onFinishBaseline={finishBaseline}
+            onCopyBaselineReport={copyBaselineReport}
+            onDownloadBaselineReport={downloadBaselineReport}
+            isLive={isLive}
+            isRecovering={isRecovering}
+            gameActive={gameActive}
+            squatTrackingEnabled={squatTrackingEnabled}
+          />
         </aside>
-      </section>
-
-      <section className="p100-motion-recording">
-        <div className="p100-motion-recording-copy">
-          <span><ShieldCheck /></span>
-          <div><small>Privat testdata</small><strong>Landmark-logg, aldrig råvideo</strong><p>Spela in pose-snapshots och tidsstämplar för reproducerbar replay. Filen lämnar inte enheten om du inte själv flyttar den.</p></div>
-        </div>
-        <div className="p100-motion-recording-actions">
-          {recording ? (
-            <button type="button" className="recording" onClick={finishRecording}><CircleStop /> Stoppa · {recordedFrameCount} frames</button>
-          ) : (
-            <button type="button" onClick={beginRecording} disabled={!isLive || isRecovering || replaying || baselineRunning || performanceProfileRunning}><Square /> Spela in landmarks</button>
-          )}
-          <button type="button" onClick={replaying ? cancelReplay : replayRecording} disabled={!recordingData || recording || gameActive || baselineRunning || performanceProfileRunning}><Play /> {replaying ? "Stoppa replay" : "Replay"}</button>
-          <button type="button" onClick={downloadRecording} disabled={!recordingData}><Download /> Ladda ned replay (.json)</button>
-        </div>
-        {recordingData && !recording ? <small className="p100-motion-recording-ready">Redo: {recordingData.frameCount} frames över {(recordingData.durationMs / 1000).toFixed(1)} sekunder.</small> : null}
-      </section>
-
-      <section className="p100-motion-baseline">
-        <div className="p100-motion-baseline-head">
-          <div>
-            <small>Fas A · reproducerbar mätning</small>
-            <strong>3 min baslinje</strong>
-            <p>Rör dig som i spelet: stå neutralt, slå åt sidorna, gör knäböj och ducka. Endast mätvärden och synlighetsflaggor sparas.</p>
-          </div>
-          <div className="p100-motion-baseline-actions">
-            <button type="button" className="voice" onClick={toggleVoiceGuidance} aria-pressed={voiceGuidance}>
-              {voiceGuidance ? <Volume2 /> : <VolumeX />} Röstguide {voiceGuidance ? "på" : "av"}
-            </button>
-            {baselineRunning ? (
-              <button type="button" className="running" onClick={() => finishBaseline()} title="Avslutar före tre minuter och skapar en delrapport"><CircleStop /> Avbryt · {baselineClock(baselineElapsedMs)}</button>
-            ) : (
-              <button type="button" onClick={startBaseline} disabled={!isLive || isRecovering || recording || replaying || gameActive || performanceProfileRunning}><Play /> Starta 3 min</button>
-            )}
-            <button type="button" className="report-download" onClick={downloadBaselineReport} disabled={!baselineReport}><Download /> Ladda ned rapport (.json)</button>
-            <button type="button" onClick={() => void copyBaselineReport()} disabled={!baselineReport}>
-              {reportCopied ? <Check /> : <Copy />} {reportCopied ? "Rapport kopierad" : "Kopiera rapport"}
-            </button>
-          </div>
-        </div>
-
-        <div className="p100-motion-baseline-progress" aria-label="Baslinjemätningens förlopp">
-          <span style={{ width: `${baselineProgress}%` }} />
-        </div>
-
-        <div className="p100-motion-baseline-protocol">
-          {MOTION_BASELINE_PROTOCOL.map((phase, index) => (
-            <article key={phase.id} className={baselineRunning && phase.id === baselinePhase.id ? "active" : ""}>
-              <small>{index + 1} · {phase.cameraView}</small>
-              <strong>{phase.title}</strong>
-              <span>{Math.round((phase.endsAtMs - phase.startsAtMs) / 1000)} sek</span>
-            </article>
-          ))}
-          <p><strong>Vinkelguide:</strong> Framifrån visar höger–vänster-symmetri. Cirka 45° ger bättre djupinformation utan att benen överlappar. Golvarmhävningar analyseras bäst från sidan, men kräver en separat kameravinkel som ser händer till fötter och ingår därför inte i vardagsrumsbaslinjen.</p>
-        </div>
-
-        {baselineRunning ? (
-          <div className="p100-motion-baseline-live" aria-live="polite">
-            <span className={fullBodyVisible ? "ok" : "warn"}>{fullBodyVisible ? "Hel kropp synlig" : "Backa – kroppen lämnar bild"}</span>
-            <span className={lightOkay ? "ok" : "warn"}>{lightOkay ? `Ljus ${rounded(luminance ?? 0)}` : "Mer ljus hjälper precisionen"}</span>
-            <span>{baselineClock(baselineElapsedMs)} kvar</span>
-          </div>
-        ) : null}
-
-        {baselineReport ? (
-          <div className="p100-motion-baseline-report">
-            <header>
-              <div><small>Senaste rapport</small><strong>{baselinePassedChecks}/4 kvalitetskontroller</strong></div>
-              <span>{baselineReport.actualResolution} · {baselineReport.delegate}</span>
-            </header>
-            <div className="p100-motion-baseline-metrics">
-              <article><small>Capture snitt</small><strong>{baselineReport.summary.captureFpsAverage}</strong><span>FPS</span></article>
-              <article><small>Pose snitt</small><strong>{baselineReport.summary.poseHzAverage}</strong><span>Hz</span></article>
-              <article><small>Första render p95</small><strong>{milliseconds(baselineReport.summary.firstRenderP95)}</strong></article>
-              <article><small>Hel kropp</small><strong>{baselineReport.summary.fullBodyVisiblePercent}%</strong></article>
-            </div>
-            <div className="p100-motion-baseline-checks">
-              <span className={baselineReport.checks.captureNear30Fps ? "ok" : "warn"}><i /> Capture nära 30 FPS</span>
-              <span className={baselineReport.checks.renderNear60Fps ? "ok" : "warn"}><i /> Render nära 60 FPS</span>
-              <span className={baselineReport.checks.poseAtLeast20Hz ? "ok" : "warn"}><i /> Pose minst 20 Hz</span>
-              <span className={baselineReport.checks.bodyVisibleAtLeast90Percent ? "ok" : "warn"}><i /> Hel kropp minst 90%</span>
-            </div>
-            <small className="p100-motion-baseline-note">{baselineReport.sampleCount} prover över {(baselineReport.durationMs / 1000).toFixed(1)} sekunder · pose guard: {baselineReport.summary.heldLowConfidencePercent}% hållna, {baselineReport.summary.limitedOutlierPercent}% begränsade · ingen råvideo · detta är filen att skicka för analys</small>
-          </div>
-        ) : null}
       </section>
 
       <footer className="p100-motion-footnote"><Gauge /> MediaPipe Pose Landmarker Lite körs i en separat Web Worker. Runtime och modell hämtas versionslåst vid första start; kamerabilder skickas inte till Zickaris-servern.</footer>

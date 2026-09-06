@@ -11,7 +11,7 @@ import {
   type Project100RecoveryInsights,
   type Project100TrainingInsights,
   type Project100WorkComparison,
-} from "./project100-insights";
+} from "../project100-insights";
 
 describe("project100-insights domain helpers", () => {
   it("computes metric deltas correctly with absolute and percentage change", () => {

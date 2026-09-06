@@ -16,7 +16,7 @@ import {
   scheduleMotionVideoFrame,
   summarizeMotionMetrics,
   type MotionFrameSchedulerState,
-} from "./motion-engine";
+} from "../motion-engine";
 
 describe("motion-engine", () => {
   it("buffers the latest camera frame and submits it immediately when inference becomes free", () => {

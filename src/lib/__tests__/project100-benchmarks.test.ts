@@ -6,8 +6,8 @@ import {
   formatDurationTime,
   parseDistanceToMeters,
   parseDurationToSeconds,
-} from "./project100-benchmarks";
-import type { Project100TrainingSession } from "./project100-training";
+} from "../project100-benchmarks";
+import type { Project100TrainingSession } from "../project100-training";
 
 describe("project100-benchmarks", () => {
   describe("Pace calculation & time parsing", () => {
