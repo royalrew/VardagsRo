@@ -554,7 +554,7 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
     if (requestedCommand === "help") {
       await sendTelegramMessage(
         chatId,
-        "Jag är Jarvis, din personliga digitala kollega.\n\nDu kan skriva, tala in röstmeddelanden eller använda snabbknapparna:\n• 🌅 Dagens Briefing – morgonöversikt eller kvällsavstämning\n• 🏋️‍♂️ Dagens Träning – pass, övningar och status\n• 🥩 Protein & Mat – dagsintag, matlådor och proteinmål\n• 📅 Familjens Schema – arbetspass och aktiviteter\n\nDu kan även skriva påminnelser som ”Påminn mig att köpa mjölk på fredag efter jobbet”.",
+        "Jag är Jarvis, din personliga digitala kollega.\n\nDu kan skriva, tala in röstmeddelanden eller använda snabbknapparna:\n• 🌅 Dagens Briefing – morgonöversikt eller kvällsavstämning\n• 🏋️‍♂️ Dagens Träning – pass, övningar och status\n• 🥩 Protein & Mat – dagsintag, matlådor och proteinmål\n• 📅 Familjens Schema – arbetspass och aktiviteter\n\nExempel på naturliga fraser:\n• ”Nu drack jag en proteindrink”\n• ”20 × 2 armhävningar”\n• ”Nu gjorde jag 40 knäböj”\n• ”Jag har ont i foten”\n• ”Foten känns bra igen”\n• ”Påminn mig att köpa mjölk på fredag efter jobbet”",
         { replyMarkup: getTelegramReplyKeyboard() },
       );
       return;

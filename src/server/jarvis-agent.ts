@@ -9,6 +9,15 @@ import {
 } from "@/lib/dates";
 import { eventConcernsPerson } from "@/lib/family-scope";
 import {
+  isJarvisSpontaneousWorkoutPrompt,
+  jarvisBodyPartLabel,
+  jarvisTrainingAdaptation,
+  parseJarvisBodyState,
+  parseJarvisProteinCapture,
+  parseJarvisStrengthCaptures,
+  type JarvisBodyPart,
+} from "@/lib/jarvis-natural-language";
+import {
   type Project100MemoryCategory,
 } from "@/lib/project100-jarvis";
 import { parseMemoryCommand } from "@/lib/project100-memory-classifier";
@@ -33,6 +42,11 @@ import { loadProject100BodyJourney, saveProject100BodyEntry } from "@/server/pro
 import { getCleaningAreaForPerson, getKidsChoresOverview } from "@/lib/kids-chores";
 import { createProject100ContentProject } from "@/server/project100-content";
 import { logJarvisCapabilityGap } from "@/server/jarvis-gaps";
+import {
+  listJarvisBodyLimitations,
+  resolveJarvisBodyLimitation,
+  saveJarvisBodyLimitation,
+} from "@/server/jarvis-body-state";
 import { loadProject100Journal, saveProject100JournalEntry } from "@/server/project100-journal";
 import { handleMemoryTextIntent } from "@/server/project100-memory-assistant";
 import {
@@ -82,6 +96,17 @@ export interface JarvisAgentOptions {
 export interface JarvisAgentResult {
   text: string;
   executedActions: string[];
+}
+
+function bodyLimitationSummary(bodyPart: JarvisBodyPart, bodyPartLabel: string): string {
+  const adaptation = jarvisTrainingAdaptation(bodyPart);
+  return `Jag undviker tills vidare ${adaptation.avoid.join(", ")} i dina träningsförslag. Belastningssnälla alternativ för ${bodyPartLabel}: ${adaptation.alternatives.join(", ")}. Avbryt en övning om den ökar smärtan. Det här är en träningsanpassning, inte en diagnos. Om du har mycket ont, tydlig svullnad/deformitet eller svårt att använda kroppsdelen efter en skada bör du kontakta vården eller 1177.`;
+}
+
+function isJarvisBodyPart(value: string): value is JarvisBodyPart {
+  return ["foot", "wrist", "hand", "knee", "shoulder", "elbow", "back", "neck", "hip", "calf"].includes(
+    value,
+  );
 }
 
 const SWEDISH_WEEKDAYS: Record<string, number> = {
@@ -426,7 +451,7 @@ const JARVIS_TOOLS: OpenAI.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "log_quick_nutrition",
-      description: "Logga en snabb måltid, proteinshake, mellanmål eller lunch med proteinmängd och eventuella kalorier.",
+      description: "Logga en snabb måltid, proteinshake, mellanmål eller lunch. Proteinmängden är valfri och får aldrig gissas.",
       parameters: {
         type: "object",
         properties: {
@@ -436,7 +461,7 @@ const JARVIS_TOOLS: OpenAI.ChatCompletionTool[] = [
           },
           protein_g: {
             type: "number",
-            description: "Mängd protein i gram (t.ex. 35, 42).",
+            description: "Valfri mängd protein i gram (t.ex. 35, 42). Utelämna om användaren inte angav mängden.",
           },
           energy_kcal: {
             type: "number",
@@ -452,7 +477,7 @@ const JARVIS_TOOLS: OpenAI.ChatCompletionTool[] = [
             description: "Datum för måltiden i format YYYY-MM-DD (standard är idag).",
           },
         },
-        required: ["title", "protein_g"],
+        required: ["title"],
       },
     },
   },
@@ -495,8 +520,59 @@ const JARVIS_TOOLS: OpenAI.ChatCompletionTool[] = [
             type: "string",
             description: "Datum i format YYYY-MM-DD (standard är idag).",
           },
+          exercises: {
+            type: "array",
+            description: "Utförda övningar med ett objekt per övning och en rad per faktiskt set.",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                notes: { type: ["string", "null"] },
+                sets: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      reps: { type: ["number", "null"] },
+                      weightKg: { type: ["number", "null"] },
+                      durationSeconds: { type: ["number", "null"] },
+                      distanceMeters: { type: ["number", "null"] },
+                      rpe: { type: ["number", "null"] },
+                    },
+                    required: ["reps"],
+                  },
+                },
+              },
+              required: ["name", "sets"],
+            },
+          },
         },
         required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "record_body_limitation",
+      description: "Spara eller avsluta en aktuell kroppskänning/smärta så att framtida träningsförslag kan belastningsanpassas utan att ställa diagnos.",
+      parameters: {
+        type: "object",
+        properties: {
+          body_part: {
+            type: "string",
+            enum: ["foot", "wrist", "hand", "knee", "shoulder", "elbow", "back", "neck", "hip", "calf"],
+          },
+          body_part_label: {
+            type: "string",
+            description: "Kroppsdelen på naturlig svenska, exempelvis 'foten' eller 'handleden'.",
+          },
+          status: {
+            type: "string",
+            enum: ["active", "resolved"],
+          },
+        },
+        required: ["body_part", "status"],
       },
     },
   },
@@ -910,6 +986,46 @@ export async function processJarvisAgentMessage(
       actor.role === "adult" ||
       actor.personType === "adult";
 
+    if (name === "record_body_limitation") {
+      const bodyPartValue = String(args.body_part || "").toLowerCase();
+      if (!isJarvisBodyPart(bodyPartValue)) {
+        return JSON.stringify({
+          success: false,
+          summary: "Jag kunde inte avgöra vilken kroppsdel känningen gäller.",
+        });
+      }
+
+      const bodyPartLabel = args.body_part_label
+        ? String(args.body_part_label).trim()
+        : jarvisBodyPartLabel(bodyPartValue);
+      const status = String(args.status || "active").toLowerCase();
+      if (status === "resolved") {
+        const resolvedCount = await resolveJarvisBodyLimitation(actor, bodyPartValue);
+        return JSON.stringify({
+          success: true,
+          status: "resolved",
+          resolvedCount,
+          summary:
+            resolvedCount > 0
+              ? `Skönt att höra. Jag har markerat känningen i ${bodyPartLabel} som över och använder inte längre den begränsningen i träningsförslagen.`
+              : `Skönt att ${bodyPartLabel} känns bättre. Jag hittade ingen aktiv begränsning att avsluta.`,
+        });
+      }
+
+      await saveJarvisBodyLimitation(
+        actor,
+        bodyPartValue,
+        today,
+        options.channel || "web",
+      );
+      return JSON.stringify({
+        success: true,
+        status: "active",
+        bodyPart: bodyPartValue,
+        summary: `Noterat: du har ont i ${bodyPartLabel}. ${bodyLimitationSummary(bodyPartValue, bodyPartLabel)}`,
+      });
+    }
+
     if (name === "save_memory") {
       if (!isAdult) {
         return JSON.stringify({
@@ -1179,7 +1295,7 @@ export async function processJarvisAgentMessage(
 
     if (name === "log_quick_nutrition") {
       const title = String(args.title || "Proteinshake");
-      const proteinG = Math.round(Number(args.protein_g));
+      const proteinG = typeof args.protein_g === "number" ? Math.round(args.protein_g) : null;
       const energyKcal = typeof args.energy_kcal === "number" ? Math.round(args.energy_kcal) : null;
       const rawMealType = String(args.meal_type || "snack").toLowerCase();
       const mealType: Project100MealType = /shake|vassle/i.test(rawMealType) || /shake|vassle/i.test(title)
@@ -1187,7 +1303,7 @@ export async function processJarvisAgentMessage(
         : (["breakfast", "lunch", "dinner", "snack", "shake"].includes(rawMealType) ? rawMealType as Project100MealType : "snack");
       const targetDate = args.date ? String(args.date) : today;
 
-      if (proteinG <= 0 || proteinG > 300) {
+      if (proteinG !== null && (proteinG <= 0 || proteinG > 300)) {
         return JSON.stringify({
           error: `Orimlig proteinmängd: ${proteinG}g. Vänligen ange mellan 1 och 300g.`,
         });
@@ -1209,7 +1325,7 @@ export async function processJarvisAgentMessage(
         mediaId: null,
       });
 
-      let dayTotalProteinG = proteinG;
+      let dayTotalProteinG = proteinG ?? 0;
       let targetProteinG = 160;
       try {
         const nutritionDay = await loadProject100NutritionDay(actor, targetDate);
@@ -1220,6 +1336,9 @@ export async function processJarvisAgentMessage(
       }
 
       const remainingG = Math.max(0, targetProteinG - dayTotalProteinG);
+      const amountSummary = proteinG === null
+        ? "Proteinmängden saknas, så inga gram har lagts till i dagens totalsumma."
+        : `+${proteinG}g protein`;
 
       return JSON.stringify({
         success: true,
@@ -1229,7 +1348,7 @@ export async function processJarvisAgentMessage(
         dayTotalProteinG,
         targetProteinG,
         remainingG,
-        summary: `Loggat måltid: "${title}" (+${proteinG}g protein). Dagens total: ${dayTotalProteinG}g av ${targetProteinG}g (${remainingG}g kvar till målet).`,
+        summary: `Loggat måltid: "${title}" (${amountSummary}). Dagens total: ${dayTotalProteinG}g av ditt mål på ${targetProteinG}g (${remainingG}g kvar till målet).`,
       });
     }
 
@@ -1415,11 +1534,19 @@ export async function processJarvisAgentMessage(
 
     if (name === "get_training_status") {
       const targetDate = args.date ? String(args.date) : today;
-      const [sessions, templates, dashboard] = await Promise.all([
+      const [sessions, templates, dashboard, bodyLimitations] = await Promise.all([
         loadProject100TrainingSessions(actor),
         loadProject100TrainingTemplates(actor),
         loadDashboard(actor),
+        listJarvisBodyLimitations(actor).catch(() => []),
       ]);
+
+      const bodyLimitationNote = bodyLimitations.length > 0
+        ? `\n\n⚠️ Aktuell känning: ${bodyLimitations.map((item) => item.bodyPartLabel).join(", ")}. ${bodyLimitationSummary(
+            bodyLimitations[0].bodyPart,
+            bodyLimitations[0].bodyPartLabel,
+          )}`
+        : "";
 
       const todaySessions = sessions.filter((s) => s.sessionDate === targetDate);
       const completed = todaySessions.filter((s) => s.status === "completed");
@@ -1455,7 +1582,7 @@ export async function processJarvisAgentMessage(
           status: "completed",
           targetDate,
           completedCount: completed.length,
-          summary: `Du har redan genomfört träningspass idag:\n${compList}\n\n${workScheduleSummary} Bra kört!`,
+          summary: `Du har redan genomfört träningspass idag:\n${compList}\n\n${workScheduleSummary} Bra kört!${bodyLimitationNote}`,
         });
       }
 
@@ -1468,7 +1595,7 @@ export async function processJarvisAgentMessage(
           status: "planned",
           targetDate,
           plannedCount: planned.length,
-          summary: `Dagens inplanerade träningspass:\n${planList}\n\n${workScheduleSummary}\nSäg till när du kört klart så klarmarkerar jag det, eller logga via snabbspåret!`,
+          summary: `Dagens inplanerade träningspass:\n${planList}\n\n${workScheduleSummary}\nSäg till när du kört klart så klarmarkerar jag det, eller logga via snabbspåret!${bodyLimitationNote}`,
         });
       }
 
@@ -1481,7 +1608,7 @@ export async function processJarvisAgentMessage(
         success: true,
         status: "none",
         targetDate,
-        summary: `Du har inget inplanerat träningspass för idag (${targetDate}).\n${workScheduleSummary}${tmplList}\n\nVill du köra ett pass från dina mallar eller ett spontant pass? Säg bara till (t.ex. "Logga 30 min hemmapass" eller "Körde Överkropp A") så hjälper jag dig!`,
+        summary: `Du har inget inplanerat träningspass för idag (${targetDate}).\n${workScheduleSummary}${tmplList}\n\nVill du köra ett pass från dina mallar eller ett spontant pass? Säg bara till (t.ex. "Logga 30 min hemmapass" eller "Körde Överkropp A") så hjälper jag dig!${bodyLimitationNote}`,
       });
     }
 
@@ -1914,10 +2041,101 @@ export async function processJarvisAgentMessage(
     return JSON.stringify({ error: `Okänt verktyg: ${name}` });
   }
 
+  // High-confidence everyday captures run before the LLM. These phrases mutate
+  // personal data, so the code — not a probabilistic interpretation — decides
+  // exactly what is saved.
+  const strengthCaptures = parseJarvisStrengthCaptures(text);
+  const proteinCapture = parseJarvisProteinCapture(text);
+  const bodyStateCapture = parseJarvisBodyState(text);
+
+  if (strengthCaptures.length > 0 || proteinCapture || bodyStateCapture) {
+    const confirmations: string[] = [];
+
+    if (strengthCaptures.length > 0) {
+      const exerciseNames = strengthCaptures.map((capture) => capture.exerciseName);
+      await executeTool("log_quick_workout", {
+        title: strengthCaptures.length === 1
+          ? `Hemmapass ${strengthCaptures[0].exerciseName}`
+          : `Hemmapass ${exerciseNames.join(" & ")}`,
+        activity_type: "strength_home",
+        notes: text,
+        exercises: strengthCaptures.map((capture) => ({
+          name: capture.exerciseName,
+          notes: null,
+          sets: Array.from({ length: capture.setCount }, () => ({
+            reps: capture.repsPerSet,
+            weightKg: 0,
+            durationSeconds: null,
+            distanceMeters: null,
+            rpe: null,
+          })),
+        })),
+      });
+      const loggedExercises = strengthCaptures.map((capture) =>
+        capture.setCount === 1
+          ? `${capture.totalReps} ${capture.exerciseName.toLocaleLowerCase("sv-SE")}`
+          : `${capture.setCount} set × ${capture.repsPerSet} ${capture.exerciseName.toLocaleLowerCase("sv-SE")} (${capture.totalReps} totalt)`,
+      );
+      confirmations.push(`Loggat ${loggedExercises.join(" och ")} som ett genomfört pass.`);
+    }
+
+    if (proteinCapture) {
+      const result = JSON.parse(
+        await executeTool("log_quick_nutrition", {
+          title: proteinCapture.title,
+          ...(proteinCapture.proteinG === null ? {} : { protein_g: proteinCapture.proteinG }),
+        }),
+      );
+      confirmations.push(result.summary);
+    }
+
+    if (bodyStateCapture) {
+      const result = JSON.parse(
+        await executeTool("record_body_limitation", {
+          body_part: bodyStateCapture.bodyPart,
+          body_part_label: bodyStateCapture.bodyPartLabel,
+          status: bodyStateCapture.status,
+        }),
+      );
+      confirmations.push(result.summary);
+    }
+
+    return {
+      text: `${getGreeting(callerName, now)}\n\n${confirmations.join("\n\n")}`,
+      executedActions,
+    };
+  }
+
+  if (isJarvisSpontaneousWorkoutPrompt(text)) {
+    return {
+      text: `${getGreeting(callerName, now)} Absolut. Säg vad du gjorde och gärna set/reps, tid eller distans — till exempel ”20 × 2 armhävningar”, ”40 knäböj” eller ”sprang 5 km på 28 minuter” — så loggar jag passet direkt.`,
+      executedActions,
+    };
+  }
+
+  const preflightClock = clockValueInTimeZone(now.toISOString(), DEFAULT_TIME_ZONE);
+  const preflightHour = Number(preflightClock.slice(0, 2));
+  if (/\b(?:breif|breifing)\b/i.test(text)) {
+    const type = /kväll/i.test(text) || preflightHour >= 17 || preflightHour < 4
+      ? "evening"
+      : "morning";
+    const result = JSON.parse(await executeTool("get_daily_briefing", { type }));
+    return { text: result.summary || result.data?.text, executedActions };
+  }
+
   // 2. Try LLM Tool Calling
   const ai = getAgentClient();
   if (ai) {
     try {
+      const needsBodyContext = /(?:trän|pass|övning|ont|smärt|känning|skad|återhämt)/i.test(text);
+      const activeBodyLimitations = needsBodyContext
+        ? await listJarvisBodyLimitations(actor).catch(() => [])
+        : [];
+      const limitationPrompt = activeBodyLimitations.length > 0
+        ? `\nAKTUELLA KROPPSBEGRÄNSNINGAR: ${activeBodyLimitations
+            .map((item) => item.content)
+            .join(" ")} Föreslå inte övningar som belastar de områdena; använd belastningsanpassade alternativ och ställ ingen diagnos.`
+        : "";
       const systemPrompt = `Du är Jarvis, den personliga assistenten och digitala kollegan i Vardagsro och Projekt 100.
 Du hjälper ${callerName} med hushållets kalender, minnen, dagbok, idéer, att-göra-uppgifter, träning, kost och kroppsmätningar.
 
@@ -1925,8 +2143,9 @@ IDAG ÄR: ${today} (tidszon Europe/Stockholm, klockan är cirka ${now.toTimeStri
 DITT TILLTAL: Varmt, personligt, professionellt och koncist ("Glass & Steel"). Hälsa gärna med "${getGreeting(callerName, now)}" om användaren inleder en konversation.
 NOLL HALLUCINATION: Gissa aldrig kalenderhändelser, koder, vikt eller fakta. Använd alltid verktygen för att slå upp schema (check_schedule), hämta daglig briefing (get_daily_briefing), skapa uppgifter (create_task), spara/söka minnen, logga mätningar (log_body_measurement), logga protein/mat (log_quick_nutrition), logga pass (log_quick_workout / complete_planned_session) eller logga dagbok (save_journal).
 BRIEFING & DAGLIG ÖVERSIKT: När användaren efterfrågar en briefing, morgonöversikt, kvällsavstämning eller frågar vad som händer idag / hur dagen ser ut / hur dagen gick, anropa ALLTID verktyget "get_daily_briefing" med type "morning" (på morgonen/dagen) eller "evening" (på kvällen / vid summering). Återge verktygets strukturerade sammanfattning.
+KROPPSKÄNNINGAR: När användaren säger att en kroppsdel gör ont, anropa "record_body_limitation". Anpassa träningen genom att undvika belastning på området, erbjud andra övningar, ställ ingen diagnos och säg åt användaren att avbryta rörelser som ökar smärtan. När användaren säger att området känns bra igen, avsluta begränsningen med status "resolved".
 KOMBINERADE HANDLINGAR: Om användaren nämner flera saker (t.ex. körde benpass OCH sprang 5 km, eller vägde sig OCH drack en shake), anropa ALLA relevanta verktyg och ge ett komplett, strukturerat svar som bekräftar alla delar.
-MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pass, ge konkreta siffror (t.ex. hur mycket protein som återstår till dagens 160g-mål, eller hur mycket som återstår till 100 kg-målet). Undvik tomma klyschor.`;
+MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pass, ge konkreta siffror (t.ex. hur mycket protein som återstår till dagens mål, eller hur mycket som återstår till viktmålet). Hitta aldrig på proteinmängd när användaren inte angav den. Undvik tomma klyschor.${limitationPrompt}`;
 
       const { sanitizedText } = sanitizePII(text);
       const messages: OpenAI.ChatCompletionMessageParam[] = [
@@ -2043,7 +2262,7 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
 
   if (/^(vem\s*är\s*du|vad\s*kan\s*du\s*göra|vad\s*kan\s*jag\s*fråga|hjälp|funktioner|kommandon)[\s!?.…]*$/i.test(lower)) {
     return {
-      text: `${getGreeting(callerName, now)} Jag är Jarvis, er digitala familje- och livskollega! 🤖✨\n\nHär är exempel på vad du kan fråga eller be mig om:\n\n📅 **Schema & Arbetstider:**\n• "När börjar jag imorgon?"\n• "När jobbar Hanni på fredag?"\n• "Vad händer i helgen?"\n\n🎯 **Aktiviteter & Dagsplan:**\n• "Vad ska vi göra idag?"\n• "Hur ser morgondagen ut?"\n\n🍽️ **Middag & Kost:**\n• "Vad ska vi äta idag?" / "Middagstips"\n• "Protein & Mat" / "Logga 30g protein"\n\n🏋️‍♂️ **Projekt 100 Träning & Kropp:**\n• "Vad ska jag träna idag?"\n• "Vägde 84.5 kg"\n• "Sprang 5 km på 28 min"\n\n🧹 **Barnen & Städning:**\n• "Vem städar vad?"\n• "Är barnen klara med sina ansvarsområden?"\n• "Har barnen några läxor?"\n\n🔔 **Smarta Påminnelser:**\n• "Påminn mig att handla på fredag efter jobbet"\n\n📌 **Minnesbank & Dokument:**\n• "Vad står i kallelsen från tandläkaren?"\n• "Kom ihåg att koden till förrådet är 1234"`,
+      text: `${getGreeting(callerName, now)} Jag är Jarvis, er digitala familje- och livskollega! 🤖✨\n\nHär är exempel på vad du kan fråga eller be mig om:\n\n📅 **Schema & Arbetstider:**\n• "När börjar jag imorgon?"\n• "När jobbar Hanni på fredag?"\n• "Vad händer i helgen?"\n\n🎯 **Aktiviteter & Dagsplan:**\n• "Vad ska vi göra idag?"\n• "Hur ser morgondagen ut?"\n\n🍽️ **Middag & Kost:**\n• "Vad ska vi äta idag?" / "Middagstips"\n• "Nu drack jag en proteindrink"\n• "Tog en shake med 35 g protein"\n\n🏋️‍♂️ **Projekt 100 Träning & Kropp:**\n• "Vad ska jag träna idag?" / "Spontant pass"\n• "Nu gjorde jag 40 knäböj"\n• "20 × 2 armhävningar"\n• "Sprang 5 km på 28 min"\n• "Jag har ont i foten" / "Foten känns bra igen"\n• "Vägde 84.5 kg"\n\n🧹 **Barnen & Städning:**\n• "Vem städar vad?"\n• "Är barnen klara med sina ansvarsområden?"\n• "Har barnen några läxor?"\n\n🔔 **Smarta Påminnelser:**\n• "Påminn mig att handla på fredag efter jobbet"\n\n📌 **Minnesbank & Dokument:**\n• "Vad står i kallelsen från tandläkaren?"\n• "Kom ihåg att koden till förrådet är 1234"`,
       executedActions: [],
     };
   }
@@ -2619,29 +2838,6 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
     }
   }
 
-  // Protein & Quick Nutrition micro-log
-  const proteinMatch = text.match(/(\d{1,3})\s*(?:g|gram)\s*protein/i) ||
-    text.match(/(?:drack|åt|tog)\s*(?:en\s*)?(?:proteinshake|shake|vassleshake|keso|kvarg)\s*(?:med\s*)?(\d{1,3})/i);
-  if (proteinMatch) {
-    const proteinVal = parseInt(proteinMatch[1], 10);
-    if (proteinVal > 0 && proteinVal <= 300) {
-      let title = "Proteinmellanmål";
-      if (/shake|vassle/i.test(text)) title = "Proteinshake";
-      else if (/kyckling/i.test(text)) title = "Kycklingmåltid";
-      else if (/keso|kvarg/i.test(text)) title = "Keso/kvarg";
-
-      const toolResStr = await executeTool("log_quick_nutrition", {
-        title,
-        protein_g: proteinVal,
-      });
-      const toolRes = JSON.parse(toolResStr);
-      return {
-        text: `${getGreeting(callerName, now)} Noterat ${proteinVal}g protein (${title}). Dagens total är nu ${toolRes.dayTotalProteinG}g av ditt mål på ${toolRes.targetProteinG}g (${toolRes.remainingG}g kvar till målet).`,
-        executedActions,
-      };
-    }
-  }
-
   // Quick Workout / Spontaneous Session micro-log
   const runMatch = text.match(/(?:sprang|löpning|löppass)\s*(\d+(?:[.,]\d+)?)\s*(?:km|kilometer)?(?:\s*(?:på|i)\s*(\d+)\s*(?:min|minuter))?/i);
   if (runMatch) {
@@ -2655,38 +2851,6 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
     });
     return {
       text: `${getGreeting(callerName, now)} Grymt sprungit! Loggat Löpning ${distanceKm} km${durationMinutes ? ` (${durationMinutes} min)` : ""} som genomfört pass.`,
-      executedActions,
-    };
-  }
-
-  // Spontaneous home workout / pushups
-  const homeMatch = text.match(/(?:gjorde|körde)\s*(\d+)\s*(?:armhävningar|knäböj|situps|chins|pull-?ups|dips)/i);
-  if (homeMatch) {
-    const count = parseInt(homeMatch[1], 10);
-    const exName = /armhäv/i.test(text)
-      ? "Armhävningar"
-      : /chins|pull/i.test(text)
-      ? "Pull-ups"
-      : /dips/i.test(text)
-      ? "Dips"
-      : /knäböj/i.test(text)
-      ? "Knäböj"
-      : "Styrkeövning";
-
-    await executeTool("log_quick_workout", {
-      title: `Hemmapass ${exName}`,
-      activity_type: "strength_home",
-      notes: text,
-      exercises: [
-        {
-          name: exName,
-          notes: null,
-          sets: [{ reps: count, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 }],
-        },
-      ],
-    });
-    return {
-      text: `${getGreeting(callerName, now)} Bra jobbat! Loggat ${count} ${exName.toLowerCase()} som genomfört pass.`,
       executedActions,
     };
   }

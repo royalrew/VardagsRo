@@ -86,6 +86,15 @@ const dependencies = vi.hoisted(() => {
   removeEvent: vi.fn(async () => true),
   readyClient: vi.fn(async () => vi.fn()),
   deleteProject100Memory: vi.fn(async () => true),
+  listJarvisBodyLimitations: vi.fn(async () => []),
+  saveJarvisBodyLimitation: vi.fn(async (_actor, bodyPart, reportedOn) => ({
+    id: "limitation-1",
+    bodyPart,
+    bodyPartLabel: bodyPart === "foot" ? "foten" : "handleden",
+    content: `Ont rapporterat ${reportedOn}`,
+    reportedOn,
+  })),
+  resolveJarvisBodyLimitation: vi.fn(async () => 1),
   saveProject100JournalEntry: vi.fn(),
   loadProject100Journal: vi.fn(async () => ({ entries: [], totalEntries: 0, excludedCount: 0 })),
   loadProject100BodyJourney: vi.fn(async (_actor, filter) => ({
@@ -159,6 +168,11 @@ vi.mock("@/server/database", () => ({
 }));
 vi.mock("@/server/project100-jarvis", () => ({
   deleteProject100Memory: dependencies.deleteProject100Memory,
+}));
+vi.mock("@/server/jarvis-body-state", () => ({
+  listJarvisBodyLimitations: dependencies.listJarvisBodyLimitations,
+  saveJarvisBodyLimitation: dependencies.saveJarvisBodyLimitation,
+  resolveJarvisBodyLimitation: dependencies.resolveJarvisBodyLimitation,
 }));
 vi.mock("@/server/project100-journal", () => ({
   loadProject100Journal: dependencies.loadProject100Journal,
@@ -306,6 +320,100 @@ describe("jarvis-agent", () => {
     expect(res.executedActions).toContain("log_quick_nutrition");
     expect(res.text).toContain("35g protein");
     expect(res.text).toContain("115g av ditt mål");
+  });
+
+  it("logs a protein drink without inventing a protein amount", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Nu drack jag en proteindrink",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.logProject100Meal).toHaveBeenCalledWith(
+      TEST_ACTOR,
+      expect.objectContaining({
+        title: "Proteinshake",
+        proteinG: null,
+        source: "manual",
+      }),
+    );
+    expect(res.executedActions).toContain("log_quick_nutrition");
+    expect(res.text).toContain("inga gram har lagts till");
+  });
+
+  it("logs natural strength set notation as separate completed sets", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "20 x 2 armhävningar",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.createProject100TrainingSession).toHaveBeenCalledWith(
+      TEST_ACTOR,
+      expect.objectContaining({
+        title: "Hemmapass Armhävningar",
+        status: "completed",
+        exercises: [
+          expect.objectContaining({
+            name: "Armhävningar",
+            sets: [
+              expect.objectContaining({ reps: 20 }),
+              expect.objectContaining({ reps: 20 }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(res.text).toContain("2 set × 20 armhävningar (40 totalt)");
+  });
+
+  it("records foot pain and immediately offers a low-foot-load alternative", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Jag har ont i foten",
+      { channel: "telegram", personName: "Jimmy" },
+    );
+
+    expect(dependencies.saveJarvisBodyLimitation).toHaveBeenCalledWith(
+      TEST_ACTOR,
+      "foot",
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      "telegram",
+    );
+    expect(res.executedActions).toContain("record_body_limitation");
+    expect(res.text).toContain("liggande golvpress");
+    expect(res.text).toContain("sittande axelpress");
+    expect(res.text).not.toContain("utvecklingslista");
+  });
+
+  it("stops adapting for a body part when it feels good again", async () => {
+    const res = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Foten känns bra igen",
+      { personName: "Jimmy" },
+    );
+
+    expect(dependencies.resolveJarvisBodyLimitation).toHaveBeenCalledWith(TEST_ACTOR, "foot");
+    expect(res.text).toContain("begränsningen");
+  });
+
+  it("turns 'Spontant pass' into a guided capture instead of a capability gap", async () => {
+    const res = await processJarvisAgentMessage(TEST_ACTOR, "Spontant pass", {
+      channel: "telegram",
+      personName: "Jimmy",
+    });
+
+    expect(res.text).toContain("20 × 2 armhävningar");
+    expect(dependencies.logJarvisCapabilityGap).not.toHaveBeenCalled();
+  });
+
+  it("understands the common briefing typo 'breif'", async () => {
+    const res = await processJarvisAgentMessage(TEST_ACTOR, "Ge mig dagens breif", {
+      personName: "Jimmy",
+    });
+
+    expect(res.executedActions).toContain("get_daily_briefing");
+    expect(dependencies.logJarvisCapabilityGap).not.toHaveBeenCalled();
   });
 
   it("handles spontaneous workout micro-updates (running 5 km)", async () => {

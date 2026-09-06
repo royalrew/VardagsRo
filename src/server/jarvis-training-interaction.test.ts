@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ActorContext } from "@/server/authorization-types";
 import { TEST_ACTOR } from "../../test/actor-fixture";
 
 const dependencies = vi.hoisted(() => {
@@ -133,6 +132,13 @@ const dependencies = vi.hoisted(() => {
       documents: [],
       folders: [],
     })),
+    listJarvisBodyLimitations: vi.fn(async (): Promise<Array<{
+      id: string;
+      bodyPart: "foot" | "wrist" | "hand" | "knee" | "shoulder" | "elbow" | "back" | "neck" | "hip" | "calf";
+      bodyPartLabel: string;
+      content: string;
+      reportedOn: string;
+    }>> => []),
   };
 });
 
@@ -163,6 +169,12 @@ vi.mock("@/server/config", () => ({
   openAIConfig: () => null,
 }));
 
+vi.mock("@/server/jarvis-body-state", () => ({
+  listJarvisBodyLimitations: dependencies.listJarvisBodyLimitations,
+  saveJarvisBodyLimitation: vi.fn(),
+  resolveJarvisBodyLimitation: vi.fn(),
+}));
+
 import { processJarvisAgentMessage } from "@/server/jarvis-agent";
 
 describe("Jarvis Training & Conversational Interaction", () => {
@@ -175,6 +187,24 @@ describe("Jarvis Training & Conversational Interaction", () => {
 
     expect(result.text).toContain("Överkropp");
     expect(result.executedActions).toContain("get_training_status");
+  });
+
+  it("adapts today's training response around an active foot limitation", async () => {
+    dependencies.listJarvisBodyLimitations.mockResolvedValueOnce([
+      {
+        id: "limitation-foot",
+        bodyPart: "foot",
+        bodyPartLabel: "foten",
+        content: "Ont i foten",
+        reportedOn: "2026-09-06",
+      },
+    ]);
+
+    const result = await processJarvisAgentMessage(TEST_ACTOR, "Vad ska jag träna idag?");
+
+    expect(result.text).toContain("Aktuell känning: foten");
+    expect(result.text).toContain("liggande golvpress");
+    expect(result.text).toContain("löpning");
   });
 
   it("answers 'Hur ligger jag till i mina benchmarks?' with PB and levels", async () => {

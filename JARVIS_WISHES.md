@@ -2,7 +2,7 @@
 
 Detta dokument spårar funktioner, frågor och kommandon som Jimmy har ställt till Jarvis i vardagen (via Telegram eller webben) men som systemet ännu inte har full täckning för i koden.
 
-Varje gång en förfrågan faller utanför Jarvis befintliga verktyg loggas den automatiskt i databasen (`jarvis_capability_gaps`) och visas här som underlag för nästa utvecklingssession.
+Varje gång en förfrågan faller utanför Jarvis befintliga verktyg loggas den automatiskt i databasen (`jarvis_capability_gaps`). Databasen är den levande källan; den här filen är en statisk vägledning och fylls inte på automatiskt från Telegram.
 
 ---
 
@@ -21,6 +21,7 @@ Varje gång en förfrågan faller utanför Jarvis befintliga verktyg loggas den 
 * [x] **Morgon- & Kvällsbriefing i Telegram & Webb:** Fullt stöd för `/briefing`, `/morgonbrief`, `/kvallsbrief` och naturliga fraser ("God morgon Jarvis, vad har vi idag?", "Hur ser dagen ut?", "Kvällsavstämning", "Kvällsbrief"). Sammanfattar arbetspass, familj/skola, träningsfönster, 160g proteinmål & matlådor samt dagbok.
 * [x] **Projekt 100 Före/Efter-kroppsscanning & Analys:** Interaktiv split/side/fade-jämförelse, tidsfilter (Start vs Senaste, 30d, 90d) och automatisk muskelökningsanalys (vikt vs midjemått).
 * [x] **Röstinmatning & Tal-syntes i Telegram:** Röstmeddelanden i Telegram transkriberas via Whisper och besvaras med röstsvar (Onyx) och text.
+* [x] **Naturlig vardagsloggning & belastningsanpassning:** Jarvis förstår bland annat "nu drack jag en proteindrink", "20 × 2 armhävningar", "nu gjorde jag 40 knäböj" och aktuella kroppskänningar. Proteinmängd gissas aldrig. En rapporterad känning påverkar kommande träningsförslag tills användaren säger att kroppsdelen känns bra igen.
 
 ---
 
