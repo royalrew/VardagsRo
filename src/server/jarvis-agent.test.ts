@@ -4,8 +4,10 @@ import type { ActorContext } from "@/server/authorization-types";
 import { TEST_ACTOR } from "../../test/actor-fixture";
 
 const dependencies = vi.hoisted(() => {
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const tomorrowStr = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const now = new Date();
+  const todayStr = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(now);
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const tomorrowStr = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(tomorrow);
 
   return {
     loadDashboard: vi.fn(async () => ({
@@ -126,7 +128,7 @@ const dependencies = vi.hoisted(() => {
       title: "Benpass",
       activityType: "strength_gym",
       status: "planned",
-      sessionDate: new Date().toISOString().slice(0, 10),
+      sessionDate: todayStr,
       exercises: [{ id: "ex-1", exerciseId: "e-1", name: "Knäböj", position: 0, notes: null, sets: [] }],
     },
   ]),

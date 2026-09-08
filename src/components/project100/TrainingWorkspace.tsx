@@ -12,6 +12,7 @@ import {
   Flame,
   Footprints,
   Gauge,
+  Flag,
   Leaf,
   MapPin,
   Mountain,
@@ -44,7 +45,7 @@ import {
 import { RunningQuickLogModal } from "./RunningQuickLogModal";
 import { WorkoutQuickModal } from "./WorkoutQuickModal";
 import { DailyTrainingMission, type DailyMissionView } from "./DailyTrainingMission";
-import { TrainingLiveGatePanel } from "./TrainingLiveGatePanel";
+import { OnboardingWorkoutModal, type OnboardingGeneratedWorkout } from "./OnboardingWorkoutModal";
 import {
   buildRunningAnalytics,
   evaluateProject100Benchmarks,
@@ -866,6 +867,12 @@ export function TrainingWorkspace({
     draft: PlanDraft;
   } | null>(null);
   const [savedWorkoutSnapshot, setSavedWorkoutSnapshot] = useState<WorkoutMemorySnapshot | null>(null);
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+
+  const hasCompletedSessions = useMemo(
+    () => sessions.some((s) => s.status === "completed"),
+    [sessions],
+  );
 
   useEffect(() => {
     setSavedWorkoutSnapshot(loadWorkoutMemorySnapshot());
@@ -1041,6 +1048,38 @@ export function TrainingWorkspace({
   function handlePauseSession() {
     setComposer(null);
     setSavedWorkoutSnapshot(loadWorkoutMemorySnapshot());
+  }
+
+  function handleStartOnboardingWorkout(proposal: OnboardingGeneratedWorkout) {
+    const nextDraft: SessionDraft = {
+      title: proposal.title,
+      activityType: proposal.activityType,
+      status: "completed",
+      sessionDate: initialView.today,
+      templateId: null,
+      durationMinutes: proposal.durationMinutes,
+      location: proposal.location,
+      effort: "7",
+      bodyBefore: "",
+      bodyAfter: "",
+      notes: proposal.explanation,
+      exercises: proposal.exercises.map((ex) => ({
+        id: ex.id || draftId(),
+        name: ex.name,
+        notes: ex.notes,
+        sets: ex.sets.map((s) => ({
+          id: s.id || draftId(),
+          reps: s.reps,
+          weightKg: s.weightKg,
+          durationMinutes: s.durationMinutes,
+          distanceKm: s.distanceKm,
+          rpe: s.rpe,
+        })),
+      })),
+    };
+    handleUpdateSessionDraft(nextDraft);
+    setShowOnboardingModal(false);
+    setComposer("session");
   }
 
   function handleResumeSavedWorkout() {
@@ -1289,22 +1328,29 @@ export function TrainingWorkspace({
       <header className="p100-page-head p100-training-head">
         <div><span>Bygg · mät · förstå</span><h1>Träning</h1><p>Planera runt verkligheten, logga vad som faktiskt hände och bygg ett minne som går att lära av.</p></div>
         <div className="p100-head-actions">
+          <button
+            type="button"
+            className="p100-button-secondary p100-btn-onboarding"
+            onClick={() => setShowOnboardingModal(true)}
+          >
+            <Sparkles size={16} /> Hjälp mig komma igång
+          </button>
           <Link className="p100-button-secondary" href="/projekt-100/traning/motion">
-            <ScanLine /> Motion Lab
+            <ScanLine size={16} /> Motion Lab
           </Link>
           <button
             type="button"
             className="p100-button p100-button-run"
             onClick={() => setShowRunModal(true)}
           >
-            <Wind /> Logga löpning
+            <Wind size={16} /> Logga löpning
           </button>
           <button
             type="button"
             className="p100-button p100-button-quick"
             onClick={() => setShowQuickModal(true)}
           >
-            <Zap /> Snabbavsluta styrka
+            <Zap size={16} /> Snabbavsluta
           </button>
           <button
             type="button"
@@ -1315,10 +1361,10 @@ export function TrainingWorkspace({
               setComposer("template");
             }}
           >
-            <Sparkles /> Ny mall
+            <Plus size={16} /> Ny mall
           </button>
           <button type="button" className="p100-button" onClick={openSession}>
-            <Plus /> Nytt pass
+            <Plus size={16} /> Nytt pass
           </button>
         </div>
       </header>
@@ -1364,33 +1410,61 @@ export function TrainingWorkspace({
         </section>
       ) : null}
 
+      {!hasCompletedSessions && !savedWorkoutSnapshot ? (
+        <section className="p100-studio-welcome" aria-label="Din första träning">
+          <div className="p100-studio-welcome-badge">
+            <Sparkles size={14} /> Träningsstudio · Välkommen
+          </div>
+          <h2>Din första träning börjar här.</h2>
+          <p>
+            Vi hjälper dig välja övningar och visar hur du gör. Inga förkunskaper, programinstallationer eller utvecklingskrav behövs för att köra igång.
+          </p>
+          <div className="p100-studio-welcome-actions">
+            <button
+              type="button"
+              className="p100-button p100-welcome-primary"
+              onClick={() => setShowOnboardingModal(true)}
+            >
+              <Play size={16} /> Hjälp mig komma igång
+            </button>
+            <button
+              type="button"
+              className="p100-button-secondary p100-welcome-secondary"
+              onClick={openSession}
+            >
+              Jag har ett eget upplägg
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       <DailyTrainingMission today={initialView.today} initialMission={initialMission} />
 
-      <TrainingLiveGatePanel assessment={initialLiveGate} />
-
-      {/* Program installer banner if few templates or requested */}
-      <section className="p100-program-banner">
-        <div className="p100-program-banner-content">
-          <span className="p100-program-banner-icon">
-            <Trophy />
-          </span>
+      {/* Program installer banner in unobtrusive details summary */}
+      <details className="p100-program-collapsible">
+        <summary className="p100-program-summary">
+          <Trophy size={16} />
+          <span>Projekt 100 Standardprogram (5+2)</span>
+        </summary>
+        <div className="p100-program-banner-content" style={{ marginTop: "1rem" }}>
           <div>
-            <h3>Projekt 100 Standardprogram (5+2)</h3>
+            <h3>Standardprogram (5+2)</h3>
             <p>
               5 träningspass (Överkropp, Lugn löpning, Ben + core, Helkropp/styrka, Löpning kvalitet) + 2 aktiva återhämtningspass.
             </p>
             {installStatus ? <div className="p100-program-status">{installStatus}</div> : null}
           </div>
+          <button
+            type="button"
+            className="p100-button-secondary"
+            onClick={handleInstallProgram}
+            disabled={installingProgram}
+            style={{ marginTop: "0.75rem" }}
+          >
+            <Sparkles size={14} /> {installingProgram ? "Installerar..." : "Installera / Återställ 5+2"}
+          </button>
         </div>
-        <button
-          type="button"
-          className="p100-button-secondary"
-          onClick={handleInstallProgram}
-          disabled={installingProgram}
-        >
-          <Sparkles /> {installingProgram ? "Installerar..." : "Installera / Återställ 5+2"}
-        </button>
-      </section>
+      </details>
 
       <section className="p100-training-context">
         <span><CalendarClock /></span>
@@ -1604,6 +1678,19 @@ export function TrainingWorkspace({
           onComplete={completePlan}
           onMove={movePlan}
           onSkip={skipPlan}
+        />
+      ) : null}
+
+      <footer className="p100-studio-footer-meta">
+        <Link href="/projekt-100/traning/verifiering" className="p100-verification-link">
+          <Flag size={14} /> System & K8-verifiering
+        </Link>
+      </footer>
+
+      {showOnboardingModal ? (
+        <OnboardingWorkoutModal
+          onClose={() => setShowOnboardingModal(false)}
+          onStartWorkout={handleStartOnboardingWorkout}
         />
       ) : null}
     </div>
