@@ -22,6 +22,13 @@ motionärer som vill bygga styrka och muskler. Erfarna användare ska kunna styr
 mer. Specialiserad elitidrott kräver senare val av idrott, tränarbehov och egen
 validering; en avancerad vy är inte ett bevis på elitstöd.
 
+Vid sidan av generell styrka och hypertrofi finns ett starkt intresse av att
+faktiskt *lära sig något nytt* (inre motivation och motorisk bemästring).
+Därför etableras ett tydligt avgränsat **färdighetsspår** (Skill Track), med exakt
+en pilotövning till en början: **"Lär dig stå på händer"**. Här visar Motion Lab sin
+starkaste sida genom att med kameran bedöma inverterad kroppslinje, axelstabilitet
+och ackumulerad isometrisk hålltid.
+
 **Utanför denna leverans:** Stripe, betalningar, abonnemangspaket, ny tenantmodell,
 enterprise, organisationer, tränarportal, kommersiell lansering och betalningstest.
 Ingen sådan infrastruktur behövs för att godkänna träningsupplevelsen. Befintlig
@@ -90,8 +97,8 @@ viktmål, programinstallationer eller utvecklingspaneler krävs för att börja.
 
 Introduktionen frågar en sak åt gången:
 
-1. Vad vill du få ut av träningen? Komma igång, bli starkare, bygga muskler
-   eller osäker. Osäker leder till ett förklarat introduktionsförslag.
+1. Vad vill du få ut av träningen? Komma igång, bli starkare, bygga muskler,
+   lära mig något (stå på händer) eller osäker. Osäker leder till ett förklarat introduktionsförslag.
 2. Var tränar du idag? Fråga bara om relevant utrustning. Kom ihåg vanliga miljöer.
 3. Hur mycket tid har du just nu? Visa att tiden inkluderar rimlig förberedelse
    och vila, med ett tydligt ungefärligt tidsestimat.
@@ -249,6 +256,24 @@ användaren får en konkret motivering framför ett ensamt "87/100 nytta".
 Progression ska följa mål och historik. Svårare balansövning är inte automatiskt
 bättre muskelträning. Föreslagna ökningar ska gå att förstå och ändra. Denna plan
 föreskriver inga nya universella träningsdoser eller fysiologiska garantier.
+
+### Färdighetsspår vs Muskelträning: Pilotspår "Lär dig stå på händer"
+Att träna för att lära sig en specifik färdighet skiljer sig fysiologiskt och mentalt
+från generell muskel- och volymträning. Därför hålls färdighetsspåret avgränsat:
+
+- **Varför handstående?** Det är en klassisk kroppsviktsfärdighet som bygger axelstabilitet,
+  båltryck och balans, och där datorseendet i Motion Lab är unikt starkt: kameran mäter
+  inverterad kroppsställning ($y_{\text{ankel}} < y_{\text{höft}} < y_{\text{axel}} < y_{\text{näsa}}$),
+  håller koll på lodrät linje, ackumulerar isometrisk hålltid i sekunder och ger direkta
+  röst- och ljudcues vid milstolpar ("10 sekunder", "Bra balans!").
+- **Pedagogisk progression i fyra steg:**
+  1. *Pikstyrka & axelstabilitet:* Pik-armhävningar eller fötter på bänk (`pike-pushup`).
+  2. *Väggklättring (Wall-walk):* Klättra upp med fötterna mot vägg för att vänja sig vid lutningen.
+  3. *Handstående mot vägg (Wall Handstand Hold):* Mäta och öka isometrisk hålltid mot 20–30 s.
+  4. *Fritt handstående (Freestanding Balance):* Kick-up, balansering och mikrojusteringar.
+- **Bara 1 sak till en början:** Inga andra akrobatiska färdigheter (som hjulning, planche
+  eller muscle-up) läggs till innan detta enda handståendespår är verifierat, begripligt och
+  provat framför kameran.
 
 ## 9. Spelglädje och motivation
 
