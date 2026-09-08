@@ -17,6 +17,8 @@ import {
   Mountain,
   Plus,
   ScanLine,
+  Pause,
+  Play,
   Search,
   SkipForward,
   Sparkles,
@@ -29,11 +31,20 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import {
+  clearWorkoutMemorySnapshot,
+  formatWorkoutSnapshotRelativeTime,
+  getWorkoutSnapshotProgress,
+  loadWorkoutMemorySnapshot,
+  saveWorkoutMemorySnapshot,
+  type WorkoutMemorySnapshot,
+} from "@/lib/project100-workout-memory";
 import { RunningQuickLogModal } from "./RunningQuickLogModal";
 import { WorkoutQuickModal } from "./WorkoutQuickModal";
 import { DailyTrainingMission, type DailyMissionView } from "./DailyTrainingMission";
+import { TrainingLiveGatePanel } from "./TrainingLiveGatePanel";
 import {
   buildRunningAnalytics,
   evaluateProject100Benchmarks,
@@ -48,6 +59,7 @@ import {
   type Project100TrainingTemplate,
   type Project100TrainingView,
 } from "@/lib/project100-training";
+import type { Project100TrainingLiveGateAssessment } from "@/lib/project100-training-live-gate";
 
 type Composer = "session" | "template" | null;
 type SessionFilter = "all" | "completed" | "planned";
@@ -335,6 +347,7 @@ function SessionComposer({
   busy,
   error,
   onClose,
+  onPause,
   onSubmit,
 }: {
   draft: SessionDraft;
@@ -342,6 +355,7 @@ function SessionComposer({
   busy: boolean;
   error: string | null;
   onClose: () => void;
+  onPause: () => void;
   onSubmit: (event: React.FormEvent) => void;
 }) {
   return (
@@ -371,7 +385,20 @@ function SessionComposer({
             <label><span>Passanteckning</span><textarea maxLength={3000} rows={3} value={draft.notes} placeholder="Det du vill minnas nästa gång." onChange={(event) => setDraft({ ...draft, notes: event.target.value })} /></label>
           </div>
           {error ? <p className="p100-form-error" role="alert">{error}</p> : null}
-          <footer className="p100-composer-actions"><button type="button" onClick={onClose}>Avbryt</button><button type="submit" disabled={busy}>{busy ? "Sparar…" : draft.status === "planned" ? "Planera pass" : "Spara genomfört pass"}</button></footer>
+          <footer className="p100-composer-actions">
+            <button type="button" onClick={onClose}>Avbryt</button>
+            <button
+              type="button"
+              className="p100-button-secondary p100-pause-btn"
+              disabled={busy}
+              onClick={onPause}
+            >
+              <Pause /> Pausa & fortsätt senare
+            </button>
+            <button type="submit" disabled={busy}>
+              {busy ? "Sparar…" : draft.status === "planned" ? "Planera pass" : "Spara genomfört pass"}
+            </button>
+          </footer>
         </form>
       </div>
     </div>
@@ -441,8 +468,57 @@ interface PlanDraft {
   exercises: PerformExercise[];
 }
 
-/** A plan opens prefilled with what it asked for, so agreeing takes one press. */
-function planDraft(session: Project100TrainingSession): PlanDraft {
+/** A plan opens prefilled with what it asked for, or restores from an active snapshot. */
+function planDraft(
+  session: Project100TrainingSession,
+  snapshot?: WorkoutMemorySnapshot | null,
+): PlanDraft {
+  if (snapshot && snapshot.sessionId === session.id) {
+    return {
+      sessionDate: snapshot.sessionDate || session.sessionDate,
+      startTime: "",
+      endTime: "",
+      durationMinutes:
+        snapshot.durationMinutes ||
+        (session.durationSeconds === null ? "" : String(Math.round(session.durationSeconds / 60))),
+      location: snapshot.location || (session.location ?? ""),
+      effort: snapshot.effort || (session.effort?.toString() ?? ""),
+      bodyBefore: snapshot.bodyBefore || (session.bodyBefore ?? ""),
+      bodyAfter: snapshot.bodyAfter || (session.bodyAfter ?? ""),
+      notes: snapshot.notes || (session.notes ?? ""),
+      exercises: session.exercises.map((exercise) => {
+        const savedEx = snapshot.exercises.find(
+          (e) => e.name === exercise.name || e.id === exercise.id,
+        );
+        return {
+          id: exercise.id,
+          name: exercise.name,
+          sets: exercise.sets.map((set, setIdx) => {
+            const savedSet = savedEx?.sets[setIdx];
+            return {
+              id: set.id,
+              target: set.target,
+              reps: savedSet ? savedSet.reps : (set.target?.reps?.toString() ?? ""),
+              weightKg: savedSet ? savedSet.weightKg : (set.target?.weightKg?.toString() ?? ""),
+              durationMinutes: savedSet
+                ? savedSet.durationMinutes
+                : (set.target?.durationSeconds
+                  ? String(Math.round((set.target.durationSeconds / 60) * 10) / 10)
+                  : ""),
+              distanceKm: savedSet
+                ? savedSet.distanceKm
+                : (set.target?.distanceMeters
+                  ? String(Math.round((set.target.distanceMeters / 1000) * 100) / 100)
+                  : ""),
+              rpe: savedSet ? savedSet.rpe : (set.target?.rpe?.toString() ?? ""),
+              done: savedSet !== undefined ? savedSet.done : true,
+            };
+          }),
+        };
+      }),
+    };
+  }
+
   return {
     sessionDate: session.sessionDate,
     startTime: "",
@@ -479,6 +555,7 @@ function PlanActionSheet({
   busy,
   error,
   onClose,
+  onPause,
   onComplete,
   onMove,
   onSkip,
@@ -490,6 +567,7 @@ function PlanActionSheet({
   busy: boolean;
   error: string | null;
   onClose: () => void;
+  onPause: () => void;
   onComplete: (event: React.FormEvent) => void;
   onMove: (event: React.FormEvent) => void;
   onSkip: () => void;
@@ -733,6 +811,14 @@ function PlanActionSheet({
               <button type="button" className="p100-plan-skip" disabled={busy} onClick={onSkip}>
                 <SkipForward /> Blev inte av
               </button>
+              <button
+                type="button"
+                className="p100-button-secondary p100-pause-btn"
+                disabled={busy}
+                onClick={onPause}
+              >
+                <Pause /> Pausa passet
+              </button>
               <button type="button" onClick={onClose}>
                 Avbryt
               </button>
@@ -751,11 +837,13 @@ export function TrainingWorkspace({
   initialView,
   nextWorkLabel,
   initialMission,
+  initialLiveGate,
   initialComposer = null,
 }: {
   initialView: Project100TrainingView;
   nextWorkLabel: string | null;
   initialMission: DailyMissionView | null;
+  initialLiveGate: Project100TrainingLiveGateAssessment;
   initialComposer?: Composer;
 }) {
   const router = useRouter();
@@ -777,6 +865,11 @@ export function TrainingWorkspace({
     mode: PlanMode;
     draft: PlanDraft;
   } | null>(null);
+  const [savedWorkoutSnapshot, setSavedWorkoutSnapshot] = useState<WorkoutMemorySnapshot | null>(null);
+
+  useEffect(() => {
+    setSavedWorkoutSnapshot(loadWorkoutMemorySnapshot());
+  }, []);
 
   const summary = useMemo(
     () => buildProject100TrainingSummary(sessions, initialView.today),
@@ -857,8 +950,142 @@ export function TrainingWorkspace({
   }
 
   function openPlan(session: Project100TrainingSession, mode: PlanMode) {
-    setPlan({ session, mode, draft: planDraft(session) });
+    setPlan({ session, mode, draft: planDraft(session, savedWorkoutSnapshot) });
     setError(null);
+  }
+
+  function handleUpdatePlanDraft(nextDraft: PlanDraft) {
+    if (!plan) return;
+    setPlan({ ...plan, draft: nextDraft });
+    if (plan.mode === "complete") {
+      const snapshot: WorkoutMemorySnapshot = {
+        type: "plan",
+        sessionId: plan.session.id,
+        title: plan.session.title,
+        activityType: plan.session.activityType,
+        sessionDate: nextDraft.sessionDate,
+        startedAtMs: savedWorkoutSnapshot?.startedAtMs ?? Date.now(),
+        updatedAtMs: Date.now(),
+        durationMinutes: nextDraft.durationMinutes,
+        location: nextDraft.location,
+        effort: nextDraft.effort,
+        bodyBefore: nextDraft.bodyBefore,
+        bodyAfter: nextDraft.bodyAfter,
+        notes: nextDraft.notes,
+        exercises: nextDraft.exercises.map((ex) => ({
+          id: ex.id,
+          name: ex.name,
+          sets: ex.sets.map((s) => ({
+            id: s.id,
+            reps: s.reps,
+            weightKg: s.weightKg,
+            durationMinutes: s.durationMinutes,
+            distanceKm: s.distanceKm,
+            rpe: s.rpe,
+            done: s.done,
+          })),
+        })),
+      };
+      saveWorkoutMemorySnapshot(snapshot);
+      setSavedWorkoutSnapshot(snapshot);
+    }
+  }
+
+  function handleUpdateSessionDraft(nextDraft: SessionDraft) {
+    setSession(nextDraft);
+    const hasAnyContent =
+      Boolean(nextDraft.title.trim()) ||
+      nextDraft.exercises.some(
+        (e) => Boolean(e.name.trim()) || e.sets.some((s) => s.reps || s.weightKg),
+      );
+    if (hasAnyContent) {
+      const snapshot: WorkoutMemorySnapshot = {
+        type: "session",
+        templateId: nextDraft.templateId,
+        title: nextDraft.title || "Nytt pass",
+        activityType: nextDraft.activityType,
+        sessionDate: nextDraft.sessionDate,
+        startedAtMs: savedWorkoutSnapshot?.startedAtMs ?? Date.now(),
+        updatedAtMs: Date.now(),
+        durationMinutes: nextDraft.durationMinutes,
+        location: nextDraft.location,
+        effort: nextDraft.effort,
+        bodyBefore: nextDraft.bodyBefore,
+        bodyAfter: nextDraft.bodyAfter,
+        notes: nextDraft.notes,
+        exercises: nextDraft.exercises.map((ex) => ({
+          id: ex.id,
+          name: ex.name,
+          notes: ex.notes,
+          sets: ex.sets.map((s) => ({
+            id: s.id,
+            reps: s.reps,
+            weightKg: s.weightKg,
+            durationMinutes: s.durationMinutes,
+            distanceKm: s.distanceKm,
+            rpe: s.rpe,
+            done: Boolean(s.reps || s.weightKg || s.durationMinutes || s.distanceKm),
+          })),
+        })),
+      };
+      saveWorkoutMemorySnapshot(snapshot);
+      setSavedWorkoutSnapshot(snapshot);
+    }
+  }
+
+  function handlePausePlan() {
+    setPlan(null);
+    setSavedWorkoutSnapshot(loadWorkoutMemorySnapshot());
+  }
+
+  function handlePauseSession() {
+    setComposer(null);
+    setSavedWorkoutSnapshot(loadWorkoutMemorySnapshot());
+  }
+
+  function handleResumeSavedWorkout() {
+    if (!savedWorkoutSnapshot) return;
+    if (savedWorkoutSnapshot.type === "plan" && savedWorkoutSnapshot.sessionId) {
+      const foundSession = sessions.find((s) => s.id === savedWorkoutSnapshot.sessionId);
+      if (foundSession) {
+        openPlan(foundSession, "complete");
+        return;
+      }
+    }
+
+    setSession({
+      title: savedWorkoutSnapshot.title,
+      activityType: savedWorkoutSnapshot.activityType,
+      status: "completed",
+      sessionDate: savedWorkoutSnapshot.sessionDate,
+      templateId: savedWorkoutSnapshot.templateId ?? null,
+      durationMinutes: savedWorkoutSnapshot.durationMinutes,
+      location: savedWorkoutSnapshot.location,
+      effort: savedWorkoutSnapshot.effort,
+      bodyBefore: savedWorkoutSnapshot.bodyBefore,
+      bodyAfter: savedWorkoutSnapshot.bodyAfter,
+      notes: savedWorkoutSnapshot.notes,
+      exercises: savedWorkoutSnapshot.exercises.map((ex) => ({
+        id: ex.id || draftId(),
+        name: ex.name,
+        notes: ex.notes ?? "",
+        sets: ex.sets.map((s) => ({
+          id: s.id || draftId(),
+          reps: s.reps,
+          weightKg: s.weightKg,
+          durationMinutes: s.durationMinutes,
+          distanceKm: s.distanceKm,
+          rpe: s.rpe,
+        })),
+      })),
+    });
+    setComposer("session");
+  }
+
+  function handleDiscardSavedWorkout() {
+    if (!window.confirm("Vill du slänga det sparade påbörjade passet?")) return;
+    clearWorkoutMemorySnapshot();
+    setSavedWorkoutSnapshot(null);
   }
 
   async function patchPlan(session: Project100TrainingSession, body: unknown) {
@@ -879,6 +1106,8 @@ export function TrainingWorkspace({
         current.map((item) => (item.id === saved.session.id ? saved.session : item)),
       );
       setPlan(null);
+      clearWorkoutMemorySnapshot();
+      setSavedWorkoutSnapshot(null);
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Något gick fel.");
@@ -995,6 +1224,8 @@ export function TrainingWorkspace({
       setSessions((current) => [body.session, ...current.filter((item) => item.id !== body.session.id)]);
       setComposer(null);
       setSession(sessionDraft(initialView.today));
+      clearWorkoutMemorySnapshot();
+      setSavedWorkoutSnapshot(null);
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Något gick fel.");
@@ -1092,7 +1323,50 @@ export function TrainingWorkspace({
         </div>
       </header>
 
+      {savedWorkoutSnapshot ? (
+        <section className="p100-resume-banner" aria-label="Påbörjat träningspass">
+          <div className="p100-resume-banner-content">
+            <span className="p100-resume-banner-icon">
+              <Dumbbell />
+            </span>
+            <div className="p100-resume-details">
+              <div className="p100-resume-meta">
+                <span className="p100-resume-tag">
+                  <span className="p100-resume-pulse" /> Påbörjat pass sparat
+                </span>
+                <small className="p100-resume-time">
+                  Sparat {formatWorkoutSnapshotRelativeTime(savedWorkoutSnapshot.updatedAtMs)}
+                </small>
+              </div>
+              <h3 className="p100-resume-title">{savedWorkoutSnapshot.title}</h3>
+              <p className="p100-resume-progress">
+                {getWorkoutSnapshotProgress(savedWorkoutSnapshot).progressSummary}
+              </p>
+            </div>
+          </div>
+          <div className="p100-resume-actions">
+            <button
+              type="button"
+              className="p100-button p100-resume-btn-primary"
+              onClick={handleResumeSavedWorkout}
+            >
+              <Play size={15} /> Fortsätt passet
+            </button>
+            <button
+              type="button"
+              className="p100-button-secondary p100-resume-btn-discard"
+              onClick={handleDiscardSavedWorkout}
+              title="Släng utkast"
+            >
+              <Trash2 size={14} /> Släng
+            </button>
+          </div>
+        </section>
+      ) : null}
+
       <DailyTrainingMission today={initialView.today} initialMission={initialMission} />
+
+      <TrainingLiveGatePanel assessment={initialLiveGate} />
 
       {/* Program installer banner if few templates or requested */}
       <section className="p100-program-banner">
@@ -1280,7 +1554,17 @@ export function TrainingWorkspace({
         )}
       </section>
 
-      {composer === "session" ? <SessionComposer draft={session} setDraft={setSession} busy={busy} error={error} onClose={closeComposer} onSubmit={submitSession} /> : null}
+      {composer === "session" ? (
+        <SessionComposer
+          draft={session}
+          setDraft={handleUpdateSessionDraft}
+          busy={busy}
+          error={error}
+          onClose={closeComposer}
+          onPause={handlePauseSession}
+          onSubmit={submitSession}
+        />
+      ) : null}
       {composer === "template" ? <TemplateComposer draft={template} setDraft={setTemplate} busy={busy} error={error} onClose={closeComposer} onSubmit={submitTemplate} /> : null}
       <WorkoutQuickModal
         isOpen={showQuickModal}
@@ -1307,7 +1591,7 @@ export function TrainingWorkspace({
           session={plan.session}
           mode={plan.mode}
           draft={plan.draft}
-          setDraft={(draft) => setPlan({ ...plan, draft })}
+          setDraft={handleUpdatePlanDraft}
           busy={busy}
           error={error}
           onClose={() => {
@@ -1316,6 +1600,7 @@ export function TrainingWorkspace({
               setError(null);
             }
           }}
+          onPause={handlePausePlan}
           onComplete={completePlan}
           onMove={movePlan}
           onSkip={skipPlan}

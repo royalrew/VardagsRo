@@ -140,24 +140,33 @@ export function RunningQuickLogModal({
       }
 
       // 2. Optionally log protein shake
+      let shakeLogged = false;
       if (includeProteinShake && proteinGrams > 0) {
-        await fetch("/api/project100/meals", {
+        const shakeRes = await fetch("/api/project100/nutrition/meals", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            source: "manual",
             title: "Proteinshake efter löpning",
+            mealType: "shake",
             eatenOn: sessionDate,
             proteinG: proteinGrams,
             carbsG: 5,
             fatG: 1,
             kcal: Math.round(proteinGrams * 4 + 20),
-            notes: "Snabbloggad efter passet",
+            note: "Snabbloggad efter passet",
           }),
-        }).catch(() => null);
+        });
+
+        if (!shakeRes.ok) {
+          const errData = await shakeRes.json().catch(() => null);
+          throw new Error(errData?.error ?? "Passet sparades, men proteinshaken kunde inte sparas.");
+        }
+        shakeLogged = true;
       }
 
       const kmFormatted = (distanceMeters / 1000).toFixed(2);
-      const receipt = `🏃‍♂️ Loggade ${kmFormatted} km på ${formattedPace}!`;
+      const receipt = `🏃‍♂️ Loggade ${kmFormatted} km på ${formattedPace}!${shakeLogged ? ` (+${proteinGrams}g protein)` : ""}`;
 
       if (onSaved) onSaved(receipt);
       router.refresh();

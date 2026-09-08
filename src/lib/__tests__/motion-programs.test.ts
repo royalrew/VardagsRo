@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   WORKOUT_PROGRAMS,
   getWorkoutProgram,
@@ -7,6 +7,9 @@ import {
   tickProgramRest,
   skipProgramRest,
   generateProgramSummary,
+  saveProgramSessionSnapshot,
+  loadProgramSessionSnapshot,
+  clearProgramSessionSnapshot,
   type ProgramId,
 } from "../motion-programs";
 
@@ -123,3 +126,47 @@ describe("motion-programs: Program Execution State Machine", () => {
     expect(summary.isFullyCompleted).toBe(true);
   });
 });
+
+describe("motion-programs: Program Session Memory & Persistence", () => {
+  const mockStorage: Record<string, string> = {};
+
+  beforeEach(() => {
+    for (const key in mockStorage) delete mockStorage[key];
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => mockStorage[key] ?? null,
+      setItem: (key: string, val: string) => {
+        mockStorage[key] = val;
+      },
+      removeItem: (key: string) => {
+        delete mockStorage[key];
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("saves and loads an in-progress program session", () => {
+    const prog = getWorkoutProgram("push-power");
+    let session = createProgramSession(prog);
+    // Complete all 3 sets of pushups
+    for (let i = 0; i < 3; i++) {
+      session = completeProgramSet(session, 15);
+      session = skipProgramRest(session);
+    }
+    // Now on exercise 1 (overhead-press)
+    expect(session.currentExerciseIndex).toBe(1);
+
+    saveProgramSessionSnapshot(session);
+    const loaded = loadProgramSessionSnapshot();
+    expect(loaded).toBeDefined();
+    expect(loaded?.programId).toBe("push-power");
+    expect(loaded?.currentExerciseIndex).toBe(1);
+    expect(loaded?.completedSets.length).toBe(3);
+
+    clearProgramSessionSnapshot();
+    expect(loadProgramSessionSnapshot()).toBeNull();
+  });
+});
+

@@ -155,6 +155,9 @@ import {
   tickProgramRest,
   skipProgramRest,
   generateProgramSummary,
+  saveProgramSessionSnapshot,
+  loadProgramSessionSnapshot,
+  clearProgramSessionSnapshot,
   type ProgramId,
   type ProgramSessionState,
   type ProgramSummary,
@@ -418,6 +421,38 @@ export function MotionLab({
   const [programSession, setProgramSession] = useState<ProgramSessionState | null>(null);
   const programSessionRef = useRef<ProgramSessionState | null>(null);
   const [programSummary, setProgramSummary] = useState<ProgramSummary | null>(null);
+  const [savedProgramSnapshot, setSavedProgramSnapshot] = useState<ProgramSessionState | null>(null);
+
+  useEffect(() => {
+    setSavedProgramSnapshot(loadProgramSessionSnapshot());
+  }, []);
+
+  function handleResumeProgramSession(saved: ProgramSessionState) {
+    programSessionRef.current = saved;
+    setProgramSession(saved);
+    setSavedProgramSnapshot(saved);
+    setActiveWorkoutExercise(saved.programId);
+    const tracker = createUnifiedExerciseTracker(saved.activeExercise.exerciseId);
+    unifiedTrackerRef.current = tracker;
+    setUnifiedTracker(tracker);
+    lastUnifiedRepRef.current = 0;
+    lastUnifiedHoldRef.current = 0;
+    setSquatTrackingEnabled(true);
+    squatTrackingEnabledRef.current = true;
+    const prog = WORKOUT_PROGRAMS[saved.programId];
+    const exName =
+      EXERCISE_LIBRARY[saved.activeExercise.exerciseId]?.name ?? saved.activeExercise.exerciseId;
+    speakSquatInstruction(
+      `Återupptar ${prog?.title ?? "program"}. Fortsätter med ${exName}, set ${saved.currentSet} av ${saved.activeExercise.sets}. Gör dig redo!`,
+      true,
+    );
+  }
+
+  function handleDiscardProgramSession() {
+    clearProgramSessionSnapshot();
+    setSavedProgramSnapshot(null);
+  }
+
   const lastUnifiedRepRef = useRef<number>(0);
   const lastUnifiedHoldRef = useRef<number>(0);
   const [framingFeedback, setFramingFeedback] = useState<ExerciseFramingFeedback | null>(null);
@@ -498,6 +533,7 @@ export function MotionLab({
   const lastRemoteFrameIndexRef = useRef<number | null>(null);
   const lastRemoteFrameAtRef = useRef<number | null>(null);
   const remotePollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const remoteHostTokenRef = useRef<string | null>(null);
 
   function changeInputSource(source: "webcam" | "remote-sensor") {
     setInputSource(source);
@@ -544,11 +580,23 @@ export function MotionLab({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "create", pairingCode: remotePairingCode }),
-    }).catch(() => {});
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && typeof data.hostToken === "string") {
+          remoteHostTokenRef.current = data.hostToken;
+        }
+      })
+      .catch(() => {});
 
     remotePollTimerRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`/api/motion/sensor/relay?session=${remotePairingCode}&role=host`);
+        const hostToken = remoteHostTokenRef.current;
+        if (!hostToken) return;
+
+        const res = await fetch(
+          `/api/motion/sensor/relay?session=${remotePairingCode}&role=host&token=${encodeURIComponent(hostToken)}`,
+        );
         if (!res.ok) {
           setRemoteConnected(false);
           return;
@@ -840,6 +888,8 @@ export function MotionLab({
       }
 
       if (next.phase === "active-set" && current.phase === "resting") {
+        saveProgramSessionSnapshot(next);
+        setSavedProgramSnapshot(next);
         playSquatSound("rep");
         const nextExId = next.activeExercise.exerciseId;
         const exName = EXERCISE_LIBRARY[nextExId]?.name ?? nextExId;
@@ -1208,6 +1258,8 @@ export function MotionLab({
       playSquatSound("rep");
 
       if (nextProg.phase === "completed") {
+        clearProgramSessionSnapshot();
+        setSavedProgramSnapshot(null);
         playGameSound(null, true);
         const summary = generateProgramSummary(nextProg, WORKOUT_PROGRAMS[nextProg.programId]);
         setProgramSummary(summary);
@@ -1216,6 +1268,8 @@ export function MotionLab({
           true,
         );
       } else {
+        saveProgramSessionSnapshot(nextProg);
+        setSavedProgramSnapshot(nextProg);
         const nextExId = nextProg.activeExercise.exerciseId;
         const exName = EXERCISE_LIBRARY[nextExId]?.name ?? nextExId;
         speakSquatInstruction(
@@ -1362,6 +1416,8 @@ export function MotionLab({
         programSessionRef.current = sess;
         setProgramSession(sess);
         setProgramSummary(null);
+        saveProgramSessionSnapshot(sess);
+        setSavedProgramSnapshot(sess);
         const firstExId = sess.activeExercise.exerciseId;
         const initialTracker = createUnifiedExerciseTracker(firstExId);
         unifiedTrackerRef.current = initialTracker;
@@ -1492,6 +1548,8 @@ export function MotionLab({
           playSquatSound("milestone");
 
           if (updatedProg.phase === "completed") {
+            clearProgramSessionSnapshot();
+            setSavedProgramSnapshot(null);
             playGameSound(null, true);
             const summary = generateProgramSummary(updatedProg, WORKOUT_PROGRAMS[updatedProg.programId]);
             setProgramSummary(summary);
@@ -1500,6 +1558,8 @@ export function MotionLab({
               true,
             );
           } else {
+            saveProgramSessionSnapshot(updatedProg);
+            setSavedProgramSnapshot(updatedProg);
             speakSquatInstruction(
               `Set ${currentProg.currentSet} klart! Vila i ${currentProg.activeExercise.restSeconds} sekunder.`,
               true,
@@ -1523,6 +1583,8 @@ export function MotionLab({
           playSquatSound("milestone");
 
           if (updatedProg.phase === "completed") {
+            clearProgramSessionSnapshot();
+            setSavedProgramSnapshot(null);
             playGameSound(null, true);
             const summary = generateProgramSummary(updatedProg, WORKOUT_PROGRAMS[updatedProg.programId]);
             setProgramSummary(summary);
@@ -1531,6 +1593,8 @@ export function MotionLab({
               true,
             );
           } else {
+            saveProgramSessionSnapshot(updatedProg);
+            setSavedProgramSnapshot(updatedProg);
             speakSquatInstruction(
               `Set ${currentProg.currentSet} klart! Vila i ${currentProg.activeExercise.restSeconds} sekunder.`,
               true,
@@ -2828,6 +2892,9 @@ export function MotionLab({
             onSkipRest={handleSkipRest}
             onRecordRpe={handleRecordRpe}
             framingFeedback={framingFeedback}
+            savedProgramSnapshot={savedProgramSnapshot}
+            onResumeProgram={handleResumeProgramSession}
+            onDiscardProgram={handleDiscardProgramSession}
           />
 
           <MotionDiagnosticsPanel

@@ -66,6 +66,24 @@ Den styrande produktprincipen är:
 > Logga en sak en gång. Använd den sedan för tidslinjen, graferna,
 > veckosummeringen, Jarvis-minnet och eventuellt framtida innehåll.
 
+## Produktprinciper och målgrupp (Positionering & Användarpsykologi)
+
+### Målgrupp och kärnlöfte
+* **Kärnlöfte:** *Seriös träning som fungerar även när vardagen är oregelbunden — med valbar spelglädje.*
+* **Primär målgrupp (ICP):** Vuxna med en oregelbunden vardag som vill bygga styrka och muskler seriöst, från nybörjare till vana motionärer.
+* **Medveten avgränsning:** Ambitionen att från början vara förstahandsvalet för elitidrottare (som kräver specialiserad periodisering, RIR-mikrostyrning och tränarportaler) parkeras medvetet som en senare, separat expansion.
+
+### De fyra produktprinciperna
+1. **Eget inflytande:** Användaren väljer mellan begripliga alternativ med förståeliga konsekvenser (valbar vy, valbar gamification, valbar spegling).
+2. **Märkbar utveckling:** Appen visar konkret vad som blivit starkare, lättare eller mer regelbundet – förankrat i faktisk data, inte i tomma motivationsklyschor.
+3. **Låg starttröskel:** Det går blixtsnabbt att börja, även när energin är låg. Kameran och datorseendet är en *power-feature*, aldrig en grindvakt. Manuell loggning och röststyrning är 100 % likvärdiga förstaklassens alternativ så att ett kort träningsfönster inte äts upp av kamerauppställning.
+4. **Enkel återkomst (The Day 21 Problem):** När livet kommer emellan och användaren haft ett uppehåll (efter sjukdom, övertid eller förskolekaos) möts de av ett rimligt, skuldfritt nästa steg. Inga brutna streaks som rödmarkeras, ingen upparbetad "träningsskuld" och inget underkännande.
+
+### Uppdelad träning och träningsminne som räddningsplanka
+* Appen håller ihop planen och utvecklingen oavsett om träningen sker i ett sammanhängande pass eller i flera block över dagen.
+* **Träningsminne:** Vid avbrott (t.ex. körning till förskolan mitt i passet) minns produkten utfört arbete (avslutade set och reps) och återupptar sömlöst nästa övning utan dubbelarbete.
+* **Beteendemässig realism:** Tre små pass innebär tre mentala starter. För vissa underlättar det; för andra blir träningen en uppgift som hänger över hela dagen. Uppdelning ska därför erbjudas som en flexibel möjlighet när verkligheten kräver det, inte förutsättas som en tvingande norm. Veckovolymen är det som bär framgången, inte rigid dagspress.
+
 ## Jobbschemat är en del av kärnan
 
 Projekt 100 ska planera runt användarens verkliga jobbschema som redan finns i

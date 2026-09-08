@@ -33,6 +33,7 @@ import {
 import {
   WORKOUT_PROGRAMS,
   type ProgramId,
+  type ProgramSessionState,
 } from "@/lib/motion-programs";
 import type { ExerciseFramingFeedback } from "@/lib/motion-camera-coach";
 import { angleDegrees } from "./motion-formatting";
@@ -51,6 +52,9 @@ export interface MotionWorkoutPanelProps {
   squatReportCopied: boolean;
   nowMs: number;
   activeExercise?: WorkoutPanelSelection;
+  savedProgramSnapshot?: ProgramSessionState | null;
+  onResumeProgram?: (saved: ProgramSessionState) => void;
+  onDiscardProgram?: () => void;
   onChangeExercise?: (exercise: WorkoutPanelSelection) => void;
   onChangeRestPreset: (preset: RestPreset) => void;
   onChangeCoachSettings: (next: CoachSettings) => void;
@@ -78,6 +82,9 @@ export function MotionWorkoutPanel({
   squatReportCopied,
   nowMs,
   activeExercise = "squat",
+  savedProgramSnapshot,
+  onResumeProgram,
+  onDiscardProgram,
   onChangeExercise,
   onChangeRestPreset,
   onChangeCoachSettings,
@@ -117,6 +124,45 @@ export function MotionWorkoutPanel({
         <span>Fas H & Bibliotek · Styrka & Program</span>
         <strong>{displayTitle}</strong>
       </header>
+
+      {/* Påbörjat program återupptagnings-kort */}
+      {savedProgramSnapshot && onResumeProgram && (
+        <div className="p100-motion-program-resume">
+          <div className="p100-motion-resume-info">
+            <span className="p100-resume-tag">
+              <span className="p100-resume-pulse" /> Pausat program
+            </span>
+            <strong>
+              {WORKOUT_PROGRAMS[savedProgramSnapshot.programId]?.title ?? savedProgramSnapshot.programId}
+            </strong>
+            <small>
+              {EXERCISE_LIBRARY[savedProgramSnapshot.activeExercise.exerciseId]?.name ??
+                savedProgramSnapshot.activeExercise.exerciseId}{" "}
+              · Set {savedProgramSnapshot.currentSet} av {savedProgramSnapshot.activeExercise.sets} (
+              {savedProgramSnapshot.completedSets.length} set gjorda)
+            </small>
+          </div>
+          <div className="p100-motion-resume-btns">
+            <button
+              type="button"
+              className="p100-button p100-resume-btn-primary"
+              onClick={() => onResumeProgram(savedProgramSnapshot)}
+            >
+              <Play size={12} /> Fortsätt
+            </button>
+            {onDiscardProgram && (
+              <button
+                type="button"
+                className="p100-button-secondary"
+                onClick={onDiscardProgram}
+                title="Släng och börja om"
+              >
+                <RotateCcw size={12} />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Övningsbibliotek & Programväljare */}
       {onChangeExercise && (

@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TEST_ACTOR } from "../../test/actor-fixture";
 import {
+  _resetDispatchLockForTesting,
   createContextualReminder,
   dispatchDueTelegramReminders,
+  getDueTelegramRemindersCount,
   parseSwedishReminder,
 } from "@/server/jarvis-reminders";
 
@@ -55,6 +57,7 @@ vi.mock("@/server/telegram", () => ({
 
 describe("Jarvis Contextual Reminder Engine", () => {
   beforeEach(() => {
+    _resetDispatchLockForTesting();
     vi.clearAllMocks();
   });
 
@@ -136,7 +139,7 @@ describe("Jarvis Contextual Reminder Engine", () => {
   });
 
   describe("dispatchDueTelegramReminders", () => {
-    it("finds due tasks and sends Telegram push messages", async () => {
+    it("finds due tasks and sends Telegram push messages when atomically claimed", async () => {
       dependencies.sqlQuery
         .mockResolvedValueOnce([
           {
@@ -149,7 +152,7 @@ describe("Jarvis Contextual Reminder Engine", () => {
             telegram_chat_id: "123456789",
           },
         ])
-        .mockResolvedValueOnce([]); // update query
+        .mockResolvedValueOnce([{ id: "task-due-1" }]); // atomic claim update query
 
       const result = await dispatchDueTelegramReminders(new Date("2026-08-31T18:05:00.000Z"));
 
@@ -161,11 +164,81 @@ describe("Jarvis Contextual Reminder Engine", () => {
       );
     });
 
+    it("skips task if atomic claim fails (concurrent worker won the race)", async () => {
+      dependencies.sqlQuery
+        .mockResolvedValueOnce([
+          {
+            id: "task-due-1",
+            title: "Packa lådor hemma",
+            notes: null,
+            due_at: "2026-08-31T18:00:00.000Z",
+            person_id: "person-nora",
+            person_name: "Jimmy",
+            telegram_chat_id: "123456789",
+          },
+        ])
+        .mockResolvedValueOnce([]); // 0 rows updated, meaning another worker claimed it first
+
+      const result = await dispatchDueTelegramReminders(new Date("2026-08-31T18:05:00.000Z"));
+
+      expect(result.dispatchedCount).toBe(0);
+      expect(dependencies.sendTelegramMessage).not.toHaveBeenCalled();
+    });
+
+    it("reverts claim stamp if sendTelegramMessage throws", async () => {
+      dependencies.sqlQuery
+        .mockResolvedValueOnce([
+          {
+            id: "task-due-1",
+            title: "Packa lådor hemma",
+            notes: "Ursprunglig anteckning",
+            due_at: "2026-08-31T18:00:00.000Z",
+            person_id: "person-nora",
+            person_name: "Jimmy",
+            telegram_chat_id: "123456789",
+          },
+        ])
+        .mockResolvedValueOnce([{ id: "task-due-1" }]) // claim succeeded
+        .mockResolvedValueOnce([]); // revert update
+
+      dependencies.sendTelegramMessage.mockRejectedValueOnce(new Error("Telegram network timeout"));
+
+      const result = await dispatchDueTelegramReminders(new Date("2026-08-31T18:05:00.000Z"));
+
+      expect(result.dispatchedCount).toBe(0);
+      expect(dependencies.sqlQuery).toHaveBeenCalledTimes(3);
+    });
+
+    it("prevents overlapping executions with in-process lock", async () => {
+      let resolveFirstQuery: (val: unknown) => void;
+      const slowQueryPromise = new Promise((resolve) => {
+        resolveFirstQuery = resolve;
+      });
+
+      dependencies.sqlQuery.mockImplementationOnce(() => slowQueryPromise);
+
+      const dispatchPromise1 = dispatchDueTelegramReminders(new Date("2026-08-31T18:05:00.000Z"));
+      const dispatchPromise2 = dispatchDueTelegramReminders(new Date("2026-08-31T18:05:00.000Z"));
+
+      const result2 = await dispatchPromise2;
+      expect(result2.dispatchedCount).toBe(0);
+
+      resolveFirstQuery!([]);
+      await dispatchPromise1;
+    });
+
     it("respects night quiet hours (22:30-07:00) and suppresses alerts", async () => {
       // 23:30 CEST is 21:30 UTC
       const nightTime = new Date("2026-08-31T21:30:00.000Z");
       const result = await dispatchDueTelegramReminders(nightTime);
       expect(result.dispatchedCount).toBe(0);
+      expect(dependencies.sendTelegramMessage).not.toHaveBeenCalled();
+    });
+
+    it("returns count of pending due reminders without mutating in getDueTelegramRemindersCount", async () => {
+      dependencies.sqlQuery.mockResolvedValueOnce([{ count: "4" }]);
+      const count = await getDueTelegramRemindersCount(new Date("2026-08-31T18:05:00.000Z"));
+      expect(count).toBe(4);
       expect(dependencies.sendTelegramMessage).not.toHaveBeenCalled();
     });
   });

@@ -43,12 +43,14 @@ const UNAMBIGUOUS_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
  * @returns 6-character pairing code string.
  */
 export function generatePairingCode(): string {
-  let code = "";
-  for (let i = 0; i < 6; i++) {
-    const idx = Math.floor(Math.random() * UNAMBIGUOUS_CHARS.length);
-    code += UNAMBIGUOUS_CHARS[idx];
-  }
-  return code;
+  const randomBytes = new Uint8Array(6);
+  crypto.getRandomValues(randomBytes);
+  return Array.from(
+    randomBytes,
+    // The alphabet has exactly 32 characters, so the mask is uniform and does
+    // not introduce modulo bias.
+    (byte) => UNAMBIGUOUS_CHARS[byte & 31],
+  ).join("");
 }
 
 /**

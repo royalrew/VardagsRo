@@ -259,3 +259,50 @@ export function generateProgramSummary(
     exercisesCompletedCount: distinctExercises,
   };
 }
+
+export const MOTION_PROGRAM_STORAGE_KEY = "p100:motion:active_program_session:v1";
+
+function getProgramStorage(): Storage | null {
+  if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
+  if (typeof localStorage !== "undefined") return localStorage;
+  return null;
+}
+
+export function saveProgramSessionSnapshot(session: ProgramSessionState): void {
+  const storage = getProgramStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(MOTION_PROGRAM_STORAGE_KEY, JSON.stringify(session));
+  } catch {
+    // ignore
+  }
+}
+
+export function loadProgramSessionSnapshot(): ProgramSessionState | null {
+  const storage = getProgramStorage();
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(MOTION_PROGRAM_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ProgramSessionState;
+    if (!parsed || !parsed.programId || !parsed.activeExercise) {
+      clearProgramSessionSnapshot();
+      return null;
+    }
+    return parsed;
+  } catch {
+    clearProgramSessionSnapshot();
+    return null;
+  }
+}
+
+export function clearProgramSessionSnapshot(): void {
+  const storage = getProgramStorage();
+  if (!storage) return;
+  try {
+    storage.removeItem(MOTION_PROGRAM_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+

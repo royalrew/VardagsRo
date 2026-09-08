@@ -18,6 +18,10 @@ import {
   assessProject100TrainingStimulus,
   type Project100TrainingStimulusAssessment,
 } from "@/lib/project100-training-stimulus";
+import {
+  assessProject100TrainingLiveGate,
+  type Project100TrainingLiveGateAssessment,
+} from "@/lib/project100-training-live-gate";
 import { recordAudit } from "@/server/audit";
 import type { ActorContext } from "@/server/authorization-types";
 import { readyClient } from "@/server/database";
@@ -78,6 +82,27 @@ interface MissionSetRow {
 
 interface WeeklyPatternVolumeRow {
   movement_pattern: Project100MovementPattern;
+  completed_sets: number | string;
+}
+
+interface LiveGateMissionRow {
+  id: string;
+  mission_type: Project100MissionType;
+  status: MissionRow["status"];
+  session_date: string;
+}
+
+interface LiveGateBlockRow {
+  id: string;
+  session_id: string;
+  environment: Project100TrainingEnvironment;
+  source: Project100TrainingSource;
+}
+
+interface LiveGateSetSummaryRow {
+  session_id: string;
+  movement_pattern: Project100MovementPattern | null;
+  purpose: Project100ExercisePurpose | null;
   completed_sets: number | string;
 }
 
@@ -393,6 +418,79 @@ export async function loadProject100DailyTrainingMission(
 ): Promise<Project100DailyTrainingMission | null> {
   assertProject100Adult(actor);
   return loadMission(actor, { sessionDate });
+}
+
+export async function loadProject100TrainingLiveGate(
+  actor: ActorContext,
+): Promise<Project100TrainingLiveGateAssessment> {
+  assertProject100Adult(actor);
+  const sql = await readyClient();
+  const missions = await sql<LiveGateMissionRow[]>`
+    select id, mission_type, status,
+           to_char(session_date, 'YYYY-MM-DD') as session_date
+    from project100_training_sessions
+    where user_id = ${actor.userId} and mission_type is not null
+    order by session_date desc, created_at desc, id desc
+  `;
+  if (missions.length === 0) return assessProject100TrainingLiveGate([]);
+
+  const missionIds = missions.map((mission) => mission.id);
+  const [blocks, setSummaries] = await Promise.all([
+    sql<LiveGateBlockRow[]>`
+      select id, session_id, environment, source
+      from project100_training_blocks
+      where user_id = ${actor.userId}
+        and session_id = any(${sql.array(missionIds)})
+      order by started_at, id
+    `,
+    sql<LiveGateSetSummaryRow[]>`
+      select se.session_id, e.movement_pattern, e.purpose,
+             count(*)::integer as completed_sets
+      from project100_training_session_sets ss
+      join project100_training_session_exercises se
+        on se.id = ss.session_exercise_id and se.user_id = ss.user_id
+      join project100_exercises e
+        on e.id = se.exercise_id and e.user_id = se.user_id
+      where ss.user_id = ${actor.userId}
+        and ss.completed = true
+        and ss.block_id is not null
+        and se.session_id = any(${sql.array(missionIds)})
+      group by se.session_id, e.movement_pattern, e.purpose
+    `,
+  ]);
+
+  const blocksByMission = new Map<string, LiveGateBlockRow[]>();
+  for (const block of blocks) {
+    const list = blocksByMission.get(block.session_id) ?? [];
+    list.push(block);
+    blocksByMission.set(block.session_id, list);
+  }
+  const setsByMission = new Map<string, LiveGateSetSummaryRow[]>();
+  for (const summary of setSummaries) {
+    const list = setsByMission.get(summary.session_id) ?? [];
+    list.push(summary);
+    setsByMission.set(summary.session_id, list);
+  }
+
+  return assessProject100TrainingLiveGate(missions.map((mission) => ({
+    id: mission.id,
+    missionType: mission.mission_type,
+    status: mission.status,
+    sessionDate: toDateText(mission.session_date),
+    coveragePercentage: calculateProject100MissionCoverage(
+      mission.mission_type,
+      (setsByMission.get(mission.id) ?? []).map((summary) => ({
+        movementPattern: summary.movement_pattern,
+        purpose: summary.purpose,
+        completedSets: toNumber(summary.completed_sets) ?? 0,
+      })),
+    ).percentage,
+    blocks: (blocksByMission.get(mission.id) ?? []).map((block) => ({
+      id: block.id,
+      environment: block.environment,
+      source: block.source,
+    })),
+  })));
 }
 
 export async function startOrResumeProject100DailyTrainingMission(

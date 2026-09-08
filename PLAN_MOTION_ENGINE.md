@@ -659,7 +659,10 @@ Genomförandestatus 2026-09-08:
   uppdraget, med spårbara set/reps/vikt eller hålltid, RPE och uppskattad RIR,
   ROM-confidence, tidigare veckovolym och synliga dataluckor. Bedömningen lovar
   aldrig muskeltillväxt och hög belastning rekommenderar inte automatiskt fler set.
-- [ ] K8 — live-gate.
+- [ ] K8 — live-gaten är kodklar och räknas direkt från användarskopade,
+  beständiga uppdragsloggar. Över- och underkropp måste var för sig vara
+  avslutade med 100 % plantäckning, minst tre block och minst två unika miljöer.
+  Den slutliga bocken väntar avsiktligt på de två verkliga passen.
 - [x] Core 24-koncept, kandidater och kvalitetsgrind är beslutade.
 - [x] Core 24-katalog, transparent nyttopoäng och miljö-/utrustningsfilter är implementerade.
 - [x] `loaded_backpack` har viktuppskattning, bärposition, säkerhetsgrind och explicit kompatibilitetslista.

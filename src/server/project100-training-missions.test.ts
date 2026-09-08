@@ -12,6 +12,7 @@ const database = vi.hoisted(() => {
     existingBlockSessionId: "mission-1",
     includeBlock: false,
     missionStatus: "in_progress",
+    liveGateMode: false,
   };
   let exerciseCounter = 0;
 
@@ -19,6 +20,29 @@ const database = vi.hoisted(() => {
     const text = strings.join("?").replace(/\s+/g, " ").trim();
     calls.push({ text, values });
 
+    if (state.liveGateMode && text.includes("select id, mission_type, status") && text.includes("order by session_date desc")) {
+      return Promise.resolve([{
+        id: "00000000-0000-4000-8000-000000000001",
+        mission_type: "upper",
+        status: "completed",
+        session_date: "2026-09-08",
+      }]);
+    }
+    if (state.liveGateMode && text.includes("select id, session_id, environment, source")) {
+      return Promise.resolve([
+        { id: "b1", session_id: "00000000-0000-4000-8000-000000000001", environment: "home", source: "manual" },
+        { id: "b2", session_id: "00000000-0000-4000-8000-000000000001", environment: "outdoor_gym", source: "motion" },
+        { id: "b3", session_id: "00000000-0000-4000-8000-000000000001", environment: "home", source: "jarvis" },
+      ]);
+    }
+    if (state.liveGateMode && text.includes("select se.session_id, e.movement_pattern, e.purpose")) {
+      return Promise.resolve([
+        { session_id: "00000000-0000-4000-8000-000000000001", movement_pattern: "horizontal_push", purpose: "strength_hypertrophy", completed_sets: 3 },
+        { session_id: "00000000-0000-4000-8000-000000000001", movement_pattern: "horizontal_pull", purpose: "strength_hypertrophy", completed_sets: 3 },
+        { session_id: "00000000-0000-4000-8000-000000000001", movement_pattern: "vertical_push", purpose: "strength_hypertrophy", completed_sets: 3 },
+        { session_id: "00000000-0000-4000-8000-000000000001", movement_pattern: "vertical_pull", purpose: "strength_hypertrophy", completed_sets: 3 },
+      ]);
+    }
     if (text.includes("where user_id = ? and status = 'in_progress'")) return Promise.resolve([]);
     if (
       text.includes("where user_id = ? and session_date = ?") &&
@@ -126,7 +150,11 @@ const database = vi.hoisted(() => {
     throw new Error(`Unexpected query in test: ${text}`);
   });
   const begin = vi.fn(async (callback: (tx: typeof sql) => Promise<unknown>) => callback(sql));
-  Object.assign(sql, { begin, json: (value: unknown) => value });
+  Object.assign(sql, {
+    begin,
+    json: (value: unknown) => value,
+    array: (value: unknown) => value,
+  });
   return { calls, sql, state, resetExerciseCounter: () => { exerciseCounter = 0; } };
 });
 
@@ -140,6 +168,7 @@ vi.mock("@/server/auth", () => ({ getAuth: () => ({ api: { getSession: vi.fn() }
 import {
   appendProject100TrainingBlock,
   finishProject100DailyTrainingMission,
+  loadProject100TrainingLiveGate,
   startOrResumeProject100DailyTrainingMission,
 } from "@/server/project100-training-missions";
 
@@ -188,6 +217,7 @@ describe("Projekt 100 daily training missions", () => {
     database.state.existingBlockSessionId = "mission-1";
     database.state.includeBlock = false;
     database.state.missionStatus = "in_progress";
+    database.state.liveGateMode = false;
     database.resetExerciseCounter();
   });
 
@@ -296,5 +326,26 @@ describe("Projekt 100 daily training missions", () => {
       ),
     ).rejects.toMatchObject({ code: "PROJECT100_ADULT_ONLY", status: 403 });
     expect(database.sql).not.toHaveBeenCalled();
+  });
+
+  it("derives K8 from user-scoped persisted missions, blocks and completed sets", async () => {
+    database.state.liveGateMode = true;
+
+    const gate = await loadProject100TrainingLiveGate(TEST_ACTOR);
+
+    expect(gate.missions.upper).toMatchObject({
+      passed: true,
+      coveragePercentage: 100,
+      blockCount: 3,
+      environments: ["home", "outdoor_gym"],
+    });
+    expect(gate.passed).toBe(false);
+    const gateQueries = database.calls.filter((call) =>
+      call.text.includes("order by session_date desc") ||
+      call.text.includes("select id, session_id, environment, source") ||
+      call.text.includes("select se.session_id, e.movement_pattern, e.purpose"),
+    );
+    expect(gateQueries).toHaveLength(3);
+    expect(gateQueries.every((call) => call.text.includes("user_id = ?"))).toBe(true);
   });
 });

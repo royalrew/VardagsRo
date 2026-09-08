@@ -281,37 +281,34 @@ export async function createContextualReminder(
   };
 }
 
+let isDispatching = false;
+
 /**
- * Dispatches all due tasks to their owners' linked Telegram accounts.
+ * Resets the in-process dispatch lock (for testing).
  */
-export async function dispatchDueTelegramReminders(
+export function _resetDispatchLockForTesting(): void {
+  isDispatching = false;
+}
+
+/**
+ * Retrieves the count of due reminders waiting to be dispatched (read-only and idempotent).
+ */
+export async function getDueTelegramRemindersCount(
   now: Date = new Date(),
-): Promise<DispatchedReminderResult> {
+): Promise<number> {
   const sql = await readyClient();
   const nowIso = now.toISOString();
 
-  // Nattfrid / Sleep protection: do not send automatic reminder alerts between 22:30 and 07:00
+  // Sleep protection: during quiet hours, effective due count for alert dispatch is 0
   const clockStr = clockValueInTimeZone(nowIso, DEFAULT_TIME_ZONE);
   const currentMinute = minuteOfDayFromClockValue(clockStr) ?? 12 * 60;
   const isNightQuietHours = currentMinute >= 22 * 60 + 30 || currentMinute < 7 * 60;
   if (isNightQuietHours) {
-    return { dispatchedCount: 0, reminders: [] };
+    return 0;
   }
 
-  // Find uncompleted tasks that are due, have not been reminded yet, and where person has a linked Telegram account
-  const rows = await sql<
-    Array<{
-      id: string;
-      title: string;
-      notes: string | null;
-      due_at: string;
-      person_id: string;
-      person_name: string;
-      telegram_chat_id: string;
-    }>
-  >`
-    select t.id, t.title, t.notes, t.due_at, t.person_id,
-           p.name as person_name, a.telegram_chat_id
+  const rows = await sql<Array<{ count: string | number }>>`
+    select count(*) as count
     from family_tasks t
     join telegram_accounts a on a.person_id = t.person_id and a.household_id = t.household_id
     join family_people p on p.id = t.person_id and p.household_id = t.household_id
@@ -319,47 +316,124 @@ export async function dispatchDueTelegramReminders(
       and t.due_at is not null
       and t.due_at <= ${nowIso}
       and (t.notes is null or t.notes not like '%[telegram_reminded:%')
-    order by t.due_at asc
-    limit 20
   `;
 
-  const dispatched: DispatchedReminderResult["reminders"] = [];
+  return Number(rows[0]?.count ?? 0);
+}
 
-  for (const row of rows) {
-    const safeDueDate = new Date(row.due_at);
-    const validDate = !Number.isNaN(safeDueDate.getTime()) ? safeDueDate : new Date();
-    const formattedTime = formatClock(validDate, DEFAULT_TIME_ZONE);
-    const dateFormatted = formatLongDate(validDate);
-    const message = `⏰ Påminnelse från Jarvis\n\nHej ${row.person_name}! Dags att:\n👉 ${row.title}\n\n(Tid: kl ${formattedTime}, ${dateFormatted})`;
+/**
+ * Dispatches all due tasks to their owners' linked Telegram accounts.
+ * Hardened with:
+ * 1. In-process mutex to eliminate concurrent overlapping dispatch loops.
+ * 2. Atomic conditional DB claiming (`UPDATE ... WHERE ... AND (notes is null or notes not like '%[telegram_reminded:%') RETURNING id`)
+ *    to prevent duplicate Telegram notifications across multi-worker environments.
+ * 3. Automatic claim reversion if Telegram message dispatch fails.
+ */
+export async function dispatchDueTelegramReminders(
+  now: Date = new Date(),
+): Promise<DispatchedReminderResult> {
+  if (isDispatching) {
+    return { dispatchedCount: 0, reminders: [] };
+  }
 
-    try {
-      await sendTelegramMessage(row.telegram_chat_id, message, {
-        replyMarkup: taskReminderInlineKeyboard(row.id),
-      });
+  isDispatching = true;
+  try {
+    const sql = await readyClient();
+    const nowIso = now.toISOString();
 
+    // Nattfrid / Sleep protection: do not send automatic reminder alerts between 22:30 and 07:00
+    const clockStr = clockValueInTimeZone(nowIso, DEFAULT_TIME_ZONE);
+    const currentMinute = minuteOfDayFromClockValue(clockStr) ?? 12 * 60;
+    const isNightQuietHours = currentMinute >= 22 * 60 + 30 || currentMinute < 7 * 60;
+    if (isNightQuietHours) {
+      return { dispatchedCount: 0, reminders: [] };
+    }
+
+    // Find uncompleted tasks that are due, have not been reminded yet, and where person has a linked Telegram account
+    const rows = await sql<
+      Array<{
+        id: string;
+        title: string;
+        notes: string | null;
+        due_at: string;
+        person_id: string;
+        person_name: string;
+        telegram_chat_id: string;
+      }>
+    >`
+      select t.id, t.title, t.notes, t.due_at, t.person_id,
+             p.name as person_name, a.telegram_chat_id
+      from family_tasks t
+      join telegram_accounts a on a.person_id = t.person_id and a.household_id = t.household_id
+      join family_people p on p.id = t.person_id and p.household_id = t.household_id
+      where t.completed_at is null
+        and t.due_at is not null
+        and t.due_at <= ${nowIso}
+        and (t.notes is null or t.notes not like '%[telegram_reminded:%')
+      order by t.due_at asc
+      limit 20
+    `;
+
+    const dispatched: DispatchedReminderResult["reminders"] = [];
+
+    for (const row of rows) {
       const stamp = `[telegram_reminded:${nowIso}]`;
       const updatedNotes = row.notes ? `${row.notes}\n${stamp}` : stamp;
-      await sql`
+
+      // Atomic claim: update notes with reminder stamp only if it hasn't been claimed yet
+      const claimed = await sql<Array<{ id: string }>>`
         update family_tasks
         set notes = ${updatedNotes}
         where id = ${row.id}
+          and completed_at is null
+          and (notes is null or notes not like '%[telegram_reminded:%')
+        returning id
       `;
 
-      dispatched.push({
-        taskId: row.id,
-        title: row.title,
-        personName: row.person_name,
-        chatId: row.telegram_chat_id,
-      });
-    } catch (err) {
-      console.error(`Failed to send Telegram reminder for task ${row.id}:`, err);
-    }
-  }
+      if (!claimed || claimed.length === 0) {
+        // Another concurrent worker/request already claimed this task
+        continue;
+      }
 
-  return {
-    dispatchedCount: dispatched.length,
-    reminders: dispatched,
-  };
+      const safeDueDate = new Date(row.due_at);
+      const validDate = !Number.isNaN(safeDueDate.getTime()) ? safeDueDate : new Date();
+      const formattedTime = formatClock(validDate, DEFAULT_TIME_ZONE);
+      const dateFormatted = formatLongDate(validDate);
+      const message = `⏰ Påminnelse från Jarvis\n\nHej ${row.person_name}! Dags att:\n👉 ${row.title}\n\n(Tid: kl ${formattedTime}, ${dateFormatted})`;
+
+      try {
+        await sendTelegramMessage(row.telegram_chat_id, message, {
+          replyMarkup: taskReminderInlineKeyboard(row.id),
+        });
+
+        dispatched.push({
+          taskId: row.id,
+          title: row.title,
+          personName: row.person_name,
+          chatId: row.telegram_chat_id,
+        });
+      } catch (err) {
+        console.error(`Failed to send Telegram reminder for task ${row.id}:`, err);
+        // Revert atomic claim so it can be retried in a future cycle
+        try {
+          await sql`
+            update family_tasks
+            set notes = ${row.notes ?? null}
+            where id = ${row.id}
+          `;
+        } catch (revertErr) {
+          console.error(`Failed to revert claim stamp for task ${row.id}:`, revertErr);
+        }
+      }
+    }
+
+    return {
+      dispatchedCount: dispatched.length,
+      reminders: dispatched,
+    };
+  } finally {
+    isDispatching = false;
+  }
 }
 
 let tickerStarted = false;

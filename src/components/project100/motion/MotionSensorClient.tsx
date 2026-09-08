@@ -34,6 +34,34 @@ export function MotionSensorClient({ initialPairingCode = "" }: MotionSensorClie
   const lastFrameTimeRef = useRef(performance.now());
   const fpsCountRef = useRef(0);
   const fpsWindowStartRef = useRef(performance.now());
+  const clientTokenRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    clientTokenRef.current = null;
+    setConnected(false);
+  }, [pairingCode]);
+
+  async function ensureJoinedSession(): Promise<string | null> {
+    if (clientTokenRef.current) return clientTokenRef.current;
+    const cleanCode = pairingCode.toUpperCase().trim();
+    if (!cleanCode || !/^[A-Z0-9]{6}$/.test(cleanCode)) return null;
+
+    try {
+      const res = await fetch("/api/motion/sensor/relay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "join", pairingCode: cleanCode }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data.clientToken === "string") {
+          clientTokenRef.current = data.clientToken;
+          return data.clientToken;
+        }
+      }
+    } catch {}
+    return null;
+  }
 
   // Check orientation
   useEffect(() => {
@@ -165,6 +193,13 @@ export function MotionSensorClient({ initialPairingCode = "" }: MotionSensorClie
         landmarks: fullBodyLandmarks,
       };
 
+      const token = await ensureJoinedSession();
+      if (!token) {
+        setConnected(false);
+        timerId = setTimeout(sendFrame, 1000);
+        return;
+      }
+
       try {
         const res = await fetch("/api/motion/sensor/relay", {
           method: "POST",
@@ -172,12 +207,16 @@ export function MotionSensorClient({ initialPairingCode = "" }: MotionSensorClie
           body: JSON.stringify({
             action: "frame",
             pairingCode: pairingCode.toUpperCase().trim(),
+            token,
             frame: framePayload,
           }),
         });
         if (res.ok) {
           setConnected(true);
-        } else if (res.status === 404) {
+        } else {
+          if (res.status === 401) {
+            clientTokenRef.current = null;
+          }
           setConnected(false);
         }
       } catch {
@@ -304,6 +343,9 @@ export function MotionSensorClient({ initialPairingCode = "" }: MotionSensorClie
 
   async function sendRemoteCommand(action: RemoteCommandAction) {
     if (!pairingCode) return;
+    const token = await ensureJoinedSession();
+    if (!token) return;
+
     const signal = createRemoteCommandSignal(action);
     try {
       await fetch("/api/motion/sensor/relay", {
@@ -312,6 +354,7 @@ export function MotionSensorClient({ initialPairingCode = "" }: MotionSensorClie
         body: JSON.stringify({
           action: "signal",
           pairingCode: pairingCode.toUpperCase().trim(),
+          token,
           signal,
         }),
       });
