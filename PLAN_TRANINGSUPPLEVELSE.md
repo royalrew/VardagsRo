@@ -591,10 +591,10 @@ Ingen rekrytering, kontakt med andra eller publicering sker automatiskt genom pl
 
 | Etapp | Kodstatus | Automatiska kontroller | Fysisk provning | Ny användare | Bevis / nästa steg |
 | --- | --- | --- | --- | --- | --- |
-| U0 | Klar (commit 43a6cea) | 136/136 testfiler gröna (1144 tester) | Redo för T1 | Ej prövad | K8 flyttat till verifieringsvy; Studio-ingång och tillståndskarta aktiva |
-| U1 | Klar (commit 43a6cea) | 136/136 testfiler gröna (1144 tester) | Redo för T1 & T2 | Ej prövad | Onboarding, förslag, 10-stegs handstående och träningsminne |
-| U2 | Klar för provning | 136/136 testfiler gröna (1144 tester) | Redo för T3 & T4 | Ej prövad | TV HUD, röst & mellanslagskontroll, direkt programlänkning, manuell fallback |
-| U3 | Befintliga delar finns; nytt flöde ej verifierat | Ej körda för etappen | Ej prövad för etappen | Ej prövad | T5–T6 |
+| U0 | Klar (commit 43a6cea) | 137/137 testfiler gröna (1150 tester) | Redo för T1 | Ej prövad | K8 flyttat till verifieringsvy; Studio-ingång och tillståndskarta aktiva |
+| U1 | Klar (commit 43a6cea) | 137/137 testfiler gröna (1150 tester) | Redo för T1 & T2 | Ej prövad | Onboarding, förslag, 10-stegs handstående och träningsminne |
+| U2 | Klar för provning (commit aabfee9) | 137/137 testfiler gröna (1150 tester) | Redo för T3 & T4 | Ej prövad | TV HUD, röst & mellanslagskontroll, direkt programlänkning, manuell fallback |
+| U3 | Klar för provning (commit aabfee9) | 137/137 testfiler gröna (1150 tester) | Redo för T5 & T6 | Ej prövad | Motion-to-Memory bridge, databassparande från Motion Lab, 0 förlorade set |
 | U4 | Ej verifierad | Ej körda | Ej prövad | Ej prövad | Granskat upplägg och detaljväxling |
 | U5 | Befintlig RPG finns; nytt flöde ej verifierat | Ej körda för etappen | Ej prövad för etappen | Ej prövad | T7–T8 |
 | U6 | Ej verifierad | Ej körda | Ej prövad | Ej prövad | T9 och vardagsprovning |
