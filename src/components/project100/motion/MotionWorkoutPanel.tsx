@@ -8,6 +8,7 @@ import {
   Download,
   Play,
   RotateCcw,
+  Save,
 } from "lucide-react";
 import React from "react";
 
@@ -65,6 +66,10 @@ export interface MotionWorkoutPanelProps {
   onSkipRest: () => void;
   onRecordRpe?: (setIndex: number, rpe: "easy" | "moderate" | "hard") => void;
   framingFeedback?: ExerciseFramingFeedback | null;
+  onSaveToLog?: () => Promise<void> | void;
+  isSavedToLog?: boolean;
+  isSavingToLog?: boolean;
+  saveLogError?: string | null;
 }
 
 /**
@@ -95,6 +100,10 @@ export function MotionWorkoutPanel({
   onSkipRest,
   onRecordRpe,
   framingFeedback,
+  onSaveToLog,
+  isSavedToLog,
+  isSavingToLog,
+  saveLogError,
 }: MotionWorkoutPanelProps): React.JSX.Element {
   const [filterCategory, setFilterCategory] = React.useState<
     "all" | "bodyweight" | "dumbbell" | "kettlebell" | "programs"
@@ -827,6 +836,40 @@ export function MotionWorkoutPanel({
         >
           <Download /> Ladda ned .json
         </button>
+        {onSaveToLog ? (
+          <button
+            type="button"
+            className="p100-button p100-motion-save-log-btn"
+            onClick={() => void onSaveToLog()}
+            disabled={
+              isSavingToLog ||
+              isSavedToLog ||
+              workoutSession.completedSets.length === 0
+            }
+            style={{
+              gridColumn: "1 / -1",
+              background: isSavedToLog ? "#166534" : "#245746",
+              color: "#ffffff",
+              fontWeight: 600,
+              padding: "10px 14px",
+              borderRadius: "8px",
+              cursor: isSavedToLog ? "default" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "0.5rem",
+              marginTop: "0.25rem",
+            }}
+          >
+            {isSavedToLog ? <Check size={16} /> : <Save size={16} />}
+            {isSavedToLog ? "Sparat i träningsloggen!" : isSavingToLog ? "Sparar till loggen..." : "Spara till träningsloggen"}
+          </button>
+        ) : null}
+        {saveLogError ? (
+          <small style={{ gridColumn: "1 / -1", color: "#f87171" }}>
+            ⚠️ {saveLogError}
+          </small>
+        ) : null}
       </div>
     </section>
   );

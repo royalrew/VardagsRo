@@ -1,6 +1,7 @@
 "use client";
 
-import { Play } from "lucide-react";
+import { Check, Play, Save } from "lucide-react";
+import Link from "next/link";
 import React from "react";
 
 import {
@@ -36,11 +37,15 @@ export interface MotionWorkoutOverlayProps {
   programSession?: ProgramSessionState | null;
   programSummary?: ProgramSummary | null;
   framingFeedback?: ExerciseFramingFeedback | null;
+  onSaveToLog?: () => Promise<void> | void;
+  isSavedToLog?: boolean;
+  isSavingToLog?: boolean;
+  saveLogError?: string | null;
 }
 
 /**
  * TV HUD overlay for Squat and Program workout sessions, displaying the large rest timer,
- * set technique summary, RPE rating, and coach prompts.
+ * set technique summary, RPE rating, coach prompts, and log completion actions.
  */
 export function MotionWorkoutOverlay({
   workoutSession,
@@ -57,6 +62,10 @@ export function MotionWorkoutOverlay({
   programSession,
   programSummary,
   framingFeedback,
+  onSaveToLog,
+  isSavedToLog,
+  isSavingToLog,
+  saveLogError,
 }: MotionWorkoutOverlayProps): React.JSX.Element | null {
   const cameraCoachBadge = framingFeedback ? (
     <aside
@@ -270,13 +279,66 @@ export function MotionWorkoutOverlay({
           <strong>{programSummary?.totalSets ?? programSession?.completedSets.length ?? 0} set</strong>
           <span>genomförda</span>
         </div>
-        <div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           <strong>Grymt jobbat! 🎉 Hela träningsprogrammet är avklarat</strong>
           <span>
             {programSummary
               ? `${programSummary.totalReps} repetitioner totalt · +${programSummary.xpEarned} XP intjänat!`
               : "Alla planerade set och repetitioner genomförda."}
           </span>
+          <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            {onSaveToLog ? (
+              <button
+                type="button"
+                className="p100-button"
+                onClick={() => void onSaveToLog()}
+                disabled={isSavingToLog || isSavedToLog}
+                style={{
+                  background: isSavedToLog ? "#166534" : "#245746",
+                  color: "#ffffff",
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  fontWeight: 600,
+                  fontSize: "0.95rem",
+                  cursor: isSavedToLog ? "default" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                }}
+              >
+                {isSavedToLog ? (
+                  <>
+                    <Check size={16} /> Sparat i träningsloggen!
+                  </>
+                ) : isSavingToLog ? (
+                  "Sparar..."
+                ) : (
+                  <>
+                    <Save size={16} /> Spara till träningsloggen
+                  </>
+                )}
+              </button>
+            ) : null}
+            <Link
+              href="/projekt-100/traning"
+              className="p100-button"
+              style={{
+                background: "rgba(255, 255, 255, 0.12)",
+                color: "#F2F5F0",
+                padding: "8px 16px",
+                borderRadius: "8px",
+                fontSize: "0.95rem",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+              }}
+            >
+              Tillbaka till Träning
+            </Link>
+          </div>
+          {saveLogError ? (
+            <small style={{ color: "#f87171" }}>⚠️ {saveLogError}</small>
+          ) : null}
         </div>
       </div>
     );
@@ -334,11 +396,64 @@ export function MotionWorkoutOverlay({
             <strong>{workoutSession.completedSets.length}/{workoutSession.config.targetSets}</strong>
             <span>set klara</span>
           </div>
-          <div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             <strong>Grymt jobbat! 🎉 Hela passet är avklarat</strong>
             <span>
               {workoutSession.completedSets.reduce((acc, s) => acc + s.completedReps, 0)} repetitioner genomförda hands-free. Se fullständig sammanfattning och tekniktrend i sidopanelen.
             </span>
+            <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+              {onSaveToLog ? (
+                <button
+                  type="button"
+                  className="p100-button"
+                  onClick={() => void onSaveToLog()}
+                  disabled={isSavingToLog || isSavedToLog}
+                  style={{
+                    background: isSavedToLog ? "#166534" : "#245746",
+                    color: "#ffffff",
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    fontWeight: 600,
+                    fontSize: "0.95rem",
+                    cursor: isSavedToLog ? "default" : "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.4rem",
+                  }}
+                >
+                  {isSavedToLog ? (
+                    <>
+                      <Check size={16} /> Sparat i träningsloggen!
+                    </>
+                  ) : isSavingToLog ? (
+                    "Sparar..."
+                  ) : (
+                    <>
+                      <Save size={16} /> Spara till träningsloggen
+                    </>
+                  )}
+                </button>
+              ) : null}
+              <Link
+                href="/projekt-100/traning"
+                className="p100-button"
+                style={{
+                  background: "rgba(255, 255, 255, 0.12)",
+                  color: "#F2F5F0",
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  fontSize: "0.95rem",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
+                Tillbaka till Träning
+              </Link>
+            </div>
+            {saveLogError ? (
+              <small style={{ color: "#f87171" }}>⚠️ {saveLogError}</small>
+            ) : null}
           </div>
         </>
       ) : (

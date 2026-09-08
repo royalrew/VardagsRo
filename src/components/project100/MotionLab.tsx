@@ -172,6 +172,13 @@ import type { MotionMissionLaunch } from "@/lib/motion-mission-launch";
 import { MotionMissionSyncPanel } from "./motion/MotionMissionSyncPanel";
 import { AdaptiveCameraSetupPanel } from "./motion/AdaptiveCameraSetupPanel";
 import type { SavedCameraSetupProfile } from "@/lib/motion-adaptive-camera";
+import {
+  syncProgramToWorkoutMemory,
+  syncSquatToWorkoutMemory,
+  convertProgramSessionToApiPayload,
+  convertSquatSessionToApiPayload,
+} from "@/lib/project100-motion-bridge";
+import { clearWorkoutMemorySnapshot } from "@/lib/project100-workout-memory";
 
 const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const MODEL_ASSET =
@@ -436,6 +443,48 @@ export function MotionLab({
   const programSessionRef = useRef<ProgramSessionState | null>(null);
   const [programSummary, setProgramSummary] = useState<ProgramSummary | null>(null);
   const [savedProgramSnapshot, setSavedProgramSnapshot] = useState<ProgramSessionState | null>(null);
+  const [isSavingToLog, setIsSavingToLog] = useState(false);
+  const [isSavedToLog, setIsSavedToLog] = useState(false);
+  const [saveLogError, setSaveLogError] = useState<string | null>(null);
+
+  async function handleSaveSessionToLog() {
+    setIsSavingToLog(true);
+    setSaveLogError(null);
+    try {
+      let payload: ReturnType<typeof convertProgramSessionToApiPayload> | ReturnType<typeof convertSquatSessionToApiPayload> | null = null;
+      if (programSessionRef.current && programSessionRef.current.completedSets.length > 0) {
+        payload = convertProgramSessionToApiPayload(programSessionRef.current);
+      } else if (workoutSessionRef.current && workoutSessionRef.current.completedSets.length > 0) {
+        payload = convertSquatSessionToApiPayload(workoutSessionRef.current);
+      }
+
+      if (!payload || payload.exercises.length === 0) {
+        setSaveLogError("Inga genomförda set att spara än.");
+        setIsSavingToLog(false);
+        return;
+      }
+
+      const response = await fetch("/api/project100/training/sessions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.message ?? "Kunde inte spara passet till databasen.");
+      }
+
+      setIsSavedToLog(true);
+      clearProgramSessionSnapshot();
+      clearWorkoutMemorySnapshot();
+      setSavedProgramSnapshot(null);
+    } catch (err) {
+      setSaveLogError(err instanceof Error ? err.message : "Något gick fel vid sparandet.");
+    } finally {
+      setIsSavingToLog(false);
+    }
+  }
 
   useEffect(() => {
     const saved = loadProgramSessionSnapshot();
@@ -1572,6 +1621,7 @@ export function MotionLab({
           const updatedProg = completeProgramSet(currentProg, nextTracker.reps);
           programSessionRef.current = updatedProg;
           setProgramSession(updatedProg);
+          syncProgramToWorkoutMemory(updatedProg);
           playSquatSound("milestone");
 
           if (updatedProg.phase === "completed") {
@@ -1607,6 +1657,7 @@ export function MotionLab({
           const updatedProg = completeProgramSet(currentProg, Math.round(nextTracker.holdSeconds));
           programSessionRef.current = updatedProg;
           setProgramSession(updatedProg);
+          syncProgramToWorkoutMemory(updatedProg);
           playSquatSound("milestone");
 
           if (updatedProg.phase === "completed") {
@@ -1656,6 +1707,7 @@ export function MotionLab({
       if (workoutResult.cue) {
         let cueText = workoutResult.cue.text;
         if (workoutResult.cue.sound === "workout-complete") {
+          syncSquatToWorkoutMemory(workoutResult.session);
           playGameSound(null, true);
           const report = buildWorkoutSessionReport(workoutResult.session);
           const { updatedMemory, newPersonalRecords } = updateCoachMemoryWithSession(coachMemoryRef.current, report);
@@ -1672,6 +1724,7 @@ export function MotionLab({
             cueText = `${cueText} ${prAnnouncement}`;
           }
         } else if (workoutResult.cue.sound === "set-complete") {
+          syncSquatToWorkoutMemory(workoutResult.session);
           playSquatSound("milestone");
           const lastSet = workoutResult.session.completedSets[workoutResult.session.completedSets.length - 1];
           if (lastSet) {
@@ -2806,6 +2859,10 @@ export function MotionLab({
               programSession={programSession}
               programSummary={programSummary}
               framingFeedback={framingFeedback}
+              onSaveToLog={handleSaveSessionToLog}
+              isSavedToLog={isSavedToLog}
+              isSavingToLog={isSavingToLog}
+              saveLogError={saveLogError}
             />
           ) : null}
           <MotionArenaOverlay
@@ -2947,6 +3004,10 @@ export function MotionLab({
             savedProgramSnapshot={savedProgramSnapshot}
             onResumeProgram={handleResumeProgramSession}
             onDiscardProgram={handleDiscardProgramSession}
+            onSaveToLog={handleSaveSessionToLog}
+            isSavedToLog={isSavedToLog}
+            isSavingToLog={isSavingToLog}
+            saveLogError={saveLogError}
           />
 
           <MotionDiagnosticsPanel
