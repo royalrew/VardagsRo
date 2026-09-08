@@ -139,6 +139,9 @@ const dependencies = vi.hoisted(() => {
       content: string;
       reportedOn: string;
     }>> => []),
+    loadProject100DailyTrainingMission: vi.fn(async (): Promise<unknown> => null),
+    appendProject100TrainingBlock: vi.fn(),
+    finishProject100DailyTrainingMission: vi.fn(),
   };
 });
 
@@ -147,6 +150,12 @@ vi.mock("@/server/project100-training", () => ({
   createProject100TrainingSession: dependencies.createProject100TrainingSession,
   updateProject100TrainingSession: dependencies.updateProject100TrainingSession,
   loadProject100TrainingTemplates: vi.fn(async () => []),
+}));
+
+vi.mock("@/server/project100-training-missions", () => ({
+  loadProject100DailyTrainingMission: dependencies.loadProject100DailyTrainingMission,
+  appendProject100TrainingBlock: dependencies.appendProject100TrainingBlock,
+  finishProject100DailyTrainingMission: dependencies.finishProject100DailyTrainingMission,
 }));
 
 vi.mock("@/server/project100-nutrition", () => ({
@@ -265,6 +274,42 @@ describe("Jarvis Training & Conversational Interaction", () => {
         ],
       }),
     );
+  });
+
+  it("adds spontaneous strength to today's open mission instead of creating another pass", async () => {
+    dependencies.loadProject100DailyTrainingMission.mockResolvedValueOnce({
+      id: "mission-open-1",
+      title: "Överkropp",
+      status: "in_progress",
+    });
+    dependencies.appendProject100TrainingBlock.mockResolvedValueOnce({
+      duplicate: false,
+      mission: {
+        id: "mission-open-1",
+        title: "Överkropp",
+        coverage: {
+          percentage: 8,
+          requirements: [
+            { label: "Horisontell press", remainingSets: 2 },
+            { label: "Horisontellt drag", remainingSets: 3 },
+          ],
+        },
+      },
+    });
+
+    const result = await processJarvisAgentMessage(
+      TEST_ACTOR,
+      "Gjorde 30 armhävningar",
+      { sourceEventId: "telegram:123" },
+    );
+
+    expect(dependencies.appendProject100TrainingBlock).toHaveBeenCalledWith(
+      TEST_ACTOR,
+      "mission-open-1",
+      expect.objectContaining({ source: "jarvis", sourceEventId: "jarvis:telegram:123:workout" }),
+    );
+    expect(dependencies.createProject100TrainingSession).not.toHaveBeenCalled();
+    expect(result.text).toContain("8% plantäckning");
   });
 
   it("logs protein nutrition when saying 'Tog en proteinshake på 35g protein'", async () => {

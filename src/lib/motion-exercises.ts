@@ -1,0 +1,475 @@
+import type { MotionLandmark } from "./motion-engine";
+
+export type ExerciseType = "squat" | "lunge" | "pushup" | "jumping-jacks" | "plank";
+
+export type CameraAngle = "front" | "side" | "diagonal";
+
+export interface ExerciseProfile {
+  id: ExerciseType;
+  name: string;
+  recommendedCameraAngle: CameraAngle;
+  targetJoints: number[];
+  description: string;
+  cues: {
+    start: string;
+    formWarning: string;
+    praise: string;
+  };
+}
+
+/**
+ * Exercise profile registry defining movement targets, required camera angles,
+ * and form evaluation rules (Steg 75).
+ */
+export const EXERCISE_PROFILES: Record<ExerciseType, ExerciseProfile> = {
+  squat: {
+    id: "squat",
+    name: "Knäböj",
+    recommendedCameraAngle: "front",
+    targetJoints: [11, 12, 23, 24, 25, 26, 27, 28],
+    description: "Klassisk knäböj för ben- och sätesstyrka.",
+    cues: {
+      start: "Stå med fötterna axelbrett och tårna lätt utåt.",
+      formWarning: "Sök fullt djup med höften under knähöjd.",
+      praise: "Perfekt djup och upprätt överkropp!",
+    },
+  },
+  lunge: {
+    id: "lunge",
+    name: "Utfall",
+    recommendedCameraAngle: "side",
+    targetJoints: [23, 24, 25, 26, 27, 28],
+    description: "Utfallsteg för unilateral benstyrka och balans.",
+    cues: {
+      start: "Ta ett stort kliv framåt och sänk det bakre knät mot golvet.",
+      formWarning: "Håll främre knät i 90 grader utan att det viker inåt.",
+      praise: "Starkt och stabilt utfall!",
+    },
+  },
+  pushup: {
+    id: "pushup",
+    name: "Armhävningar",
+    recommendedCameraAngle: "side",
+    targetJoints: [11, 12, 13, 14, 15, 16, 23, 24, 27, 28],
+    description: "Bröst- och överkroppspress i rak plankposition.",
+    cues: {
+      start: "Ställ dig i plankposition med händerna under axlarna.",
+      formWarning: "Håll kroppen spänd som en rak planka utan hängande höft.",
+      praise: "Stark bröstpress och ren planklinje!",
+    },
+  },
+  "jumping-jacks": {
+    id: "jumping-jacks",
+    name: "Jumping Jacks",
+    recommendedCameraAngle: "front",
+    targetJoints: [11, 12, 15, 16, 23, 24, 27, 28],
+    description: "Helkroppsrörelse med armar över huvudet och fötter isär.",
+    cues: {
+      start: "Hoppa isär med fötterna och för händerna samman över huvudet.",
+      formWarning: "Sträck ut armarna hela vägen ovanför axlarna.",
+      praise: "Högt tempo och bra spänst!",
+    },
+  },
+  plank: {
+    id: "plank",
+    name: "Planka",
+    recommendedCameraAngle: "side",
+    targetJoints: [11, 12, 23, 24, 27, 28],
+    description: "Isometrisk bålstabilitet med neutral ryggrad.",
+    cues: {
+      start: "Håll en rak linje från axlar genom höft till hälar.",
+      formWarning: "Håll en rak linje – lyft inte höften för högt.",
+      praise: "Orubblig bålstabilitet!",
+    },
+  },
+};
+
+/**
+ * Retrieves the exercise profile for the given exercise identifier.
+ *
+ * @param type - ExerciseType key.
+ * @returns ExerciseProfile.
+ */
+export function getExerciseProfile(type: ExerciseType): ExerciseProfile {
+  return EXERCISE_PROFILES[type];
+}
+
+export interface ExerciseCameraGuidance {
+  angle: "front" | "side" | "front-or-45";
+  instruction: string;
+  warningNotice?: string;
+}
+
+/**
+ * Returns actionable camera framing guidance and positioning instructions per exercise (Steg 76).
+ *
+ * @param type - Active exercise type.
+ * @returns Camera angle guidance and instructions.
+ */
+export function getExerciseCameraGuidance(type: ExerciseType): ExerciseCameraGuidance {
+  switch (type) {
+    case "pushup":
+      return {
+        angle: "side",
+        instruction: "Vänd dig 90° åt sidan så hela kroppen och armarna syns i profil.",
+        warningNotice: "Kameran behöver se axlar, höfter och fötter från sidan.",
+      };
+    case "plank":
+      return {
+        angle: "side",
+        instruction: "Vänd dig 90° med kroppen i profil mot kameran.",
+        warningNotice: "Håll kroppen horisontell i bild.",
+      };
+    case "lunge":
+      return {
+        angle: "side",
+        instruction: "Ställ dig 90° i profil så att främre och bakre knä syns tydligt.",
+        warningNotice: "Se till att båda benen syns i rörelsen.",
+      };
+    case "jumping-jacks":
+      return {
+        angle: "front",
+        instruction: "Ställ dig rakt framifrån med plats att sträcka ut armar och ben åt sidorna.",
+      };
+    case "squat":
+    default:
+      return {
+        angle: "front-or-45",
+        instruction: "Ställ dig framifrån eller 45° snett mot kameran så att höfter och knän syns.",
+      };
+  }
+}
+
+/**
+ * Calculates 2D planar angle in degrees between three landmarks (a -> b -> c).
+ */
+export function computeJointAngle(
+  a: MotionLandmark,
+  b: MotionLandmark,
+  c: MotionLandmark,
+  aspectRatio = 1,
+): number | null {
+  const safeAspect = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : 1;
+  const ab = { x: (a.x - b.x) * safeAspect, y: a.y - b.y };
+  const cb = { x: (c.x - b.x) * safeAspect, y: c.y - b.y };
+  const abLength = Math.hypot(ab.x, ab.y);
+  const cbLength = Math.hypot(cb.x, cb.y);
+  if (abLength < 1e-6 || cbLength < 1e-6) return null;
+  const cosine = Math.min(1, Math.max(-1, (ab.x * cb.x + ab.y * cb.y) / (abLength * cbLength)));
+  return Math.acos(cosine) * (180 / Math.PI);
+}
+
+// ---------------------------------------------------------------------------
+// Steg 71: Lunge Tracker
+// ---------------------------------------------------------------------------
+
+export type LungePhase = "standing" | "descending" | "bottom" | "ascending";
+
+export interface LungeTrackerState {
+  phase: LungePhase;
+  reps: number;
+  leadLeg: "left" | "right" | null;
+  kneeAngle: number;
+  lastRepAtMs: number | null;
+}
+
+export function createLungeTrackerState(): LungeTrackerState {
+  return {
+    phase: "standing",
+    reps: 0,
+    leadLeg: null,
+    kneeAngle: 180,
+    lastRepAtMs: null,
+  };
+}
+
+export function advanceLungeTracker(
+  state: LungeTrackerState,
+  landmarks: readonly MotionLandmark[],
+  nowMs: number,
+): LungeTrackerState {
+  const leftHip = landmarks[23];
+  const leftKnee = landmarks[25];
+  const leftAnkle = landmarks[27];
+
+  const rightHip = landmarks[24];
+  const rightKnee = landmarks[26];
+  const rightAnkle = landmarks[28];
+
+  if (!leftHip || !leftKnee || !leftAnkle || !rightHip || !rightKnee || !rightAnkle) {
+    return state;
+  }
+
+  const leftKneeAngle = computeJointAngle(leftHip, leftKnee, leftAnkle) ?? 180;
+  const rightKneeAngle = computeJointAngle(rightHip, rightKnee, rightAnkle) ?? 180;
+
+  // Lead leg is the one bending forward/deepest
+  const isLeftLead = leftKneeAngle <= rightKneeAngle;
+  const activeKneeAngle = isLeftLead ? leftKneeAngle : rightKneeAngle;
+  const leadLeg = isLeftLead ? "left" : "right";
+
+  let nextPhase = state.phase;
+  let nextReps = state.reps;
+  let lastRepAtMs = state.lastRepAtMs;
+
+  if (state.phase === "standing") {
+    if (activeKneeAngle <= 95) {
+      nextPhase = "bottom";
+    } else if (activeKneeAngle < 150) {
+      nextPhase = "descending";
+    }
+  } else if (state.phase === "descending") {
+    if (activeKneeAngle <= 95) {
+      nextPhase = "bottom";
+    } else if (activeKneeAngle > 155) {
+      nextPhase = "standing";
+    }
+  } else if (state.phase === "bottom") {
+    if (activeKneeAngle >= 150) {
+      nextPhase = "standing";
+      nextReps += 1;
+      lastRepAtMs = nowMs;
+    } else if (activeKneeAngle > 105) {
+      nextPhase = "ascending";
+    }
+  } else if (state.phase === "ascending") {
+    if (activeKneeAngle >= 155) {
+      nextPhase = "standing";
+      nextReps += 1;
+      lastRepAtMs = nowMs;
+    } else if (activeKneeAngle <= 95) {
+      nextPhase = "bottom";
+    }
+  }
+
+  return {
+    ...state,
+    phase: nextPhase,
+    reps: nextReps,
+    leadLeg: nextPhase === "standing" && state.phase !== "ascending" ? state.leadLeg : leadLeg,
+    kneeAngle: Math.round(activeKneeAngle),
+    lastRepAtMs,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Steg 72: Push-up Tracker
+// ---------------------------------------------------------------------------
+
+export type PushupPhase = "plank-top" | "descending" | "bottom" | "ascending";
+
+export interface PushupTrackerState {
+  phase: PushupPhase;
+  reps: number;
+  elbowAngle: number;
+  bodyAlignmentDeg: number;
+  isFormWarning: boolean;
+  formMessage: string | null;
+}
+
+export function createPushupTrackerState(): PushupTrackerState {
+  return {
+    phase: "plank-top",
+    reps: 0,
+    elbowAngle: 180,
+    bodyAlignmentDeg: 180,
+    isFormWarning: false,
+    formMessage: null,
+  };
+}
+
+export function advancePushupTracker(
+  state: PushupTrackerState,
+  landmarks: readonly MotionLandmark[],
+  _nowMs: number,
+): PushupTrackerState {
+  const shoulder = landmarks[11];
+  const elbow = landmarks[13];
+  const wrist = landmarks[15];
+  const hip = landmarks[23];
+  const ankle = landmarks[27];
+
+  if (!shoulder || !elbow || !wrist || !hip || !ankle) {
+    return state;
+  }
+
+  const elbowAngle = computeJointAngle(shoulder, elbow, wrist) ?? 180;
+  const bodyLine = computeJointAngle(shoulder, hip, ankle) ?? 180;
+
+  const isFormWarning = bodyLine < 145;
+  const formMessage = isFormWarning ? "Håll kroppen spänd och lyft höften" : null;
+
+  let nextPhase = state.phase;
+  let nextReps = state.reps;
+
+  if (state.phase === "plank-top") {
+    if (elbowAngle <= 95) {
+      nextPhase = "bottom";
+    } else if (elbowAngle < 140) {
+      nextPhase = "descending";
+    }
+  } else if (state.phase === "descending") {
+    if (elbowAngle <= 95) {
+      nextPhase = "bottom";
+    } else if (elbowAngle > 155) {
+      nextPhase = "plank-top";
+    }
+  } else if (state.phase === "bottom") {
+    if (elbowAngle >= 150) {
+      nextPhase = "plank-top";
+      if (!isFormWarning) {
+        nextReps += 1;
+      }
+    } else if (elbowAngle > 105) {
+      nextPhase = "ascending";
+    }
+  } else if (state.phase === "ascending") {
+    if (elbowAngle >= 155) {
+      nextPhase = "plank-top";
+      if (!isFormWarning) {
+        nextReps += 1;
+      }
+    } else if (elbowAngle <= 95) {
+      nextPhase = "bottom";
+    }
+  }
+
+  return {
+    ...state,
+    phase: nextPhase,
+    reps: nextReps,
+    elbowAngle: Math.round(elbowAngle),
+    bodyAlignmentDeg: Math.round(bodyLine),
+    isFormWarning,
+    formMessage,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Steg 73: Jumping Jacks Tracker
+// ---------------------------------------------------------------------------
+
+export type JumpingJackPhase = "closed" | "open";
+
+export interface JumpingJackTrackerState {
+  phase: JumpingJackPhase;
+  reps: number;
+}
+
+export function createJumpingJackTrackerState(): JumpingJackTrackerState {
+  return {
+    phase: "closed",
+    reps: 0,
+  };
+}
+
+export function advanceJumpingJackTracker(
+  state: JumpingJackTrackerState,
+  landmarks: readonly MotionLandmark[],
+  _nowMs: number,
+): JumpingJackTrackerState {
+  const leftShoulder = landmarks[11];
+  const rightShoulder = landmarks[12];
+  const leftWrist = landmarks[15];
+  const rightWrist = landmarks[16];
+  const leftAnkle = landmarks[27];
+  const rightAnkle = landmarks[28];
+
+  if (!leftShoulder || !rightShoulder || !leftWrist || !rightWrist || !leftAnkle || !rightAnkle) {
+    return state;
+  }
+
+  const shoulderWidth = Math.abs(rightShoulder.x - leftShoulder.x);
+  const footDistance = Math.abs(rightAnkle.x - leftAnkle.x);
+
+  // Arms overhead when wrists are higher than shoulders (y is smaller upwards)
+  const armsOverhead = leftWrist.y < leftShoulder.y && rightWrist.y < rightShoulder.y;
+  const feetSpread = footDistance > shoulderWidth * 1.5;
+
+  const isOpen = armsOverhead && feetSpread;
+  const isClosed = !armsOverhead && footDistance < shoulderWidth * 1.2;
+
+  let nextPhase = state.phase;
+  let nextReps = state.reps;
+
+  if (state.phase === "closed") {
+    if (isOpen) {
+      nextPhase = "open";
+    }
+  } else if (state.phase === "open") {
+    if (isClosed) {
+      nextPhase = "closed";
+      nextReps += 1;
+    }
+  }
+
+  return {
+    ...state,
+    phase: nextPhase,
+    reps: nextReps,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Steg 74: Plank Tracker
+// ---------------------------------------------------------------------------
+
+export interface PlankTrackerState {
+  isHolding: boolean;
+  holdTimeMs: number;
+  lastTimestampMs: number | null;
+  bodyLineDeg: number;
+  formWarning: string | null;
+}
+
+export function createPlankTrackerState(): PlankTrackerState {
+  return {
+    isHolding: false,
+    holdTimeMs: 0,
+    lastTimestampMs: null,
+    bodyLineDeg: 180,
+    formWarning: null,
+  };
+}
+
+export function advancePlankTracker(
+  state: PlankTrackerState,
+  landmarks: readonly MotionLandmark[],
+  nowMs: number,
+): PlankTrackerState {
+  const shoulder = landmarks[11];
+  const hip = landmarks[23];
+  const ankle = landmarks[27];
+
+  if (!shoulder || !hip || !ankle) {
+    return {
+      ...state,
+      isHolding: false,
+      lastTimestampMs: nowMs,
+    };
+  }
+
+  const bodyLine = computeJointAngle(shoulder, hip, ankle) ?? 180;
+  // A good plank is relatively straight: 155° to 195°
+  const isStraight = bodyLine >= 155 && bodyLine <= 195;
+
+  let formWarning: string | null = null;
+  if (!isStraight) {
+    formWarning = "Håll en rak linje mellan axel, höft och fötter.";
+  }
+
+  let nextHoldTime = state.holdTimeMs;
+  if (isStraight && state.lastTimestampMs !== null) {
+    const elapsed = Math.max(0, nowMs - state.lastTimestampMs);
+    nextHoldTime += elapsed;
+  }
+
+  return {
+    ...state,
+    isHolding: isStraight,
+    holdTimeMs: nextHoldTime,
+    lastTimestampMs: nowMs,
+    bodyLineDeg: Math.round(bodyLine),
+    formWarning,
+  };
+}

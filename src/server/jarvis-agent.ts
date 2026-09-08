@@ -21,10 +21,23 @@ import {
   type Project100MemoryCategory,
 } from "@/lib/project100-jarvis";
 import { parseMemoryCommand } from "@/lib/project100-memory-classifier";
+import {
+  formatFridgeSuggestionsReply,
+  generateFridgeMealSuggestions,
+  isFridgeMealQuery,
+  parseFridgeQueryIngredients,
+} from "@/lib/jarvis-recipes";
+import {
+  checkCarInspectionInfo,
+  checkWinterTyresRule,
+  parseCarIntent,
+  parseCarOdometerCommand,
+} from "@/lib/jarvis-car";
 import type { Project100MeasurementUnit } from "@/lib/project100-body";
 import type { Project100MealType } from "@/lib/project100-nutrition";
 import { evaluateProject100Benchmarks } from "@/lib/project100-benchmarks";
 import type { Project100ActivityType } from "@/lib/project100-training";
+import { classifyProject100MissionExercise } from "@/lib/project100-training-mission";
 import { openAIConfig } from "@/server/config";
 import {
   loadDashboard,
@@ -59,6 +72,11 @@ import {
   loadProject100TrainingTemplates,
   updateProject100TrainingSession,
 } from "@/server/project100-training";
+import {
+  appendProject100TrainingBlock,
+  finishProject100DailyTrainingMission,
+  loadProject100DailyTrainingMission,
+} from "@/server/project100-training-missions";
 import { sanitizePII } from "@/server/pii-sanitizer";
 import {
   generateEveningBriefing,
@@ -91,6 +109,8 @@ export interface JarvisAgentOptions {
   channel?: "telegram" | "web";
   personName?: string;
   conversationId?: string;
+  /** Stable inbound message/update id used to deduplicate training writes. */
+  sourceEventId?: string;
 }
 
 export interface JarvisAgentResult {
@@ -498,6 +518,11 @@ const JARVIS_TOOLS: OpenAI.ChatCompletionTool[] = [
             enum: ["strength_home", "forest", "running", "cycling", "spinning", "outdoor_gym", "other"],
             description: "Aktivitetstyp (standard är 'strength_home').",
           },
+          environment: {
+            type: "string",
+            enum: ["home", "outdoor_gym", "grass", "forest", "gym", "other"],
+            description: "Miljön där träningsblocket utfördes, om användaren angav den.",
+          },
           duration_minutes: {
             type: "number",
             description: "Passets längd i minuter.",
@@ -814,6 +839,46 @@ const JARVIS_TOOLS: OpenAI.ChatCompletionTool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "get_fridge_meal_suggestions",
+      description: "Generera proteinrika måltidsförslag och recept baserat på ingredienser i kyl/skafferi samt föreslå inköpslista för saknade varor.",
+      parameters: {
+        type: "object",
+        properties: {
+          ingredients: {
+            type: "array",
+            items: { type: "string" },
+            description: "Lista med ingredienser eller råvaror som finns hemma.",
+          },
+        },
+        required: ["ingredients"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_car_info",
+      description: "Hämta information om svenska bilregler för vinterdäck/dubbdäck, besiktningsintervall, eller logga bilens mätarställning.",
+      parameters: {
+        type: "object",
+        properties: {
+          topic: {
+            type: "string",
+            enum: ["tyres", "inspection", "odometer", "service"],
+            description: "Typ av bilärende: 'tyres' för däcklagar, 'inspection' för kontrollbesiktning, 'odometer' för mätarställning.",
+          },
+          odometer_mil: {
+            type: "number",
+            description: "Valfri mätarställning i mil att logga.",
+          },
+        },
+        required: ["topic"],
+      },
+    },
+  },
 ];
 
 function getGreeting(name: string, now: Date): string {
@@ -1061,6 +1126,73 @@ export async function processJarvisAgentMessage(
       return JSON.stringify({
         success: res.handled,
         summary: res.replyText || `Inga resultat för "${query}".`,
+      });
+    }
+
+    if (name === "get_fridge_meal_suggestions") {
+      const rawIngredients = Array.isArray(args.ingredients)
+        ? (args.ingredients as string[]).map(String)
+        : [];
+      const suggestions = generateFridgeMealSuggestions(rawIngredients);
+      const reply = formatFridgeSuggestionsReply(
+        suggestions,
+        rawIngredients.length > 0 ? rawIngredients : ["det du har i kylen"],
+      );
+      return JSON.stringify({
+        success: true,
+        suggestionsCount: suggestions.length,
+        summary: reply,
+      });
+    }
+
+    if (name === "get_car_info") {
+      const topic = String(args.topic || "general").toLowerCase();
+      if (topic === "tyres") {
+        const tyreInfo = checkWinterTyresRule(now);
+        return JSON.stringify({
+          success: true,
+          topic: "tyres",
+          mandatory: tyreInfo.mandatoryPeriodActive,
+          summary: tyreInfo.summary,
+        });
+      }
+      if (topic === "inspection") {
+        const insp = checkCarInspectionInfo(text);
+        return JSON.stringify({
+          success: true,
+          topic: "inspection",
+          summary: insp.summary,
+        });
+      }
+      if (topic === "odometer") {
+        if (typeof args.odometer_mil === "number" && args.odometer_mil > 0) {
+          if (!isAdult) {
+            return JSON.stringify({
+              success: false,
+              summary: "Bilens mätarställning kan endast hanteras av vuxna i hushållet.",
+            });
+          }
+          await handleMemoryTextIntent(
+            actor,
+            `bil - Mätarställning: ${Math.round(args.odometer_mil)} mil`,
+            options.channel || "web",
+          );
+          return JSON.stringify({
+            success: true,
+            topic: "odometer",
+            summary: `Noterat mätarställning på ${Math.round(args.odometer_mil)} mil under Fordon & Bil i minnesbanken.`,
+          });
+        }
+        const res = await handleMemoryTextIntent(actor, "mätarställning bilen", options.channel || "web");
+        return JSON.stringify({
+          success: res.handled,
+          topic: "odometer",
+          summary: res.replyText || "Ingen sparad mätarställning hittades.",
+        });
+      }
+      return JSON.stringify({
+        success: true,
+        summary: "Jag kan hjälpa till med regler för vinterdäck/dubbdäck, kontrollbesiktning samt att logga och söka mätarställning.",
       });
     }
 
@@ -1401,6 +1533,72 @@ export async function processJarvisAgentMessage(
         });
       }
 
+      if (targetDate === today && exercises.length > 0 && activityType !== "running") {
+        const mission = await loadProject100DailyTrainingMission(actor, targetDate);
+        const classified = exercises.map((exercise) => ({
+          exercise,
+          classification: classifyProject100MissionExercise(exercise.name),
+        }));
+        if (
+          mission?.status === "in_progress" &&
+          classified.every((item) => item.classification !== null)
+        ) {
+          const endedAt = new Date();
+          const durationSeconds = durationMinutes ? Math.round(durationMinutes * 60) : 60;
+          const startedAt = new Date(endedAt.getTime() - durationSeconds * 1_000);
+          const eventStem = String(options.sourceEventId || crypto.randomUUID()).slice(0, 150);
+          const environment = args.environment === "outdoor_gym" || args.environment === "grass" ||
+            args.environment === "forest" || args.environment === "gym" || args.environment === "other"
+            ? args.environment
+            : activityType === "outdoor_gym"
+              ? "outdoor_gym"
+              : activityType === "forest"
+                ? "forest"
+                : "home";
+          const appended = await appendProject100TrainingBlock(actor, mission.id, {
+            startedAt: startedAt.toISOString(),
+            endedAt: endedAt.toISOString(),
+            activeSeconds: durationSeconds,
+            environment,
+            location: null,
+            source: "jarvis",
+            sourceEventId: `jarvis:${eventStem}:workout`,
+            setupProfileId: null,
+            exercises: classified.map((item, exerciseIndex) => ({
+              name: item.exercise.name,
+              movementPattern: item.classification!.movementPattern,
+              purpose: item.classification!.purpose,
+              notes: item.exercise.notes,
+              sets: item.exercise.sets.map((set, setIndex) => ({
+                ...set,
+                performedAt: endedAt.toISOString(),
+                sourceEventId: `jarvis:${eventStem}:e${exerciseIndex}:s${setIndex}`,
+                observationLevel: "manual" as const,
+                romConfidence: null,
+              })),
+            })),
+          });
+          const remaining = appended.mission.coverage.requirements
+            .filter((requirement) => requirement.remainingSets > 0)
+            .map((requirement) => `${requirement.remainingSets} ${requirement.label.toLocaleLowerCase("sv-SE")}-set`)
+            .join(", ");
+          const stimulusText = appended.mission.stimulus
+            ? ` Muskelstimulans: ${appended.mission.stimulus.label}.`
+            : "";
+          return JSON.stringify({
+            success: true,
+            appendedToMission: true,
+            duplicate: appended.duplicate,
+            sessionId: appended.mission.id,
+            coveragePercentage: appended.mission.coverage.percentage,
+            stimulus: appended.mission.stimulus ?? null,
+            summary: appended.duplicate
+              ? `Träningsblocket fanns redan i dagens ${appended.mission.title.toLocaleLowerCase("sv-SE")} och räknades inte dubbelt.`
+              : `Tillagt i dagens ${appended.mission.title.toLocaleLowerCase("sv-SE")}: ${appended.mission.coverage.percentage}% plantäckning.${remaining ? ` Kvar: ${remaining}.` : " Alla planerade rörelsemönster är täckta."}${stimulusText}`,
+          });
+        }
+      }
+
       const created = await createProject100TrainingSession(actor, {
         title,
         activityType,
@@ -1534,7 +1732,8 @@ export async function processJarvisAgentMessage(
 
     if (name === "get_training_status") {
       const targetDate = args.date ? String(args.date) : today;
-      const [sessions, templates, dashboard, bodyLimitations] = await Promise.all([
+      const [mission, sessions, templates, dashboard, bodyLimitations] = await Promise.all([
+        loadProject100DailyTrainingMission(actor, targetDate),
         loadProject100TrainingSessions(actor),
         loadProject100TrainingTemplates(actor),
         loadDashboard(actor),
@@ -1547,6 +1746,24 @@ export async function processJarvisAgentMessage(
             bodyLimitations[0].bodyPartLabel,
           )}`
         : "";
+
+      if (mission) {
+        const remaining = mission.coverage.requirements
+          .filter((requirement) => requirement.remainingSets > 0)
+          .map((requirement) => `• ${requirement.label}: ${requirement.remainingSets} set kvar`)
+          .join("\n");
+        const completedText = mission.status === "completed" ? "avslutat" : "öppet";
+        const stimulusSummary = `\nMuskelstimulans: ${mission.stimulus.label}. ${mission.stimulus.explanation}`;
+        return JSON.stringify({
+          success: true,
+          status: mission.status,
+          targetDate,
+          missionId: mission.id,
+          coveragePercentage: mission.coverage.percentage,
+          stimulus: mission.stimulus,
+          summary: `Dagens ${mission.title.toLocaleLowerCase("sv-SE")} är ${completedText} med ${mission.coverage.percentage}% plantäckning (${mission.coverage.completedTargetSets} av ${mission.coverage.targetSets} målset).${remaining ? `\nKvar för 100%:\n${remaining}` : " Alla planerade rörelsemönster är täckta."}${stimulusSummary}${bodyLimitationNote}`,
+        });
+      }
 
       const todaySessions = sessions.filter((s) => s.sessionDate === targetDate);
       const completed = todaySessions.filter((s) => s.status === "completed");
@@ -2053,7 +2270,7 @@ export async function processJarvisAgentMessage(
 
     if (strengthCaptures.length > 0) {
       const exerciseNames = strengthCaptures.map((capture) => capture.exerciseName);
-      await executeTool("log_quick_workout", {
+      const result = JSON.parse(await executeTool("log_quick_workout", {
         title: strengthCaptures.length === 1
           ? `Hemmapass ${strengthCaptures[0].exerciseName}`
           : `Hemmapass ${exerciseNames.join(" & ")}`,
@@ -2070,13 +2287,17 @@ export async function processJarvisAgentMessage(
             rpe: null,
           })),
         })),
-      });
-      const loggedExercises = strengthCaptures.map((capture) =>
-        capture.setCount === 1
-          ? `${capture.totalReps} ${capture.exerciseName.toLocaleLowerCase("sv-SE")}`
-          : `${capture.setCount} set × ${capture.repsPerSet} ${capture.exerciseName.toLocaleLowerCase("sv-SE")} (${capture.totalReps} totalt)`,
-      );
-      confirmations.push(`Loggat ${loggedExercises.join(" och ")} som ett genomfört pass.`);
+      }));
+      if (result.appendedToMission) {
+        confirmations.push(result.summary);
+      } else {
+        const loggedExercises = strengthCaptures.map((capture) =>
+          capture.setCount === 1
+            ? `${capture.totalReps} ${capture.exerciseName.toLocaleLowerCase("sv-SE")}`
+            : `${capture.setCount} set × ${capture.repsPerSet} ${capture.exerciseName.toLocaleLowerCase("sv-SE")} (${capture.totalReps} totalt)`,
+        );
+        confirmations.push(`Loggat ${loggedExercises.join(" och ")} som ett genomfört pass.`);
+      }
     }
 
     if (proteinCapture) {
@@ -2552,8 +2773,30 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
   }
 
   // Training & Workout status check ("Dagens Träning", "Dagens Pass", "Vad ska jag träna idag?")
+  const wantsToFinishDailyMission =
+    /(?:jag är klar för idag|avsluta dagens träningsuppdrag|stäng dagens träningsuppdrag|klar med träningen för idag)/i.test(lower);
+  if (wantsToFinishDailyMission) {
+    const mission = await loadProject100DailyTrainingMission(actor, today);
+    if (mission?.status === "in_progress") {
+      executedActions.push("finish_daily_training_mission");
+      const finished = await finishProject100DailyTrainingMission(actor, mission.id, {
+        effort: null,
+        bodyAfter: null,
+        notes: null,
+      });
+      return {
+        text: `${getGreeting(callerName, now)} Dagens ${finished.title.toLocaleLowerCase("sv-SE")} är avslutat med ${finished.coverage.percentage}% plantäckning. ${finished.coverage.completedTargetSets} av ${finished.coverage.targetSets} målset blev gjorda; resten ligger kvar som ett ärligt utfall, inte som ett misslyckande.`,
+        executedActions,
+      };
+    }
+    return {
+      text: `${getGreeting(callerName, now)} Det finns inget öppet träningsuppdrag att avsluta idag.`,
+      executedActions,
+    };
+  }
+
   const isTrainingQuery =
-    /(?:dagens\s*träning|dagens\s*pass|träningspass|vad\s*ska\s*jag\s*träna|vad\s*har\s*jag\s*för\s*pass|ska\s*jag\s*träna|träning\s*idag|pass\s*idag|mitt\s*träningspass|hur\s*ser\s*träningen\s*ut)/i.test(
+    /(?:dagens\s*träning|dagens\s*pass|träningspass|vad\s*ska\s*jag\s*träna|vad\s*har\s*jag\s*för\s*pass|ska\s*jag\s*träna|träning\s*idag|pass\s*idag|mitt\s*träningspass|hur\s*ser\s*träningen\s*ut|vad\s*(?:är|har jag)\s*kvar.*(?:100|träning)|vad\s*återstår.*(?:träning|100))/i.test(
       lower,
     ) || /^(träning|pass|träningsstatus)$/i.test(lower.trim());
 
@@ -2801,6 +3044,89 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
       text: `${getGreeting(callerName, now)} ${res.text}`,
       executedActions,
     };
+  }
+
+  // Fridge Meal & Recipe Suggestions ("Kylskåpstömning")
+  if (isFridgeMealQuery(text)) {
+    const ingredients = parseFridgeQueryIngredients(text);
+    const suggestions = generateFridgeMealSuggestions(ingredients);
+    executedActions.push("suggest_fridge_meals");
+    const reply = formatFridgeSuggestionsReply(
+      suggestions,
+      ingredients.length > 0 ? ingredients : ["det du har i kylen"],
+    );
+    return {
+      text: `${getGreeting(callerName, now)} ${reply}`,
+      executedActions,
+    };
+  }
+
+  // Car & Vehicle rules and odometer logging
+  const carIntent = parseCarIntent(text);
+  if (carIntent !== "none") {
+    if (carIntent === "tyres") {
+      const tyreInfo = checkWinterTyresRule(now);
+      executedActions.push("check_car_tyres");
+      return {
+        text: `${getGreeting(callerName, now)} ${tyreInfo.summary}`,
+        executedActions,
+      };
+    }
+
+    if (carIntent === "inspection") {
+      const insp = checkCarInspectionInfo(text);
+      executedActions.push("check_car_inspection");
+      return {
+        text: `${getGreeting(callerName, now)} ${insp.summary}`,
+        executedActions,
+      };
+    }
+
+    if (carIntent === "odometer-store") {
+      const odo = parseCarOdometerCommand(text);
+      if (odo.isOdometer && odo.mileageMil) {
+        if (
+          actor.role === "owner" ||
+          actor.role === "adult" ||
+          actor.personType === "adult"
+        ) {
+          await handleMemoryTextIntent(
+            actor,
+            `bil - Mätarställning: ${odo.mileageMil} mil`,
+            options.channel || "web",
+          );
+          executedActions.push("log_car_odometer");
+          return {
+            text: `${getGreeting(callerName, now)} Noterat och sparat mätarställning på **${odo.mileageMil.toLocaleString("sv-SE")} mil** (~${odo.mileageKm?.toLocaleString("sv-SE")} km) under Fordon & Bil i minnesbanken.`,
+            executedActions,
+          };
+        } else {
+          return {
+            text: `${getGreeting(callerName, now)} Bilens uppgifter kan endast hanteras av vuxna i hushållet.`,
+            executedActions,
+          };
+        }
+      }
+    }
+
+    if (carIntent === "odometer-query" || carIntent === "service") {
+      executedActions.push("search_car_info");
+      const memRes = await handleMemoryTextIntent(
+        actor,
+        "vad är mätarställning bilen",
+        options.channel || "web",
+      );
+      if (memRes.handled && memRes.replyText) {
+        return {
+          text: `${getGreeting(callerName, now)} ${memRes.replyText}`,
+          executedActions,
+        };
+      }
+      return {
+        text: `${getGreeting(callerName, now)} Jag hittade ingen tidigare sparad mätarställning för bilen i minnet. Säg t.ex. "Bilen har gått 14 500 mil" så sparar jag det!`,
+        executedActions,
+      };
+    }
   }
 
   // Single memory store / query (adults only)

@@ -1195,6 +1195,209 @@ const migrations = [
         on family_tasks (household_id, recurrence, completed_at)`,
     ],
   },
+  {
+    version: "027_project100_daily_training_missions",
+    name: "Movement-based daily missions and traceable training blocks",
+    statements: [
+      `alter table project100_exercises
+        add column if not exists movement_pattern text`,
+      `alter table project100_exercises
+        add column if not exists purpose text`,
+      `do $$
+        begin
+          if not exists (
+            select 1 from pg_constraint
+            where conname = 'project100_exercises_movement_pattern_check'
+              and conrelid = 'project100_exercises'::regclass
+          ) then
+            alter table project100_exercises
+              add constraint project100_exercises_movement_pattern_check
+              check (movement_pattern is null or movement_pattern in (
+                'horizontal_push', 'horizontal_pull', 'vertical_push', 'vertical_pull',
+                'knee_dominant', 'hip_dominant', 'unilateral_lower', 'calf_ankle',
+                'core', 'carry', 'conditioning', 'mobility'
+              ));
+          end if;
+        end
+      $$`,
+      `do $$
+        begin
+          if not exists (
+            select 1 from pg_constraint
+            where conname = 'project100_exercises_purpose_check'
+              and conrelid = 'project100_exercises'::regclass
+          ) then
+            alter table project100_exercises
+              add constraint project100_exercises_purpose_check
+              check (purpose is null or purpose in (
+                'strength_hypertrophy', 'skill', 'conditioning', 'mobility'
+              ));
+          end if;
+        end
+      $$`,
+      `alter table project100_training_sessions
+        add column if not exists mission_type text`,
+      `do $$
+        begin
+          if not exists (
+            select 1 from pg_constraint
+            where conname = 'project100_training_sessions_mission_type_check'
+              and conrelid = 'project100_training_sessions'::regclass
+          ) then
+            alter table project100_training_sessions
+              add constraint project100_training_sessions_mission_type_check
+              check (mission_type is null or mission_type in ('upper', 'lower'));
+          end if;
+        end
+      $$`,
+      `create index if not exists project100_training_sessions_daily_mission_idx
+        on project100_training_sessions (user_id, session_date desc, mission_type, status)
+        where mission_type is not null`,
+      `create unique index if not exists project100_training_sessions_one_daily_mission_idx
+        on project100_training_sessions (user_id, session_date)
+        where mission_type is not null`,
+      `create table if not exists project100_training_blocks (
+        id text primary key,
+        user_id text not null references auth_users(id) on delete cascade,
+        session_id text not null,
+        started_at timestamptz not null,
+        ended_at timestamptz not null,
+        active_seconds integer not null check (active_seconds >= 0 and active_seconds <= 604800),
+        environment text not null check (environment in (
+          'home', 'outdoor_gym', 'grass', 'forest', 'gym', 'other'
+        )),
+        location text check (location is null or char_length(location) <= 200),
+        source text not null check (source in ('motion', 'jarvis', 'manual')),
+        source_event_id text check (
+          source_event_id is null or char_length(btrim(source_event_id)) between 1 and 200
+        ),
+        setup_profile_id text check (
+          setup_profile_id is null or char_length(btrim(setup_profile_id)) between 1 and 200
+        ),
+        created_at timestamptz not null default now(),
+        unique (id, user_id),
+        constraint project100_training_blocks_session_fk
+          foreign key (session_id, user_id)
+          references project100_training_sessions(id, user_id)
+          on delete cascade,
+        check (ended_at >= started_at),
+        check (source = 'manual' or source_event_id is not null)
+      )`,
+      `create index if not exists project100_training_blocks_session_idx
+        on project100_training_blocks (user_id, session_id, started_at, id)`,
+      `create unique index if not exists project100_training_blocks_source_event_idx
+        on project100_training_blocks (user_id, source, source_event_id)
+        where source_event_id is not null`,
+      `alter table project100_training_session_sets
+        add column if not exists block_id text`,
+      `alter table project100_training_session_sets
+        add column if not exists performed_at timestamptz`,
+      `alter table project100_training_session_sets
+        add column if not exists source text`,
+      `alter table project100_training_session_sets
+        add column if not exists source_event_id text`,
+      `alter table project100_training_session_sets
+        add column if not exists observation_level text`,
+      `do $$
+        begin
+          if not exists (
+            select 1 from pg_constraint
+            where conname = 'project100_training_sets_block_fk'
+              and conrelid = 'project100_training_session_sets'::regclass
+          ) then
+            alter table project100_training_session_sets
+              add constraint project100_training_sets_block_fk
+              foreign key (block_id, user_id)
+              references project100_training_blocks(id, user_id)
+              on delete restrict;
+          end if;
+        end
+      $$`,
+      `do $$
+        begin
+          if not exists (
+            select 1 from pg_constraint
+            where conname = 'project100_training_sets_source_check'
+              and conrelid = 'project100_training_session_sets'::regclass
+          ) then
+            alter table project100_training_session_sets
+              add constraint project100_training_sets_source_check
+              check (source is null or source in ('motion', 'jarvis', 'manual'));
+          end if;
+        end
+      $$`,
+      `do $$
+        begin
+          if not exists (
+            select 1 from pg_constraint
+            where conname = 'project100_training_sets_observation_check'
+              and conrelid = 'project100_training_session_sets'::regclass
+          ) then
+            alter table project100_training_session_sets
+              add constraint project100_training_sets_observation_check
+              check (observation_level is null or observation_level in (
+                'full_coaching', 'rep_counting', 'manual'
+              ));
+          end if;
+        end
+      $$`,
+      `do $$
+        begin
+          if not exists (
+            select 1 from pg_constraint
+            where conname = 'project100_training_sets_provenance_check'
+              and conrelid = 'project100_training_session_sets'::regclass
+          ) then
+            alter table project100_training_session_sets
+              add constraint project100_training_sets_provenance_check
+              check (
+                (block_id is null and performed_at is null and source is null and
+                 source_event_id is null and observation_level is null)
+                or
+                (block_id is not null and performed_at is not null and source is not null and
+                 observation_level is not null and
+                 (source = 'manual' or source_event_id is not null))
+              );
+          end if;
+        end
+      $$`,
+      `do $$
+        begin
+          if not exists (
+            select 1 from pg_constraint
+            where conname = 'project100_training_sets_source_event_id_check'
+              and conrelid = 'project100_training_session_sets'::regclass
+          ) then
+            alter table project100_training_session_sets
+              add constraint project100_training_sets_source_event_id_check
+              check (
+                source_event_id is null or
+                char_length(btrim(source_event_id)) between 1 and 200
+              );
+          end if;
+        end
+      $$`,
+      `create index if not exists project100_training_sets_block_idx
+        on project100_training_session_sets (user_id, block_id, position)
+        where block_id is not null`,
+      `create unique index if not exists project100_training_sets_source_event_idx
+        on project100_training_session_sets (user_id, source, source_event_id)
+        where source_event_id is not null`,
+    ],
+  },
+  {
+    version: "028_project100_training_stimulus",
+    name: "Traceable ROM confidence for conservative stimulus assessment",
+    statements: [
+      `alter table project100_training_session_sets
+        add column if not exists rom_confidence numeric(4, 3)`,
+      `alter table project100_training_session_sets
+        drop constraint if exists project100_training_sets_rom_confidence_check`,
+      `alter table project100_training_session_sets
+        add constraint project100_training_sets_rom_confidence_check
+        check (rom_confidence is null or (rom_confidence >= 0 and rom_confidence <= 1))`,
+    ],
+  },
 ];
 
 function checksum(migration) {

@@ -1,4 +1,13 @@
 import { hasUsableFullBody, type MotionLandmark, type MotionPoseSnapshot } from "./motion-engine";
+import {
+  createProjectile,
+  advanceProjectiles,
+  resolveProjectileInteractions,
+  type MotionGameProjectile,
+  type MotionProjectileLimbAction,
+} from "./motion-projectiles";
+
+export type { MotionGameProjectile };
 
 export const MOTION_GAME_DURATION_MS = 60_000;
 export const MOTION_GAME_COUNTDOWN_MS = 7_000;
@@ -46,8 +55,14 @@ interface MotionBodyFrame {
   duckThresholdY: number;
 }
 
+export type MotionGameMode = "arcade" | "boss-fight";
+
 export interface MotionGameState {
   status: "countdown" | "running" | "finished";
+  mode: MotionGameMode;
+  bossHp?: number;
+  bossMaxHp?: number;
+  bossPhase?: 1 | 2 | 3;
   difficulty: MotionGameDifficulty;
   allowKicks: boolean;
   startedAt: number;
@@ -77,7 +92,9 @@ export interface MotionGameState {
   previousRightKnee: MotionGamePoint | null;
   body: MotionBodyFrame;
   effect: MotionGameEffect | null;
-  finishReason: "time" | "hearts" | null;
+  finishReason: "time" | "hearts" | "boss-defeated" | null;
+  projectiles?: MotionGameProjectile[];
+  nextProjectileSpawnAt?: number;
 }
 
 interface DifficultyConfig {
@@ -406,6 +423,9 @@ export function startMotionGame(
   options?: {
     difficulty?: MotionGameDifficulty;
     allowKicks?: boolean;
+    bossFight?: boolean;
+    durationMs?: number;
+    bossMaxHp?: number;
   },
 ): MotionGameState | null {
   const body = bodyFrame(snapshot);
@@ -422,12 +442,23 @@ export function startMotionGame(
     options?.allowKicks ??
     (difficulty !== "easy" || leftFoot !== null || rightFoot !== null || leftKnee !== null || rightKnee !== null);
 
+  const isBoss = Boolean(options?.bossFight);
+  const mode: MotionGameMode = isBoss ? "boss-fight" : "arcade";
+  const durationMs = options?.durationMs ?? (isBoss ? 300_000 : MOTION_GAME_DURATION_MS);
+  const bossMaxHp = isBoss ? (options?.bossMaxHp ?? 1000) : undefined;
+  const bossHp = bossMaxHp;
+  const bossPhase = isBoss ? 1 : undefined;
+
   return {
     status: "countdown",
+    mode,
+    bossHp,
+    bossMaxHp,
+    bossPhase,
     difficulty,
     allowKicks,
     startedAt,
-    endsAt: startedAt + MOTION_GAME_DURATION_MS,
+    endsAt: startedAt + durationMs,
     nowMs,
     aspectRatio,
     score: 0,
@@ -454,6 +485,37 @@ export function startMotionGame(
     body,
     effect: null,
     finishReason: null,
+    projectiles: [],
+    nextProjectileSpawnAt: isBoss ? startedAt + 3500 : undefined,
+  };
+}
+
+function applyBossDamageToState(currentState: MotionGameState, baseDamage: number): MotionGameState {
+  if (currentState.bossHp === undefined) return currentState;
+  const comboMultiplier = 1 + Math.min(10, currentState.combo) * 0.05;
+  const damage = Math.round(baseDamage * comboMultiplier);
+  const nextBossHp = Math.max(0, currentState.bossHp - damage);
+  const bossMax = currentState.bossMaxHp || 1000;
+  const nextPhase: 1 | 2 | 3 = nextBossHp > bossMax * 0.66 ? 1 : nextBossHp > bossMax * 0.33 ? 2 : 3;
+
+  if (nextBossHp <= 0) {
+    return {
+      ...currentState,
+      bossHp: 0,
+      bossPhase: nextPhase,
+      status: "finished",
+      finishReason: "boss-defeated",
+      target: null,
+      secondaryTarget: null,
+      duck: null,
+      projectiles: [],
+    };
+  }
+
+  return {
+    ...currentState,
+    bossHp: nextBossHp,
+    bossPhase: nextPhase,
   };
 }
 
@@ -630,6 +692,7 @@ export function advanceMotionGame(
           at: nowMs,
         },
       };
+      state = applyBossDamageToState(state, 60);
     } else {
       const hitAWithLeft = leftHitsA;
       const hitAWithRight = !hitAWithLeft && rightHitsA;
@@ -661,6 +724,7 @@ export function advanceMotionGame(
             at: nowMs,
           },
         };
+        state = applyBossDamageToState(state, 25);
       } else if (hitB && !hitA) {
         // Motsvarande om nod B träffades först
         const requiredOtherLimb = hitBWithRight ? "leftHand" : "rightHand";
@@ -682,6 +746,7 @@ export function advanceMotionGame(
             at: nowMs,
           },
         };
+        state = applyBossDamageToState(state, 25);
       }
     }
   } else if (state.target || state.secondaryTarget) {
@@ -731,6 +796,7 @@ export function advanceMotionGame(
           at: nowMs,
         },
       };
+      state = applyBossDamageToState(state, isKickTarget ? 50 : isRemainingDual ? 40 : 25);
     }
   }
 
@@ -760,11 +826,137 @@ export function advanceMotionGame(
         nextSpawnAt: nowMs + 380,
         effect: { id: state.spawnIndex + 40_000, type: "duck", x: 0.5, y: state.duck.thresholdY, at: nowMs },
       };
+      state = applyBossDamageToState(state, 20);
+    }
+  }
+
+  // 3D Projektilhantering i bossfight (Vision RPG)
+  let projectiles = state.projectiles ?? [];
+  if (state.mode === "boss-fight" && state.status === "running") {
+    // 1. Spawna projektil om det är dags
+    const nextProjAt = state.nextProjectileSpawnAt ?? (state.startedAt + 3500);
+    if (nowMs >= nextProjAt && projectiles.length < 2) {
+      const phase = state.bossPhase ?? 1;
+      const projId = state.spawnIndex + 50_000 + projectiles.length;
+      const targetY =
+        phase === 3 && Math.random() < 0.35 && state.allowKicks
+          ? clamp(state.body.hipY + 0.2, 0.7, 0.88)
+          : clamp(state.body.shoulderY, 0.25, 0.65);
+      const isKick = targetY > 0.68;
+      const isHazard = phase >= 2 && Math.random() < (phase === 3 ? 0.35 : 0.2);
+      const kind = isHazard
+        ? "hazard-bomb"
+        : isKick
+        ? "kick-projectile"
+        : phase >= 2 && Math.random() < 0.5
+        ? "energy-orb"
+        : "fireball";
+
+      const flightTimeMs = phase === 3 ? 1800 : phase === 2 ? 2200 : 2600;
+      const sideOffset = (Math.random() - 0.5) * state.body.reachX * 1.8;
+      const targetX = clamp(state.body.centerX + sideOffset, 0.15, 0.85);
+
+      const newProj = createProjectile({
+        id: projId,
+        kind,
+        startX: state.body.centerX,
+        startY: 0.15,
+        targetX,
+        targetY,
+        spawnedAt: nowMs,
+        sweetSpotAt: nowMs + flightTimeMs,
+        baseRadius: isHazard ? 0.075 : isKick ? 0.07 : 0.058,
+      });
+
+      projectiles = [...projectiles, newProj];
+      const nextDelay = phase === 3 ? 3200 : phase === 2 ? 4200 : 5500;
+      state = {
+        ...state,
+        nextProjectileSpawnAt: nowMs + nextDelay,
+      };
+    }
+
+    // 2. Samla fysiska lemmar
+    const actions: MotionProjectileLimbAction[] = [];
+    if (leftHand) actions.push({ limb: "leftHand", point: leftHand });
+    if (rightHand) actions.push({ limb: "rightHand", point: rightHand });
+    if (leftFoot) actions.push({ limb: "leftFoot", point: leftFoot });
+    if (rightFoot) actions.push({ limb: "rightFoot", point: rightFoot });
+    if (leftKnee) actions.push({ limb: "leftKnee", point: leftKnee });
+    if (rightKnee) actions.push({ limb: "rightKnee", point: rightKnee });
+
+    // 3. Utvärdera träffar & interception i sweet spot
+    const interaction = resolveProjectileInteractions(projectiles, actions, nowMs);
+    projectiles = interaction.activeProjectiles;
+
+    if (interaction.damageToBoss > 0) {
+      state = applyBossDamageToState(state, interaction.damageToBoss);
+      const combo = state.combo + 1;
+      state = {
+        ...state,
+        score: state.score + interaction.scoreBonus + state.combo * 25,
+        combo,
+        bestCombo: Math.max(state.bestCombo, combo),
+        hits: state.hits + 1,
+      };
+    }
+
+    if (interaction.damageToPlayer > 0) {
+      const hearts = Math.max(0, state.hearts - interaction.damageToPlayer);
+      state = {
+        ...state,
+        hearts,
+        combo: 0,
+        misses: state.misses + 1,
+        effect: {
+          id: state.spawnIndex + 60_000,
+          type: "damage",
+          x: interaction.events[0]?.point.x ?? 0.5,
+          y: interaction.events[0]?.point.y ?? 0.5,
+          at: nowMs,
+        },
+      };
+      if (hearts <= 0) {
+        return { ...state, status: "finished", finishReason: "hearts", projectiles: [] };
+      }
+    }
+
+    // 4. Utvärdera projektiler som löper ut / kolliderar med spelaren
+    const advance = advanceProjectiles(projectiles, nowMs);
+    projectiles = advance.activeProjectiles;
+
+    if (advance.damageToPlayer > 0) {
+      const hearts = Math.max(0, state.hearts - advance.damageToPlayer);
+      state = {
+        ...state,
+        hearts,
+        combo: 0,
+        misses: state.misses + 1,
+        effect: {
+          id: state.spawnIndex + 65_000,
+          type: "damage",
+          x: 0.5,
+          y: 0.5,
+          at: nowMs,
+        },
+      };
+      if (hearts <= 0) {
+        return { ...state, status: "finished", finishReason: "hearts", projectiles: [] };
+      }
+    }
+
+    if (advance.scoreBonus > 0) {
+      state = {
+        ...state,
+        score: state.score + advance.scoreBonus,
+        dodges: state.dodges + 1,
+      };
     }
   }
 
   return {
     ...state,
+    projectiles,
     lastPoseTimestamp: snapshot.timestampMs,
     previousLeftHand: leftHand ?? state.previousLeftHand,
     previousRightHand: rightHand ?? state.previousRightHand,
@@ -776,7 +968,7 @@ export function advanceMotionGame(
 }
 
 export function motionGameSecondsRemaining(state: MotionGameState): number {
-  if (state.status === "countdown") return MOTION_GAME_DURATION_MS / 1000;
+  if (state.status === "countdown") return Math.ceil((state.endsAt - state.startedAt) / 1000);
   return Math.max(0, Math.ceil((state.endsAt - state.nowMs) / 1000));
 }
 
@@ -794,6 +986,14 @@ export function pauseMotionGameFor(state: MotionGameState, durationMs: number): 
     endsAt: state.endsAt + offset,
     nowMs: state.nowMs + offset,
     nextSpawnAt: state.nextSpawnAt + offset,
+    nextProjectileSpawnAt: state.nextProjectileSpawnAt ? state.nextProjectileSpawnAt + offset : undefined,
+    projectiles: state.projectiles
+      ? state.projectiles.map((p) => ({
+          ...p,
+          spawnedAt: p.spawnedAt + offset,
+          sweetSpotAt: p.sweetSpotAt + offset,
+        }))
+      : undefined,
     target: state.target
       ? {
           ...state.target,

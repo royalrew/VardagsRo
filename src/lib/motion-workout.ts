@@ -461,9 +461,7 @@ export function advanceWorkoutSession(
         ? Math.round(repsWithSymmetry.reduce((acc, r) => acc + (r.symmetry?.symmetryScore ?? 100), 0) / repsWithSymmetry.length)
         : undefined;
 
-      const primaryObservation = averageRomPercent >= 90
-        ? "Starkt set med fullt rörelseomfång."
-        : "Bra genomfört set med kontrollerad rörelse.";
+      const primaryObservation = deriveSetPrimaryObservation(repsList, averageRomPercent, averageSymmetryScore);
 
       const completedSet: WorkoutSetSummary = {
         setNumber,
@@ -495,7 +493,7 @@ export function advanceWorkoutSession(
             completedSets,
           },
           cue: {
-            text: `Set ${setNumber} klart! ${squatTracker.reps} repetitioner genomförda. ${restSeconds} sekunders vila startar nu.`,
+            text: formatSetCompleteCue(setNumber, squatTracker.reps, restSeconds, primaryObservation),
             priority: true,
             sound: "set-complete",
           },
@@ -523,6 +521,172 @@ export function advanceWorkoutSession(
   }
 
   return { session, shouldResetSquatTracker: false };
+}
+
+/**
+ * Derives a single, prioritized technique observation for a completed set.
+ * Priorities:
+ * 1. ROM/Depth deficiency (half-reps >= 25% or average ROM < 90%).
+ * 2. Uncontrolled eccentric descent (< 300ms average).
+ * 3. Asymmetry (< 75 symmetry score).
+ * 4. Excellent full-ROM set (>= 110% ROM, high symmetry).
+ * 5. Default steady set.
+ *
+ * @param repsList - Completed reps in the set.
+ * @param averageRomPercent - Average depth percentage across reps.
+ * @param averageSymmetryScore - Optional average symmetry score.
+ * @returns Prioritized Swedish observation sentence.
+ */
+export function deriveSetPrimaryObservation(
+  repsList: readonly SquatRepSummary[],
+  averageRomPercent: number,
+  averageSymmetryScore?: number,
+): string {
+  const halfRepsCount = repsList.filter((r) => r.classification === "half").length;
+  const halfRepRatio = repsList.length > 0 ? halfRepsCount / repsList.length : 0;
+
+  // 1. Depth deficiency
+  if (averageRomPercent < 90 || halfRepRatio >= 0.25) {
+    return "Fokusera på djupet i nästa set för full muskelaktivering.";
+  }
+
+  // 2. Diving descent tempo
+  const repsWithTempo = repsList.filter((r) => Boolean(r.tempo));
+  if (repsWithTempo.length > 0) {
+    const avgEccentric = repsWithTempo.reduce((acc, r) => acc + (r.tempo?.eccentricMs ?? 0), 0) / repsWithTempo.length;
+    if (avgEccentric < 300) {
+      return "Kontrollera nervägen – sänk tempot för bättre muskelkontakt.";
+    }
+  }
+
+  // 3. Marked asymmetry
+  if (averageSymmetryScore !== undefined && averageSymmetryScore < 75) {
+    return "Tänk på jämnt tryck på båda fötterna genom hela lyftet.";
+  }
+
+  // 4. Strong full-ROM set
+  if (averageRomPercent >= 110 && (averageSymmetryScore === undefined || averageSymmetryScore >= 85)) {
+    return "Starkt set med fullt rörelseomfång och god symmetri.";
+  }
+
+  // 5. Solid default
+  return "Bra genomfört set med kontrollerad rörelse.";
+}
+
+/**
+ * Formats a spoken Swedish cue for set completion.
+ *
+ * @param setNumber - 1-based set number.
+ * @param completedReps - Number of completed reps.
+ * @param restSeconds - Rest countdown in seconds.
+ * @param primaryObservation - Primary technique observation.
+ * @returns Spoken Swedish string for audio synthesis.
+ */
+export function formatSetCompleteCue(
+  setNumber: number,
+  completedReps: number,
+  restSeconds: number,
+  primaryObservation: string,
+): string {
+  const cleanObs = primaryObservation.trim();
+  return `Set ${setNumber} klart! ${completedReps} repetitioner genomförda. ${cleanObs} ${restSeconds} sekunders vila startar nu.`;
+}
+
+/**
+ * Records Rate of Perceived Exertion (RPE) for a completed workout set.
+ *
+ * @param session - Current workout session state.
+ * @param setIndex - 0-based index of the completed set.
+ * @param rpe - Perceived exertion level ("easy", "moderate", or "hard").
+ * @returns Updated workout session state with recorded RPE.
+ */
+export function recordSetRpe(
+  session: WorkoutSessionState,
+  setIndex: number,
+  rpe: "easy" | "moderate" | "hard",
+): WorkoutSessionState {
+  const updatedSets = session.completedSets.map((s, idx) =>
+    idx === setIndex ? { ...s, rpe } : s
+  );
+  return {
+    ...session,
+    completedSets: updatedSets,
+  };
+}
+
+export interface NextSetAdjustment {
+  targetReps: number;
+  delta: number;
+  adjustmentReason: string;
+}
+
+/**
+ * Calculates adaptive target reps for the subsequent workout set based on
+ * subjective exertion (RPE) and objective technique metrics.
+ *
+ * @param lastSet - Summary of the last completed set.
+ * @param baseTarget - Baseline target reps configured for the workout.
+ * @returns Target reps adjustment with Swedish explanation.
+ */
+export function calculateNextSetTarget(
+  lastSet: WorkoutSetSummary,
+  baseTarget: number,
+): NextSetAdjustment {
+  const rpe = lastSet.rpe;
+  const halfRepRatio = lastSet.completedReps > 0 ? lastSet.halfReps / lastSet.completedReps : 0;
+  const isTechniqueDegraded = halfRepRatio >= 0.25 || lastSet.averageRomPercent < 80;
+
+  // Hard exertion or degraded technique -> decrease by 1-2 reps (min 5)
+  if (rpe === "hard" || isTechniqueDegraded) {
+    const delta = (rpe === "hard" && (isTechniqueDegraded || lastSet.halfReps >= 3)) ? -2 : -1;
+    const targetReps = Math.max(5, baseTarget + delta);
+    const actualDelta = targetReps - baseTarget;
+    return {
+      targetReps,
+      delta: actualDelta,
+      adjustmentReason: rpe === "hard"
+        ? "Tungt set – sänker volymen något för att bevara perfekt form."
+        : "Tekniken tappade djup – vi minskar repetitionerna för bättre kontroll.",
+    };
+  }
+
+  // Easy exertion with clean technique -> increase by 1 rep (max +2)
+  if (rpe === "easy" && lastSet.halfReps === 0 && lastSet.averageRomPercent >= 100) {
+    const delta = 1;
+    const targetReps = baseTarget + delta;
+    return {
+      targetReps,
+      delta,
+      adjustmentReason: "Lätt set med ren teknik – ökar utmaningen något!",
+    };
+  }
+
+  // Moderate exertion or balanced set -> maintain baseline
+  return {
+    targetReps: baseTarget,
+    delta: 0,
+    adjustmentReason: "Lagom belastning – behåller målet oförändrat.",
+  };
+}
+
+/**
+ * Applies the calculated next-set target adjustment to the workout session configuration.
+ *
+ * @param session - Current workout session state.
+ * @param nextTarget - Adjusted target reps for the next set.
+ * @returns Updated workout session state.
+ */
+export function applyNextSetAdjustment(
+  session: WorkoutSessionState,
+  nextTarget: number,
+): WorkoutSessionState {
+  return {
+    ...session,
+    config: {
+      ...session.config,
+      targetRepsPerSet: nextTarget,
+    },
+  };
 }
 
 export function buildWorkoutSessionReport(session: WorkoutSessionState): WorkoutSessionReport {

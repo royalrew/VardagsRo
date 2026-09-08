@@ -4,11 +4,15 @@ import { createSquatTrackerState } from "../motion-squat";
 import {
   advanceWorkoutSession,
   buildWorkoutSessionReport,
+  calculateNextSetTarget,
   createWorkoutSession,
+  deriveSetPrimaryObservation,
+  formatSetCompleteCue,
   formatSwedishRepWord,
   getRestDurationForSet,
   getRestSecondsRemaining,
   getWorkoutRepSpeechCue,
+  recordSetRpe,
   skipWorkoutRest,
   startWorkoutSession,
 } from "../motion-workout";
@@ -397,6 +401,190 @@ describe("Workout session state machine (Steg 31)", () => {
         },
       });
       expect(rep.text).toBe("Ett. Jämnt tryck på båda benen.");
+    });
+  });
+
+  describe("Set summary and observation derivation (Steg 36)", () => {
+    it("identifies shallow depth as highest priority observation", () => {
+      const reps = [
+        { durationMs: 1200, minimumKneeAngle: 120, classification: "half" as const, romPercent: 70, relativeDepth: 0.6 },
+        { durationMs: 1200, minimumKneeAngle: 125, classification: "half" as const, romPercent: 65, relativeDepth: 0.5 },
+        { durationMs: 1200, minimumKneeAngle: 85, classification: "full" as const, romPercent: 110, relativeDepth: 1.0 },
+      ];
+      const observation = deriveSetPrimaryObservation(reps, 81, 90);
+      expect(observation).toContain("djup");
+    });
+
+    it("identifies diving descent tempo when depth is fine", () => {
+      const reps = [
+        {
+          durationMs: 700,
+          minimumKneeAngle: 85,
+          classification: "full" as const,
+          romPercent: 110,
+          relativeDepth: 1.0,
+          tempo: { eccentricMs: 200, bottomMs: 200, concentricMs: 300, notation: "0-0-0" },
+        },
+        {
+          durationMs: 700,
+          minimumKneeAngle: 85,
+          classification: "full" as const,
+          romPercent: 115,
+          relativeDepth: 1.0,
+          tempo: { eccentricMs: 220, bottomMs: 200, concentricMs: 300, notation: "0-0-0" },
+        },
+      ];
+      const observation = deriveSetPrimaryObservation(reps, 112, 90);
+      expect(observation).toContain("nervägen");
+    });
+
+    it("identifies lateral asymmetry when depth and tempo are fine", () => {
+      const reps = [
+        {
+          durationMs: 1300,
+          minimumKneeAngle: 85,
+          classification: "full" as const,
+          romPercent: 110,
+          relativeDepth: 1.0,
+          tempo: { eccentricMs: 700, bottomMs: 200, concentricMs: 400, notation: "1-0-0" },
+          symmetry: { kneeAngleDiff: 22, hipHeightDiff: 0.04, lateralShift: 0, symmetryScore: 60, dominantSide: "left" as const, observation: "" },
+        },
+      ];
+      const observation = deriveSetPrimaryObservation(reps, 110, 60);
+      expect(observation).toContain("tryck");
+    });
+
+    it("praises strong set with full ROM and good symmetry", () => {
+      const reps = [
+        {
+          durationMs: 1400,
+          minimumKneeAngle: 80,
+          classification: "full" as const,
+          romPercent: 120,
+          relativeDepth: 1.1,
+          tempo: { eccentricMs: 800, bottomMs: 200, concentricMs: 400, notation: "1-0-0" },
+          symmetry: { kneeAngleDiff: 5, hipHeightDiff: 0.01, lateralShift: 0, symmetryScore: 95, dominantSide: "balanced" as const, observation: "" },
+        },
+      ];
+      const observation = deriveSetPrimaryObservation(reps, 120, 95);
+      expect(observation).toContain("Starkt set med fullt rörelseomfång");
+    });
+
+    it("formats a concise, spoken set completion cue", () => {
+      const cue = formatSetCompleteCue(1, 10, 45, "Starkt set med fullt rörelseomfång.");
+      expect(cue).toContain("Set 1 klart");
+      expect(cue).toContain("10 repetitioner");
+      expect(cue).toContain("45 sekunders vila");
+      expect(cue).toContain("Starkt set");
+    });
+  });
+
+  describe("RPE logging during rest (Steg 37)", () => {
+    it("records easy, moderate, or hard RPE on the target completed set", () => {
+      let session = startWorkoutSession(createWorkoutSession({ targetSets: 3, targetRepsPerSet: 5 }), 10_000);
+      const tracker = { ...createSquatTrackerState(5), reps: 5, fullReps: 5 };
+      session = advanceWorkoutSession(session, tracker, 20_000).session;
+
+      expect(session.completedSets[0].rpe).toBeUndefined();
+
+      // Log RPE as easy
+      const updatedEasy = recordSetRpe(session, 0, "easy");
+      expect(updatedEasy.completedSets[0].rpe).toBe("easy");
+
+      // Update to hard
+      const updatedHard = recordSetRpe(updatedEasy, 0, "hard");
+      expect(updatedHard.completedSets[0].rpe).toBe("hard");
+    });
+  });
+
+  describe("Adaptive next-set logic (Steg 38)", () => {
+    it("suggests +1 to +2 reps when RPE is easy and technique was clean", () => {
+      const lastSet = {
+        setNumber: 1,
+        targetReps: 10,
+        completedReps: 10,
+        halfReps: 0,
+        fullReps: 10,
+        durationMs: 25_000,
+        averageRomPercent: 115,
+        averageSymmetryScore: 92,
+        primaryObservation: "Starkt set med fullt rörelseomfång.",
+        startedAtMs: 10_000,
+        completedAtMs: 35_000,
+        repsList: [],
+        rpe: "easy" as const,
+      };
+
+      const result = calculateNextSetTarget(lastSet, 10);
+      expect(result.targetReps).toBe(11);
+      expect(result.delta).toBe(1);
+      expect(result.adjustmentReason).toContain("Lätt set");
+    });
+
+    it("suggests -1 to -2 reps when RPE is hard or technique suffered", () => {
+      const hardSet = {
+        setNumber: 1,
+        targetReps: 10,
+        completedReps: 10,
+        halfReps: 4,
+        fullReps: 6,
+        durationMs: 35_000,
+        averageRomPercent: 78,
+        averageSymmetryScore: 80,
+        primaryObservation: "Fokusera på djupet i nästa set.",
+        startedAtMs: 10_000,
+        completedAtMs: 45_000,
+        repsList: [],
+        rpe: "hard" as const,
+      };
+
+      const result = calculateNextSetTarget(hardSet, 10);
+      expect(result.targetReps).toBe(8);
+      expect(result.delta).toBe(-2);
+      expect(result.adjustmentReason).toContain("Tungt set");
+    });
+
+    it("maintains current reps when RPE is moderate", () => {
+      const modSet = {
+        setNumber: 1,
+        targetReps: 10,
+        completedReps: 10,
+        halfReps: 0,
+        fullReps: 10,
+        durationMs: 28_000,
+        averageRomPercent: 105,
+        averageSymmetryScore: 88,
+        primaryObservation: "Bra genomfört set med kontrollerad rörelse.",
+        startedAtMs: 10_000,
+        completedAtMs: 38_000,
+        repsList: [],
+        rpe: "moderate" as const,
+      };
+
+      const result = calculateNextSetTarget(modSet, 10);
+      expect(result.targetReps).toBe(10);
+      expect(result.delta).toBe(0);
+      expect(result.adjustmentReason).toContain("Lagom belastning");
+    });
+
+    it("never decreases target reps below 5", () => {
+      const hardLowSet = {
+        setNumber: 2,
+        targetReps: 5,
+        completedReps: 5,
+        halfReps: 2,
+        fullReps: 3,
+        durationMs: 30_000,
+        averageRomPercent: 75,
+        primaryObservation: "Fokusera på djupet.",
+        startedAtMs: 10_000,
+        completedAtMs: 40_000,
+        repsList: [],
+        rpe: "hard" as const,
+      };
+
+      const result = calculateNextSetTarget(hardLowSet, 5);
+      expect(result.targetReps).toBe(5);
     });
   });
 });

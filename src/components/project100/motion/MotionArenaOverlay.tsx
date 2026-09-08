@@ -2,6 +2,7 @@
 
 import {
   CircleStop,
+  Flame,
   Heart,
   Minimize,
   RefreshCw,
@@ -30,7 +31,7 @@ export interface MotionArenaOverlayProps {
   baselineRunning: boolean;
   performanceProfileRunning: boolean;
   squatTrackingEnabled: boolean;
-  onStartGame: () => void;
+  onStartGame: (mode?: "arcade" | "boss-fight") => void;
   onStopGame: () => void;
   onToggleFullscreen: () => Promise<void> | void;
 }
@@ -70,6 +71,27 @@ export function MotionArenaOverlay({
               ))}
             </div>
           </div>
+
+          {/* Steg 88: Boss HP Bar */}
+          {gameView.bossHp !== undefined && gameView.bossMaxHp ? (
+            <div className="p100-motion-boss-hp-bar">
+              <div className="p100-motion-boss-header">
+                <span className="p100-motion-boss-title">
+                  ⚔️ NEON GUARDIAN {gameView.bossPhase === 3 ? "· ENRAGED" : gameView.bossPhase === 2 ? "· FAS 2" : ""}
+                </span>
+                <span className="p100-motion-boss-hp-val">
+                  {gameView.bossHp} / {gameView.bossMaxHp} HP
+                </span>
+              </div>
+              <div className="p100-motion-boss-track">
+                <div
+                  className={`p100-motion-boss-fill phase-${gameView.bossPhase ?? 1}`}
+                  style={{ width: `${Math.max(0, Math.min(100, (gameView.bossHp / gameView.bossMaxHp) * 100))}%` }}
+                />
+              </div>
+            </div>
+          ) : null}
+
           <div className="p100-motion-game-stats">
             <div className="stat combo">
               <small>Combo</small>
@@ -127,22 +149,34 @@ export function MotionArenaOverlay({
       !baselineRunning &&
       !performanceProfileRunning &&
       !squatTrackingEnabled ? (
-        <button type="button" className="p100-motion-game-launch" onClick={onStartGame}>
-          <Swords />{" "}
-          {arenaLanguage === "sv"
-            ? `Starta 60 s bossfight (${
-                difficulty === "easy" ? "Lätt" : difficulty === "hard" ? "Svår" : "Medel"
-              })`
-            : `Start 60s Boss Fight (${
-                difficulty === "easy" ? "Easy" : difficulty === "hard" ? "Hard" : "Medium"
-              })`}
-        </button>
+        <div className="p100-motion-game-launch-group">
+          <button type="button" className="p100-motion-game-launch" onClick={() => onStartGame("arcade")}>
+            <Swords />{" "}
+            {arenaLanguage === "sv"
+              ? `60 s Snabbfight (${
+                  difficulty === "easy" ? "Lätt" : difficulty === "hard" ? "Svår" : "Medel"
+                })`
+              : `60s Quick Fight (${
+                  difficulty === "easy" ? "Easy" : difficulty === "hard" ? "Hard" : "Medium"
+                })`}
+          </button>
+          <button type="button" className="p100-motion-game-launch boss-mode" onClick={() => onStartGame("boss-fight")}>
+            <Flame />{" "}
+            {arenaLanguage === "sv"
+              ? "⚔️ 5 min Bossfight (Steg 88)"
+              : "⚔️ 5 min Boss Fight (Steg 88)"}
+          </button>
+        </div>
       ) : null}
 
       {gameView?.status === "finished" ? (
         <div className="p100-motion-game-result" role="dialog" aria-label="Resultat från bossfight">
           <small>
-            {gameView.finishReason === "hearts"
+            {gameView.finishReason === "boss-defeated"
+              ? arenaLanguage === "sv"
+                ? "👑 BOSS BESEGRAD! LEGENDARISK SEGER!"
+                : "👑 BOSS DEFEATED! LEGENDARY VICTORY!"
+              : gameView.finishReason === "hearts"
               ? arenaLanguage === "sv"
                 ? "Neonväktaren vann den här gången"
                 : "Neon Guardian won this round"
@@ -160,7 +194,7 @@ export function MotionArenaOverlay({
             {arenaLanguage === "sv" ? "bästa combo" : "best combo"} ×{gameView.bestCombo}
           </p>
           <div className="p100-motion-game-result-actions">
-            <button type="button" className="p100-motion-game-result-primary" onClick={onStartGame}>
+            <button type="button" className="p100-motion-game-result-primary" onClick={() => onStartGame(gameView.mode)}>
               <RefreshCw /> {arenaLanguage === "sv" ? "Kör igen" : "Play again"}
             </button>
             {fullscreen ? (

@@ -22,25 +22,28 @@ Varje gång en förfrågan faller utanför Jarvis befintliga verktyg loggas den 
 * [x] **Projekt 100 Före/Efter-kroppsscanning & Analys:** Interaktiv split/side/fade-jämförelse, tidsfilter (Start vs Senaste, 30d, 90d) och automatisk muskelökningsanalys (vikt vs midjemått).
 * [x] **Röstinmatning & Tal-syntes i Telegram:** Röstmeddelanden i Telegram transkriberas via Whisper och besvaras med röstsvar (Onyx) och text.
 * [x] **Naturlig vardagsloggning & belastningsanpassning:** Jarvis förstår bland annat "nu drack jag en proteindrink", "20 × 2 armhävningar", "nu gjorde jag 40 knäböj" och aktuella kroppskänningar. Proteinmängd gissas aldrig. En rapporterad känning påverkar kommande träningsförslag tills användaren säger att kroppsdelen känns bra igen.
+* [x] **Kylskåpstömning & Proteinrika Måltidsförslag (`nutrition`):** "Vad kan vi laga på köttfärs och pasta?" eller "Kylskåpstömning: jag har ägg och potatis i kylen" analyserar råvaror, genererar måltider anpassade för Projekt 100 med beräknat protein- och kaloriinnehåll samt identifierar saknade basingredienser och erbjuder att lägga till dem på inköpslistan.
+* [x] **Bilen & Fordon (`car`):** Besvarar svenska däcklagar ("När måste jag byta till vinterdäck?", lagkrav 1 dec – 31 mars, dubbdäck 1 okt – 15 apr), kontrollbesiktningsintervall (3 år, 2 år, därefter var 14:e månad) samt naturlig mätarställningslogg ("Bilen har gått 14 500 mil") som sparas och versionshanteras i hushållets minnesbank.
 
 ---
 
 ## 📋 Identifierade funktionsområden för framtida utbyggnad
 
-### 1. Bilen & Fordon (`car`)
-- [ ] Besiktningstid & körförbudskoll.
-- [ ] Påminnelse om däckbyte (vinterdäck/sommardäck lagkrav).
-- [ ] Serviceintervall och mätarställningslogg.
-
-### 2. Ekonomi & Hushållsavtal (`finance` / `house`)
-- [ ] Elkostnadsberäkning & rörligt/fast elpris.
+### 1. Ekonomi & Hushållsavtal (`finance` / `house`)
+- [ ] Elkostnadsberäkning & rörligt/fast elpris (t.ex. Nordpool API-integration).
 - [ ] Avtal, försäkringsnummer och bindningstider.
 - [ ] Sophämtningsdagar och slamsugning.
 
-### 3. Mat & Kylskåp (`nutrition`)
-- [ ] "Kylskåpstömning": AI-förslag på middagar baserat på vad som finns i kylen/skafferiet.
-- [ ] Automatisk inköpslista genererad från saknade basingredienser.
-
-### 4. Barnen & Skola (`kids`)
+### 2. Barnen & Skola (`kids`)
 - [ ] Lovdagar, studiedagar och schemabrytande aktiviteter från skolschemat.
 - [ ] Packlistor för utflykter och idrottsdagar.
+
+### 3. Dagens träningsuppdrag (`training`)
+- [ ] Samla spontana övningar från Jarvis, Motion Lab och manuell loggning i ett
+  öppet överkropps- eller underkroppsuppdrag över hela dagen.
+- [ ] Svara källbundet på “vad återstår för att dagen ska vara 100 %?” med
+  rörelsemönster, målset, aktuell miljö, tillgänglig utrustning och kroppskänningar.
+- [ ] Skilj plantäckning från muskelbyggande stimulans och lova aldrig ett
+  biologiskt resultat från ett enskilt pass.
+- [x] Avsluta och spara även delvis genomförda dagar utan att skriva om planen
+  eller skapa skamformuleringar.

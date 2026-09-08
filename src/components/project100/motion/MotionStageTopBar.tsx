@@ -14,6 +14,7 @@ import React from "react";
 
 import { baselineClock, remainingClock } from "./motion-formatting";
 import { GATE_B_DURATION_MS } from "./motion-gate-b";
+import type { RemoteSensorNotice } from "@/lib/motion-remote";
 
 export interface MotionStageTopBarProps {
   isLive: boolean;
@@ -32,6 +33,8 @@ export interface MotionStageTopBarProps {
   performanceProfileSecondsLeft: number;
   fullscreen: boolean;
   voiceGuidance: boolean;
+  inputSource?: "webcam" | "remote-sensor";
+  remoteSensorNotice?: RemoteSensorNotice | null;
   onStopGame: () => void;
   onToggleFullscreen: () => Promise<void> | void;
   onToggleVoiceGuidance: () => void;
@@ -59,20 +62,29 @@ export function MotionStageTopBar({
   performanceProfileSecondsLeft,
   fullscreen,
   voiceGuidance,
+  inputSource = "webcam",
+  remoteSensorNotice,
   onStopGame,
   onToggleFullscreen,
   onToggleVoiceGuidance,
 }: MotionStageTopBarProps): React.JSX.Element {
   return (
-    <div className="p100-motion-stage-top">
-      <span className={`p100-motion-live ${isLive ? "active" : ""}`}>
-        <Radio /> {isRecovering ? "Pose återansluter" : isLive ? "Kamera aktiv" : "Kamera av"}
-      </span>
-      {delegate ? (
-        <span className="engine">
-          {delegate} · {poseExecutionMode === "main-thread" ? "Mobilmotor" : "Worker"}
-        </span>
-      ) : null}
+    <>
+      <div className="p100-motion-stage-top">
+        {inputSource === "remote-sensor" && remoteSensorNotice ? (
+          <span className={`sensor ${remoteSensorNotice.severity}`}>
+            {remoteSensorNotice.badgeLabel}
+          </span>
+        ) : (
+          <span className={`p100-motion-live ${isLive ? "active" : ""}`}>
+            <Radio /> {isRecovering ? "Pose återansluter" : isLive ? "Kamera aktiv" : "Kamera av"}
+          </span>
+        )}
+        {delegate ? (
+          <span className="engine">
+            {delegate} · {poseExecutionMode === "main-thread" ? "Mobilmotor" : "Worker"}
+          </span>
+        ) : null}
       {replaying ? <span className="replay">Replay</span> : null}
       {gameActive ? (
         <span className="game">
@@ -133,5 +145,12 @@ export function MotionStageTopBar({
         <span>Röst</span>
       </button>
     </div>
+    {inputSource === "remote-sensor" && remoteSensorNotice?.recommendedAction ? (
+      <div className={`p100-motion-stage-sensor-notice ${remoteSensorNotice.severity}`}>
+        <span>{remoteSensorNotice.message}</span>
+        <span className="notice-action">👉 {remoteSensorNotice.recommendedAction}</span>
+      </div>
+    ) : null}
+  </>
   );
 }

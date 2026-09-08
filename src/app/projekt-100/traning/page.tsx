@@ -9,6 +9,7 @@ import {
   requireProject100Actor,
 } from "@/server/project100";
 import { loadProject100TrainingView } from "@/server/project100-training";
+import { loadProject100DailyTrainingMission } from "@/server/project100-training-missions";
 
 export const metadata: Metadata = { title: "Träning" };
 
@@ -19,9 +20,10 @@ export default async function Project100TrainingPage({
 }) {
   const actor = await requireProject100Actor();
   assertProject100Adult(actor);
-  const [schedule, training, query] = await Promise.all([
+  const [schedule, training, mission, query] = await Promise.all([
     loadProject100WorkSchedule(actor),
     loadProject100TrainingView(actor),
+    loadProject100DailyTrainingMission(actor),
     searchParams,
   ]);
   const nextWork = nextProject100WorkEvent(schedule);
@@ -38,6 +40,7 @@ export default async function Project100TrainingPage({
   return (
     <TrainingWorkspace
       initialView={training}
+      initialMission={mission}
       nextWorkLabel={nextWorkLabel}
       initialComposer={initialComposer}
     />

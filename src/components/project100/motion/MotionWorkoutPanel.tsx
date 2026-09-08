@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Camera,
   Check,
   CircleStop,
   Copy,
@@ -15,13 +16,29 @@ import {
   squatTestInstruction,
   type SquatTrackerState,
 } from "@/lib/motion-squat";
+import type { CoachSettings, MotionCoachMemory } from "@/lib/motion-coach";
 import {
   getRestSecondsRemaining,
   type WorkoutSessionState,
 } from "@/lib/motion-workout";
+import {
+  getExerciseCameraGuidance,
+  type ExerciseType,
+} from "@/lib/motion-exercises";
+import {
+  EXERCISE_LIBRARY,
+  getLibraryCameraGuidance,
+  type TrackableExerciseId,
+} from "@/lib/motion-library";
+import {
+  WORKOUT_PROGRAMS,
+  type ProgramId,
+} from "@/lib/motion-programs";
+import type { ExerciseFramingFeedback } from "@/lib/motion-camera-coach";
 import { angleDegrees } from "./motion-formatting";
 
 export type RestPreset = "30" | "45" | "60" | "dynamic";
+export type WorkoutPanelSelection = ExerciseType | TrackableExerciseId | "circuit" | ProgramId;
 
 export interface MotionWorkoutPanelProps {
   workoutSession: WorkoutSessionState;
@@ -29,14 +46,21 @@ export interface MotionWorkoutPanelProps {
   squatProtocol: "workout-step-31" | "symmetry-step-26" | "tempo-step-25" | "rom-step-24";
   squatTrackingEnabled: boolean;
   restPreset: RestPreset;
+  coachSettings: CoachSettings;
+  coachMemory?: MotionCoachMemory;
   squatReportCopied: boolean;
   nowMs: number;
+  activeExercise?: WorkoutPanelSelection;
+  onChangeExercise?: (exercise: WorkoutPanelSelection) => void;
   onChangeRestPreset: (preset: RestPreset) => void;
+  onChangeCoachSettings: (next: CoachSettings) => void;
   onToggleSquatTracking: () => void;
   onResetSquatTracking: (resetWorkout?: boolean) => void;
   onCopySquatReport: () => Promise<void> | void;
   onDownloadSquatReport: () => void;
   onSkipRest: () => void;
+  onRecordRpe?: (setIndex: number, rpe: "easy" | "moderate" | "hard") => void;
+  framingFeedback?: ExerciseFramingFeedback | null;
 }
 
 /**
@@ -49,21 +73,354 @@ export function MotionWorkoutPanel({
   squatProtocol,
   squatTrackingEnabled,
   restPreset,
+  coachSettings,
+  coachMemory,
   squatReportCopied,
   nowMs,
+  activeExercise = "squat",
+  onChangeExercise,
   onChangeRestPreset,
+  onChangeCoachSettings,
   onToggleSquatTracking,
   onResetSquatTracking,
   onCopySquatReport,
   onDownloadSquatReport,
   onSkipRest,
+  onRecordRpe,
+  framingFeedback,
 }: MotionWorkoutPanelProps): React.JSX.Element {
+  const [filterCategory, setFilterCategory] = React.useState<
+    "all" | "bodyweight" | "dumbbell" | "kettlebell" | "programs"
+  >("all");
+
+  const libraryExerciseId = activeExercise as TrackableExerciseId;
+  const libraryItem = EXERCISE_LIBRARY[libraryExerciseId];
+  const programItem = WORKOUT_PROGRAMS[activeExercise as ProgramId];
+
+  const cameraGuidance = libraryItem
+    ? getLibraryCameraGuidance(libraryExerciseId)
+    : activeExercise && activeExercise !== "circuit"
+    ? getExerciseCameraGuidance(activeExercise as ExerciseType)
+    : getExerciseCameraGuidance("squat");
+
+  const displayTitle = programItem
+    ? `Program · ${programItem.title}`
+    : libraryItem
+    ? `Övning · ${libraryItem.name} (${libraryItem.equipment})`
+    : activeExercise === "circuit"
+    ? "Passmotor · 15 min Helkropp Cirkel"
+    : "Passmotor · 3×10 Knäböj";
+
   return (
     <section className="p100-motion-panel p100-motion-squat-panel">
       <header>
-        <span>Fas D · Coach v1</span>
-        <strong>Passmotor · 3×10 Knäböj</strong>
+        <span>Fas H & Bibliotek · Styrka & Program</span>
+        <strong>{displayTitle}</strong>
       </header>
+
+      {/* Övningsbibliotek & Programväljare */}
+      {onChangeExercise && (
+        <div className="p100-motion-exercise-picker">
+          <label>Övningsbibliotek & Muskelprogram</label>
+          <div className="p100-motion-category-tabs" style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+            <button
+              type="button"
+              className={filterCategory === "all" ? "active" : ""}
+              onClick={() => setFilterCategory("all")}
+              style={{ padding: "3px 7px", fontSize: "0.48rem" }}
+            >
+              Alla
+            </button>
+            <button
+              type="button"
+              className={filterCategory === "dumbbell" ? "active" : ""}
+              onClick={() => setFilterCategory("dumbbell")}
+              style={{ padding: "3px 7px", fontSize: "0.48rem" }}
+            >
+              🏋️ Hantlar
+            </button>
+            <button
+              type="button"
+              className={filterCategory === "kettlebell" ? "active" : ""}
+              onClick={() => setFilterCategory("kettlebell")}
+              style={{ padding: "3px 7px", fontSize: "0.48rem" }}
+            >
+              🔔 Kettlebell
+            </button>
+            <button
+              type="button"
+              className={filterCategory === "bodyweight" ? "active" : ""}
+              onClick={() => setFilterCategory("bodyweight")}
+              style={{ padding: "3px 7px", fontSize: "0.48rem" }}
+            >
+              🤸 Kroppsvikt
+            </button>
+            <button
+              type="button"
+              className={filterCategory === "programs" ? "active" : ""}
+              onClick={() => setFilterCategory("programs")}
+              style={{ padding: "3px 7px", fontSize: "0.48rem" }}
+            >
+              📋 Program
+            </button>
+          </div>
+
+          <div className="p100-motion-exercise-buttons">
+            {/* Programs view */}
+            {(filterCategory === "programs" || filterCategory === "all") && (
+              <>
+                <button
+                  type="button"
+                  className={activeExercise === "push-power" ? "active" : ""}
+                  onClick={() => onChangeExercise("push-power")}
+                  disabled={squatTrackingEnabled}
+                >
+                  ⚡ Push & Press (Bröst/Axlar)
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "pull-biceps" ? "active" : ""}
+                  onClick={() => onChangeExercise("pull-biceps")}
+                  disabled={squatTrackingEnabled}
+                >
+                  ⚡ Pull & Biceps (Rygg/Armar)
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "legs-foundation" ? "active" : ""}
+                  onClick={() => onChangeExercise("legs-foundation")}
+                  disabled={squatTrackingEnabled}
+                >
+                  ⚡ Legs & Lower (Ben/Säte)
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "kettlebell-blast" ? "active" : ""}
+                  onClick={() => onChangeExercise("kettlebell-blast")}
+                  disabled={squatTrackingEnabled}
+                >
+                  ⚡ Kettlebell Blast
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "calisthenics-control" ? "active" : ""}
+                  onClick={() => onChangeExercise("calisthenics-control")}
+                  disabled={squatTrackingEnabled}
+                >
+                  ⚡ Calisthenics & Handstand
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "circuit" ? "active" : ""}
+                  onClick={() => onChangeExercise("circuit")}
+                  disabled={squatTrackingEnabled}
+                >
+                  ⚡ 15m Cirkel
+                </button>
+              </>
+            )}
+
+            {/* Dumbbells view */}
+            {(filterCategory === "dumbbell" || filterCategory === "all") && (
+              <>
+                <button
+                  type="button"
+                  className={activeExercise === "bicep-curl" ? "active" : ""}
+                  onClick={() => onChangeExercise("bicep-curl")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Bicepscurl (Hantel)
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "overhead-press" ? "active" : ""}
+                  onClick={() => onChangeExercise("overhead-press")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Axelpress (Hantel)
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "lateral-raise" ? "active" : ""}
+                  onClick={() => onChangeExercise("lateral-raise")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Sidolyft (Hantel)
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "bent-over-row" ? "active" : ""}
+                  onClick={() => onChangeExercise("bent-over-row")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Hantelrodd
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "dumbbell-rdl" ? "active" : ""}
+                  onClick={() => onChangeExercise("dumbbell-rdl")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Hantel-RDL
+                </button>
+              </>
+            )}
+
+            {/* Kettlebells view */}
+            {(filterCategory === "kettlebell" || filterCategory === "all") && (
+              <>
+                <button
+                  type="button"
+                  className={activeExercise === "kettlebell-swing" ? "active" : ""}
+                  onClick={() => onChangeExercise("kettlebell-swing")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Kettlebellsving
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "goblet-squat" ? "active" : ""}
+                  onClick={() => onChangeExercise("goblet-squat")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Goblet Squat
+                </button>
+              </>
+            )}
+
+            {/* Bodyweight / Calisthenics view */}
+            {(filterCategory === "bodyweight" || filterCategory === "all") && (
+              <>
+                <button
+                  type="button"
+                  className={activeExercise === "squat" ? "active" : ""}
+                  onClick={() => onChangeExercise("squat")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Knäböj
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "pushup" ? "active" : ""}
+                  onClick={() => onChangeExercise("pushup")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Armhävningar
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "lunge" ? "active" : ""}
+                  onClick={() => onChangeExercise("lunge")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Utfall
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "bulgarian-split-squat" ? "active" : ""}
+                  onClick={() => onChangeExercise("bulgarian-split-squat")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Bulgariska utfall
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "handstand-hold" ? "active" : ""}
+                  onClick={() => onChangeExercise("handstand-hold")}
+                  disabled={squatTrackingEnabled}
+                >
+                  🤸 Handstående
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "pike-pushup" ? "active" : ""}
+                  onClick={() => onChangeExercise("pike-pushup")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Pik-armhävning
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "bench-dips" ? "active" : ""}
+                  onClick={() => onChangeExercise("bench-dips")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Bänk-dips (valfri)
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "calf-raise" ? "active" : ""}
+                  onClick={() => onChangeExercise("calf-raise")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Tåhävningar
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "plank" ? "active" : ""}
+                  onClick={() => onChangeExercise("plank")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Planka
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "jumping-jacks" ? "active" : ""}
+                  onClick={() => onChangeExercise("jumping-jacks")}
+                  disabled={squatTrackingEnabled}
+                >
+                  Jacks
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Steg 76: Kameraguide per övning */}
+      {cameraGuidance && (
+        <div className="p100-motion-camera-guidance">
+          <div className="p100-motion-camera-guidance-badge">
+            <Camera className="w-3 h-3" />
+            <span>
+              {cameraGuidance.angle === "side"
+                ? "Sidovy (90° profil)"
+                : cameraGuidance.angle === "front-or-45"
+                ? "Framifrån / 45°"
+                : "Frontvy"}
+            </span>
+          </div>
+          <p className="p100-motion-camera-guidance-text">
+            {cameraGuidance.instruction}
+          </p>
+          {cameraGuidance.warningNotice && (
+            <span className="p100-motion-camera-guidance-warn">
+              👉 {cameraGuidance.warningNotice}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Steg 80: Live Kameravinkel & Höjdtolerans (Coach-status) */}
+      {framingFeedback && (
+        <div
+          className={`p100-motion-camera-guidance ${framingFeedback.isOptimal ? "optimal" : "warning"}`}
+          style={{
+            borderColor: framingFeedback.isOptimal ? "rgba(52,211,153,0.3)" : "rgba(251,191,36,0.4)",
+            background: framingFeedback.isOptimal ? "rgba(6,32,22,0.6)" : "rgba(30,18,4,0.7)",
+          }}
+        >
+          <div className="p100-motion-camera-guidance-badge">
+            <span style={{ fontSize: "0.85rem" }}>{framingFeedback.isOptimal ? "📐" : "⚠️"}</span>
+            <span style={{ color: framingFeedback.isOptimal ? "#a7f3d0" : "#fef08a" }}>
+              {framingFeedback.badgeLabel}
+            </span>
+          </div>
+          <p className="p100-motion-camera-guidance-text" style={{ color: framingFeedback.isOptimal ? "#d1fae5" : "#fef9c3" }}>
+            {framingFeedback.advice}
+          </p>
+        </div>
+      )}
 
       <div className="p100-motion-rest-preset-select">
         <span>Vilotid:</span>
@@ -102,6 +459,85 @@ export function MotionWorkoutPanel({
           </button>
         </div>
       </div>
+
+      {/* Steg 41: Coachprofiler (Tonläge) */}
+      <div className="p100-motion-coach-persona-picker">
+        <label>Coachprofil (Tonläge)</label>
+        <div className="p100-motion-coach-persona-buttons">
+          <button
+            type="button"
+            className={coachSettings.tone === "calm" ? "active" : ""}
+            onClick={() => onChangeCoachSettings({ ...coachSettings, tone: "calm" })}
+            title="Lugn: mjukare ton, fokus på andning och hållning"
+          >
+            Lugn
+          </button>
+          <button
+            type="button"
+            className={coachSettings.tone === "motivational" ? "active" : ""}
+            onClick={() => onChangeCoachSettings({ ...coachSettings, tone: "motivational" })}
+            title="Peppande: energisk, driven och firar prestation"
+          >
+            Peppande
+          </button>
+          <button
+            type="button"
+            className={coachSettings.tone === "analytical" ? "active" : ""}
+            onClick={() => onChangeCoachSettings({ ...coachSettings, tone: "analytical" })}
+            title="Analytisk: redovisar vinklar, ROM % och millisekunder"
+          >
+            Analytisk
+          </button>
+        </div>
+      </div>
+
+      <label className="p100-motion-coach-quiet-toggle">
+        <input
+          type="checkbox"
+          checked={coachSettings.quietDuringSet}
+          onChange={(e) => onChangeCoachSettings({ ...coachSettings, quietDuringSet: e.target.checked })}
+        />
+        <span>Tyst under set (räkna endast siffror)</span>
+      </label>
+
+      {/* Steg 42: Reflektion i vila (Opt-in) */}
+      <label className="p100-motion-coach-quiet-toggle">
+        <input
+          type="checkbox"
+          checked={coachSettings.enableRestReflection ?? true}
+          onChange={(e) => onChangeCoachSettings({ ...coachSettings, enableRestReflection: e.target.checked })}
+        />
+        <span>Reflektion under vila (Opt-in coachfråga)</span>
+      </label>
+
+      {/* Steg 45: Personbästan & Minnesöversikt */}
+      {coachMemory && coachMemory.personalRecords.maxSessionVolume > 0 ? (
+        <div className="p100-motion-pr-summary-card">
+          <div className="p100-motion-pr-header">
+            <span>🏆 Personbästan & Statistik</span>
+          </div>
+          <div className="p100-motion-pr-grid">
+            <div>
+              <small>Max reps i set</small>
+              <strong>{coachMemory.personalRecords.maxRepsInSet}</strong>
+            </div>
+            <div>
+              <small>Max volym</small>
+              <strong>{coachMemory.personalRecords.maxSessionVolume} reps</strong>
+            </div>
+            <div>
+              <small>Bästa snitt-ROM</small>
+              <strong>{coachMemory.personalRecords.bestAverageRomPercent}%</strong>
+            </div>
+            {coachMemory.personalRecords.bestSymmetryScore !== undefined ? (
+              <div>
+                <small>Bästa balans</small>
+                <strong>{coachMemory.personalRecords.bestSymmetryScore}%</strong>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <div className="p100-motion-squat-summary">
         <div>
@@ -241,11 +677,12 @@ export function MotionWorkoutPanel({
                   <th>Full/Halv</th>
                   <th>ROM</th>
                   <th>Tempo</th>
+                  <th>RPE</th>
                   <th>Tid</th>
                 </tr>
               </thead>
               <tbody>
-                {workoutSession.completedSets.map((s) => (
+                {workoutSession.completedSets.map((s, idx) => (
                   <tr key={s.setNumber}>
                     <td>Set {s.setNumber}</td>
                     <td>
@@ -256,12 +693,41 @@ export function MotionWorkoutPanel({
                     </td>
                     <td>{s.averageRomPercent}%</td>
                     <td>{s.averageTempoNotation ?? "—"}</td>
+                    <td>
+                      {s.rpe === "easy" ? (
+                        <span className="p100-motion-badge badge-full">Lätt</span>
+                      ) : s.rpe === "moderate" ? (
+                        <span className="p100-motion-badge badge-mod">Lagom</span>
+                      ) : s.rpe === "hard" ? (
+                        <span className="p100-motion-badge badge-half">Tungt</span>
+                      ) : onRecordRpe ? (
+                        <button
+                          type="button"
+                          className="p100-motion-btn-rpe-mini"
+                          onClick={() => onRecordRpe(idx, "moderate")}
+                          title="Klicka för att sätta RPE"
+                        >
+                          + RPE
+                        </button>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td>{(s.durationMs / 1000).toFixed(1)}s</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {workoutSession.status === "completed" ? (
+            <div className="p100-motion-workout-completed-card">
+              <strong>🏆 Pass slutfört (Steg 39)</strong>
+              <p>
+                Total volym: <strong>{workoutSession.completedSets.reduce((acc, s) => acc + s.completedReps, 0)} reps</strong> över {workoutSession.completedSets.length} set.
+                Snitt-ROM: <strong>{Math.round(workoutSession.completedSets.reduce((acc, s) => acc + s.averageRomPercent, 0) / Math.max(1, workoutSession.completedSets.length))}%</strong>.
+              </p>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

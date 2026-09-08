@@ -30,6 +30,7 @@ import {
   remainingClock,
   rounded,
 } from "./motion-formatting";
+import type { LatencyStats, RemoteSensorNotice } from "@/lib/motion-remote";
 
 export type PerformanceProfileMode = "quick" | "gate-b";
 export type EngineStatus = "idle" | "requesting" | "loading" | "running" | "recovering" | "error";
@@ -54,6 +55,17 @@ export interface MotionMetrics {
   heldLowConfidencePercent: number;
   limitedOutlierPercent: number;
   droppedFrames: number;
+}
+
+export interface RemoteSensorDiagnostics {
+  inputSource: "webcam" | "remote-sensor";
+  pairingCode: string;
+  connected: boolean;
+  fps: number;
+  batteryLevel: number | null;
+  latencyStats: LatencyStats;
+  notice: RemoteSensorNotice | null;
+  onSelectInputSource?: (src: "webcam" | "remote-sensor") => void;
 }
 
 export interface MotionDiagnosticsPanelProps {
@@ -106,6 +118,7 @@ export interface MotionDiagnosticsPanelProps {
   isRecovering: boolean;
   gameActive: boolean;
   squatTrackingEnabled: boolean;
+  remoteSensorDiagnostics?: RemoteSensorDiagnostics | null;
 }
 
 /**
@@ -162,6 +175,7 @@ export function MotionDiagnosticsPanel({
   isRecovering,
   gameActive,
   squatTrackingEnabled,
+  remoteSensorDiagnostics,
 }: MotionDiagnosticsPanelProps): React.JSX.Element {
   return (
     <>
@@ -286,6 +300,66 @@ export function MotionDiagnosticsPanel({
           ) : null}
         </div>
       </details>
+
+      {remoteSensorDiagnostics ? (
+        <details className="p100-motion-panel p100-motion-benchmark p100-motion-collapsible" open={remoteSensorDiagnostics.inputSource === "remote-sensor"}>
+          <summary>
+            <span>Trådlös sensor</span>
+            <strong>iPhone Sensor (Fas F)</strong>
+          </summary>
+          <div className="p100-motion-metric-grid">
+            <article>
+              <small>Status</small>
+              <strong style={{ fontSize: "0.85rem" }}>
+                {remoteSensorDiagnostics.connected ? "🟢 Ansluten" : "🔴 Frånkopplad"}
+              </strong>
+              <span>{remoteSensorDiagnostics.pairingCode}</span>
+            </article>
+            <article>
+              <small>Sensor</small>
+              <strong>{remoteSensorDiagnostics.fps}</strong>
+              <span>FPS</span>
+            </article>
+            <article>
+              <small>Batteri</small>
+              <strong>
+                {remoteSensorDiagnostics.batteryLevel !== null
+                  ? `${Math.round(remoteSensorDiagnostics.batteryLevel * 100)}%`
+                  : "—"}
+              </strong>
+              <span>iPhone</span>
+            </article>
+            <article>
+              <small>Tappade</small>
+              <strong>{remoteSensorDiagnostics.latencyStats.droppedFramesCount}</strong>
+              <span>frames</span>
+            </article>
+          </div>
+          <dl className="p100-motion-latency">
+            <div>
+              <dt>End-to-End Latens p50</dt>
+              <dd>{remoteSensorDiagnostics.latencyStats.p50Ms} ms</dd>
+            </div>
+            <div>
+              <dt>End-to-End Latens p95</dt>
+              <dd>{remoteSensorDiagnostics.latencyStats.p95Ms} ms</dd>
+            </div>
+            <div>
+              <dt>Jitter (Transit variation)</dt>
+              <dd>{remoteSensorDiagnostics.latencyStats.jitterMs} ms</dd>
+            </div>
+            <div>
+              <dt>Min / Max Latens</dt>
+              <dd>{remoteSensorDiagnostics.latencyStats.minMs} / {remoteSensorDiagnostics.latencyStats.maxMs} ms</dd>
+            </div>
+          </dl>
+          {remoteSensorDiagnostics.notice?.recommendedAction ? (
+            <div style={{ marginTop: 10, padding: 8, borderRadius: 6, background: "rgba(255,196,92,0.12)", border: "1px solid rgba(255,196,92,0.3)", fontSize: "0.7rem", color: "#ffe194" }}>
+              <strong>Obs: </strong>{remoteSensorDiagnostics.notice.recommendedAction}
+            </div>
+          ) : null}
+        </details>
+      ) : null}
 
       <details className="p100-motion-panel p100-motion-cold-starts p100-motion-collapsible">
         <summary>

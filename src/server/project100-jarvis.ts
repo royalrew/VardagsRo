@@ -533,11 +533,17 @@ export async function sendProject100JarvisMessage(
   const dashboard = await loadDashboard(actor);
   const callerPerson = actor.personId ? dashboard.people.find((p) => p.id === actor.personId) : null;
 
+  // Stable ids are created before tool execution so a retried agent turn can
+  // reuse the inbound message id for idempotent side effects.
+  const userMsgId = crypto.randomUUID();
+  const assistantMsgId = crypto.randomUUID();
+
   // 4. Run through unified Jarvis Agentic Engine
   const agentResult = await processJarvisAgentMessage(actor, input.content, {
     channel: "web",
     personName: callerPerson?.name,
     conversationId: convId,
+    sourceEventId: `web:${userMsgId}`,
   });
 
   const assistantReplyText = agentResult.text;
@@ -574,9 +580,6 @@ export async function sendProject100JarvisMessage(
   }
 
   // 5. Persist user and assistant messages
-  const userMsgId = crypto.randomUUID();
-  const assistantMsgId = crypto.randomUUID();
-
   const [userMsgRows, assistantMsgRows] = await Promise.all([
     sql<MessageRow[]>`
       insert into project100_conversation_messages (

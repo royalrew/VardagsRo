@@ -733,7 +733,7 @@ const STANDARD_5PLUS2_PROGRAM = [
     dayOffset: 0, // Måndag
     name: "Överkropp",
     activityType: "strength_home" as Project100ActivityType,
-    description: "Måndag: Överkropp & bål (Armhävningar, Pull-ups, Dips, Pike push-ups, Kroppsrodd, Planka)",
+    description: "Måndag: Överkropp & bål (Armhävningar, Pull-ups, Pike push-ups, Kroppsrodd, Planka)",
     exercises: [
       {
         name: "Armhävningar",
@@ -751,14 +751,6 @@ const STANDARD_5PLUS2_PROGRAM = [
           { reps: 5, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
           { reps: 4, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
           { reps: 4, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 9 },
-        ],
-      },
-      {
-        name: "Dips",
-        sets: [
-          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
-          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
-          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
         ],
       },
       {
@@ -892,7 +884,7 @@ const STANDARD_5PLUS2_PROGRAM = [
     dayOffset: 4, // Fredag
     name: "Helkropp/styrka",
     activityType: "strength_home" as Project100ActivityType,
-    description: "Fredag: Helkroppsstyrka (Pull-ups, Armhävningar, Bulgarian split squat, Dips, Höftlyft, Hollow body hold, Dead hang)",
+    description: "Fredag: Helkroppsstyrka (Pull-ups, Armhävningar, Bulgarian split squat, Höftlyft, Hollow body hold, Dead hang)",
     exercises: [
       {
         name: "Pull-ups",
@@ -918,14 +910,6 @@ const STANDARD_5PLUS2_PROGRAM = [
           { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
           { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
           { reps: 10, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
-        ],
-      },
-      {
-        name: "Dips",
-        sets: [
-          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
-          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
-          { reps: 8, weightKg: 0, durationSeconds: null, distanceMeters: null, rpe: 8 },
         ],
       },
       {

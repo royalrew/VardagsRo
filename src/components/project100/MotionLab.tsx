@@ -5,6 +5,7 @@ import {
   Gauge,
   Play,
   RefreshCw,
+  Smartphone,
   Swords,
   Video,
   VideoOff,
@@ -12,6 +13,14 @@ import {
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
+import {
+  calculateEndToEndLatency,
+  evaluateRemoteSensorNotice,
+  generatePairingCode,
+  MotionLatencyTracker,
+  type MotionSensorFrame,
+  type RemoteSensorNotice,
+} from "@/lib/motion-remote";
 
 import {
   motionArenaCue,
@@ -65,17 +74,31 @@ import {
 } from "@/lib/motion-squat";
 import {
   advanceWorkoutSession,
+  applyNextSetAdjustment,
   buildWorkoutSessionReport,
+  calculateNextSetTarget,
   createWorkoutCoachDisciplineState,
   createWorkoutSession,
+  getRestDurationForSet,
   getRestSecondsRemaining,
   getWorkoutRepSpeechCue,
+  recordSetRpe,
   skipWorkoutRest,
   startWorkoutSession,
   type WorkoutCoachDisciplineState,
   type WorkoutSessionReport,
   type WorkoutSessionState,
 } from "@/lib/motion-workout";
+import {
+  createDefaultCoachMemory,
+  DEFAULT_COACH_SETTINGS,
+  formatCoachRepCue,
+  formatCoachSetCompleteCue,
+  updateCoachMemoryWithSession,
+  validateCoachSafetyPrompt,
+  type CoachSettings,
+  type MotionCoachMemory,
+} from "@/lib/motion-coach";
 import { MotionLandmarkStabilizer } from "@/lib/motion-stabilizer";
 
 import {
@@ -111,6 +134,41 @@ import {
   type PerformanceProfileMode,
   type PoseExecutionMode,
 } from "./motion/MotionDiagnosticsPanel";
+import {
+  getExerciseCameraGuidance,
+  getExerciseProfile,
+  type ExerciseType,
+} from "@/lib/motion-exercises";
+import {
+  EXERCISE_LIBRARY,
+  getLibraryCameraGuidance,
+  createUnifiedExerciseTracker,
+  advanceUnifiedExerciseTracker,
+  type TrackableExerciseId,
+  type UnifiedExerciseState,
+} from "@/lib/motion-library";
+import {
+  WORKOUT_PROGRAMS,
+  getWorkoutProgram,
+  createProgramSession,
+  completeProgramSet,
+  tickProgramRest,
+  skipProgramRest,
+  generateProgramSummary,
+  type ProgramId,
+  type ProgramSessionState,
+  type ProgramSummary,
+} from "@/lib/motion-programs";
+import type { WorkoutPanelSelection } from "./motion/MotionWorkoutPanel";
+import { duckAudioGainNode } from "@/lib/motion-sound";
+import {
+  evaluateExerciseFraming,
+  type ExerciseFramingFeedback,
+} from "@/lib/motion-camera-coach";
+import type { MotionMissionLaunch } from "@/lib/motion-mission-launch";
+import { MotionMissionSyncPanel } from "./motion/MotionMissionSyncPanel";
+import { AdaptiveCameraSetupPanel } from "./motion/AdaptiveCameraSetupPanel";
+import type { SavedCameraSetupProfile } from "@/lib/motion-adaptive-camera";
 
 const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const MODEL_ASSET =
@@ -205,7 +263,19 @@ function parseStoredColdStarts(): MotionColdStartStats {
   return { attempts: 0, successes: 0 };
 }
 
-export function MotionLab() {
+export function MotionLab({
+  initialMissionLaunch = null,
+}: {
+  initialMissionLaunch?: MotionMissionLaunch | null;
+}) {
+  const createConfiguredWorkoutSession = () => createWorkoutSession(
+    initialMissionLaunch?.exerciseId === "squat"
+      ? { targetSets: 1, targetRepsPerSet: initialMissionLaunch.targetReps }
+      : undefined,
+  );
+  const configuredSquatCue = initialMissionLaunch?.exerciseId === "squat"
+    ? `Dagens uppdrag: 1 set med ${initialMissionLaunch.targetReps} reps. Setet sparas först när du bekräftar det.`
+    : "Pass 3×10 Knäböj: 3 set med 10 reps och vila. Allt loggas automatiskt.";
   const stageRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -218,6 +288,7 @@ export function MotionLab() {
   const mainThreadLastTimestampRef = useRef(-1);
   const poseExecutionModeRef = useRef<PoseExecutionMode>("worker");
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioDuckingGainRef = useRef<GainNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const replayFrameRef = useRef<number | null>(null);
   const reportCopiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -239,7 +310,7 @@ export function MotionLab() {
   const squatTrackingEnabledRef = useRef(false);
   const squatTrackerRef = useRef(createSquatTrackerState());
   const squatProtocolRef = useRef<"workout-step-31" | "symmetry-step-26" | "tempo-step-25" | "rom-step-24">("workout-step-31");
-  const workoutSessionRef = useRef<WorkoutSessionState>(createWorkoutSession());
+  const workoutSessionRef = useRef<WorkoutSessionState>(createConfiguredWorkoutSession());
   const coachDisciplineRef = useRef<WorkoutCoachDisciplineState>(createWorkoutCoachDisciplineState());
   const lastSquatUiAtRef = useRef(0);
   const lastSquatCoachAtRef = useRef(0);
@@ -333,13 +404,230 @@ export function MotionLab() {
   const [performanceProfileCopied, setPerformanceProfileCopied] = useState(false);
   const [squatTrackingEnabled, setSquatTrackingEnabled] = useState(false);
   const [squatProtocol, setSquatProtocol] = useState<"workout-step-31" | "symmetry-step-26" | "tempo-step-25" | "rom-step-24">("workout-step-31");
-  const [workoutSession, setWorkoutSession] = useState<WorkoutSessionState>(() => createWorkoutSession());
+  const [workoutSession, setWorkoutSession] = useState<WorkoutSessionState>(() => createConfiguredWorkoutSession());
   const [workoutReportCopied, setWorkoutReportCopied] = useState(false);
   type RestPreset = "30" | "45" | "60" | "dynamic";
   const [restPreset, setRestPreset] = useState<RestPreset>("45");
+  const [activeWorkoutExercise, setActiveWorkoutExercise] = useState<WorkoutPanelSelection>(
+    initialMissionLaunch?.exerciseId ?? "squat",
+  );
+  const [unifiedTracker, setUnifiedTracker] = useState<UnifiedExerciseState>(() =>
+    createUnifiedExerciseTracker(initialMissionLaunch?.exerciseId ?? "squat"),
+  );
+  const unifiedTrackerRef = useRef<UnifiedExerciseState>(unifiedTracker);
+  const [programSession, setProgramSession] = useState<ProgramSessionState | null>(null);
+  const programSessionRef = useRef<ProgramSessionState | null>(null);
+  const [programSummary, setProgramSummary] = useState<ProgramSummary | null>(null);
+  const lastUnifiedRepRef = useRef<number>(0);
+  const lastUnifiedHoldRef = useRef<number>(0);
+  const [framingFeedback, setFramingFeedback] = useState<ExerciseFramingFeedback | null>(null);
+  const [cameraSetupProfile, setCameraSetupProfile] = useState<SavedCameraSetupProfile | null>(null);
+  const lastSpokenFramingRef = useRef<string | null>(null);
+  const lastSpokenFramingTimeRef = useRef<number>(0);
+
+  const activeExerciseTitle = (() => {
+    if (programSession) {
+      const prog = WORKOUT_PROGRAMS[programSession.programId];
+      const exItem = EXERCISE_LIBRARY[programSession.activeExercise.exerciseId];
+      return `${prog?.title ?? "Program"} · ${exItem?.name ?? programSession.activeExercise.exerciseId}`;
+    }
+    const libEx = EXERCISE_LIBRARY[activeWorkoutExercise as TrackableExerciseId];
+    if (libEx) return libEx.name;
+    const prog = WORKOUT_PROGRAMS[activeWorkoutExercise as ProgramId];
+    if (prog) return prog.title;
+    return "Knäböj";
+  })();
   const [squatView, setSquatView] = useState<SquatTrackerState>(() => createSquatTrackerState());
-  const [squatCoachCue, setSquatCoachCue] = useState<string>("Pass 3×10 Knäböj: 3 set med 10 reps och vila. Allt loggas automatiskt.");
+  const [squatCoachCue, setSquatCoachCue] = useState<string>(configuredSquatCue);
   const [squatReportCopied, setSquatReportCopied] = useState(false);
+  const [coachSettings, setCoachSettings] = useState<CoachSettings>(() => {
+    try {
+      const stored = localStorage.getItem("p100_motion_coach_settings");
+      if (stored) return { ...DEFAULT_COACH_SETTINGS, ...JSON.parse(stored) };
+    } catch {
+      // fallback
+    }
+    return DEFAULT_COACH_SETTINGS;
+  });
+  const coachSettingsRef = useRef<CoachSettings>(coachSettings);
+
+  function changeCoachSettings(next: CoachSettings) {
+    coachSettingsRef.current = next;
+    setCoachSettings(next);
+    try {
+      localStorage.setItem("p100_motion_coach_settings", JSON.stringify(next));
+    } catch {
+      // safe
+    }
+  }
+
+  const [coachMemory, setCoachMemory] = useState<MotionCoachMemory>(() => {
+    try {
+      const stored = localStorage.getItem("p100_motion_coach_memory");
+      if (stored) return { ...createDefaultCoachMemory(), ...JSON.parse(stored) };
+    } catch {
+      // fallback
+    }
+    return createDefaultCoachMemory();
+  });
+  const coachMemoryRef = useRef<MotionCoachMemory>(coachMemory);
+  const [newPrNotice, setNewPrNotice] = useState<string | null>(null);
+
+  // Fas F: iPhone Wireless Sensor State & Diagnostics
+  const [inputSource, setInputSource] = useState<"webcam" | "remote-sensor">(() => {
+    try {
+      const stored = localStorage.getItem("p100_motion_input_source");
+      if (stored === "webcam" || stored === "remote-sensor") return stored;
+    } catch {}
+    return "webcam";
+  });
+  const [remotePairingCode, setRemotePairingCode] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem("p100_motion_pairing_code");
+      if (stored && /^[A-HJ-NP-Z2-9]{6}$/.test(stored)) return stored;
+    } catch {}
+    return generatePairingCode();
+  });
+  const [remoteConnected, setRemoteConnected] = useState<boolean>(false);
+  const [remoteFps, setRemoteFps] = useState<number>(0);
+  const [remoteBattery, setRemoteBattery] = useState<number | null>(null);
+  const [remoteLatencyMs, setRemoteLatencyMs] = useState<number | undefined>(undefined);
+  const [remoteNotice, setRemoteNotice] = useState<RemoteSensorNotice | null>(null);
+
+  const remoteLatencyTrackerRef = useRef(new MotionLatencyTracker(100));
+  const lastRemoteFrameIndexRef = useRef<number | null>(null);
+  const lastRemoteFrameAtRef = useRef<number | null>(null);
+  const remotePollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function changeInputSource(source: "webcam" | "remote-sensor") {
+    setInputSource(source);
+    try {
+      localStorage.setItem("p100_motion_input_source", source);
+    } catch {}
+  }
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("p100_motion_pairing_code", remotePairingCode);
+    } catch {}
+  }, [remotePairingCode]);
+
+  useEffect(() => {
+    if (inputSource !== "remote-sensor") {
+      if (remotePollTimerRef.current) {
+        clearInterval(remotePollTimerRef.current);
+        remotePollTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    cameraInfoRef.current.delegate = "GPU";
+    setDelegate("GPU");
+    activeRef.current = true;
+    engineReadyRef.current = true;
+    setStatus("running");
+
+    const canvas = canvasRef.current;
+    if (canvas && (!canvas.width || !canvas.height)) {
+      const [defW, defH] = resolution.split("x").map(Number);
+      canvas.width = defW || 640;
+      canvas.height = defH || 480;
+    }
+
+    startRenderLoop();
+
+    void fetch("/api/motion/sensor/relay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "create", pairingCode: remotePairingCode }),
+    }).catch(() => {});
+
+    remotePollTimerRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/motion/sensor/relay?session=${remotePairingCode}&role=host`);
+        if (!res.ok) {
+          setRemoteConnected(false);
+          return;
+        }
+        const data = (await res.json()) as {
+          connected: boolean;
+          latestFrame: MotionSensorFrame | null;
+          signals?: Array<{ type: string; payload?: unknown }>;
+          serverTimeMs: number;
+        };
+
+        // Steg 67: Handle remote signals/commands from phone
+        if (data.signals && Array.isArray(data.signals)) {
+          for (const sig of data.signals) {
+            if (sig.type === "command" && sig.payload) {
+              const cmd = sig.payload as { action: string };
+              if (cmd.action === "skip-rest") {
+                handleSkipRest();
+              }
+            }
+          }
+        }
+
+        const now = performance.now();
+        const latestFrame = data.latestFrame;
+
+        if (latestFrame && latestFrame.frameIndex !== lastRemoteFrameIndexRef.current) {
+          lastRemoteFrameIndexRef.current = latestFrame.frameIndex;
+          lastRemoteFrameAtRef.current = now;
+
+          const transitMs = calculateEndToEndLatency(latestFrame, Date.now(), 0);
+          const pipelineStart = performance.now();
+
+          if (latestFrame.landmarks && latestFrame.landmarks.length === 33) {
+            const snapshot: MotionPoseSnapshot = {
+              capturedAtMs: latestFrame.clientTimestampMs,
+              bufferWaitMs: 0,
+              inferenceMs: 0,
+              preparationMs: 0,
+              landmarks: latestFrame.landmarks.map((l) => ({ ...l })),
+              stabilization: { heldLowConfidence: 0, limitedOutliers: 0 },
+              timestampMs: latestFrame.clientTimestampMs,
+            };
+            acceptPoseSnapshot(snapshot);
+          }
+
+          const pipelineMs = performance.now() - pipelineStart;
+          remoteLatencyTrackerRef.current.record(transitMs, pipelineMs, latestFrame.frameIndex);
+
+          setRemoteConnected(true);
+          setRemoteFps(latestFrame.fps);
+          if (latestFrame.batteryLevel !== undefined) {
+            setRemoteBattery(latestFrame.batteryLevel);
+          }
+          setRemoteLatencyMs(transitMs);
+        }
+
+        const notice = evaluateRemoteSensorNotice({
+          connected: data.connected,
+          lastFrameReceivedAtMs: lastRemoteFrameAtRef.current,
+          nowMs: now,
+          batteryLevel: latestFrame?.batteryLevel,
+          fullBodyVisible: fullBodyVisibleRef.current,
+          fps: latestFrame?.fps,
+          latencyMs: remoteLatencyMs,
+        });
+        setRemoteNotice(notice);
+      } catch {
+        setRemoteConnected(false);
+      }
+    }, 33);
+
+    return () => {
+      if (remotePollTimerRef.current) {
+        clearInterval(remotePollTimerRef.current);
+        remotePollTimerRef.current = null;
+      }
+    };
+  }, [inputSource, remotePairingCode]);
 
   function changeRestPreset(preset: RestPreset) {
     setRestPreset(preset);
@@ -360,9 +648,13 @@ export function MotionLab() {
     resetSquatTracking();
     if (nextProtocol === "workout-step-31") {
       const restDurationSeconds = restPreset === "30" ? 30 : restPreset === "45" ? 45 : restPreset === "60" ? 60 : [30, 45, 60];
-      workoutSessionRef.current = createWorkoutSession({ restDurationSeconds });
+      workoutSessionRef.current = createConfiguredWorkoutSession();
+      workoutSessionRef.current = {
+        ...workoutSessionRef.current,
+        config: { ...workoutSessionRef.current.config, restDurationSeconds },
+      };
       setWorkoutSession(workoutSessionRef.current);
-      setSquatCoachCue("Pass 3×10 Knäböj: 3 set med 10 reps och vila. Allt loggas automatiskt.");
+      setSquatCoachCue(configuredSquatCue);
     } else if (nextProtocol === "symmetry-step-26") {
       setSquatCoachCue("Steg 26: Gör rep 1 med jämn balans, rep 2 med lätt förskjutning åt ena hållet, rep 3 mot andra sidan.");
     } else if (nextProtocol === "tempo-step-25") {
@@ -534,12 +826,45 @@ export function MotionLab() {
   }, [workoutSession.status, workoutSession.restStartedAtMs]);
 
   useEffect(() => {
+    if (!programSession || programSession.phase !== "resting") return;
+    const interval = setInterval(() => {
+      const current = programSessionRef.current;
+      if (!current || current.phase !== "resting") return;
+      const next = tickProgramRest(current, 0.25);
+      programSessionRef.current = next;
+      setProgramSession(next);
+
+      if (Math.ceil(next.restSecondsRemaining) === 5) {
+        playSquatSound("half-depth");
+        speakSquatInstruction("Fem sekunder kvar. Gör dig redo!", false);
+      }
+
+      if (next.phase === "active-set" && current.phase === "resting") {
+        playSquatSound("rep");
+        const nextExId = next.activeExercise.exerciseId;
+        const exName = EXERCISE_LIBRARY[nextExId]?.name ?? nextExId;
+        speakSquatInstruction(
+          `Vilan är slut! Starta Set ${next.currentSet} av ${next.activeExercise.sets} för ${exName}.`,
+          true,
+        );
+        const tracker = createUnifiedExerciseTracker(nextExId);
+        unifiedTrackerRef.current = tracker;
+        setUnifiedTracker(tracker);
+        lastUnifiedRepRef.current = 0;
+        lastUnifiedHoldRef.current = 0;
+      }
+    }, 250);
+    return () => clearInterval(interval);
+  }, [programSession?.phase]);
+
+  useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.code === "Space" || event.key === " ") {
         if (
           squatTrackingEnabledRef.current &&
-          squatProtocolRef.current === "workout-step-31" &&
-          workoutSessionRef.current.status === "resting"
+          ((squatProtocolRef.current === "workout-step-31" &&
+            workoutSessionRef.current.status === "resting") ||
+            (programSessionRef.current && programSessionRef.current.phase === "resting"))
         ) {
           event.preventDefault();
           handleSkipRest();
@@ -575,8 +900,28 @@ export function MotionLab() {
     );
   }
 
+  function duckActiveAudio(durationSeconds = 2.2) {
+    if (!audioContextRef.current) return;
+    if (!audioDuckingGainRef.current) {
+      try {
+        const gain = audioContextRef.current.createGain();
+        gain.gain.setValueAtTime(1.0, audioContextRef.current.currentTime);
+        gain.connect(audioContextRef.current.destination);
+        audioDuckingGainRef.current = gain;
+      } catch {
+        return;
+      }
+    }
+    duckAudioGainNode(audioDuckingGainRef.current, {
+      nowSeconds: audioContextRef.current.currentTime,
+      durationSeconds,
+      duckLevel: 0.25,
+    });
+  }
+
   function speakBaselineInstruction(text: string) {
     if (!voiceGuidanceRef.current || !("speechSynthesis" in window)) return;
+    duckActiveAudio(2.5);
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "sv-SE";
@@ -595,6 +940,7 @@ export function MotionLab() {
   function speakSquatInstruction(text: string, priority = false) {
     setSquatCoachCue(text);
     if (!voiceGuidanceRef.current || !("speechSynthesis" in window)) return;
+    duckActiveAudio(priority ? 1.8 : 2.2);
     // Steg 33: Always cancel any previous utterance to eliminate backlog/queuing latency
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
@@ -613,6 +959,7 @@ export function MotionLab() {
     if (!cue.priority && (now - lastArenaSpeechAtRef.current < 3_500 || window.speechSynthesis.speaking)) {
       return;
     }
+    duckActiveAudio(cue.kind === "duck" ? 1.5 : 2.0);
     if (cue.priority) window.speechSynthesis.cancel();
     const lang = arenaLanguageRef.current;
     const utterance = new SpeechSynthesisUtterance(cue.text);
@@ -848,12 +1195,42 @@ export function MotionLab() {
     setSquatView(next);
     setSquatReportCopied(false);
     if (resetWorkout && squatProtocolRef.current === "workout-step-31") {
-      workoutSessionRef.current = createWorkoutSession();
+      workoutSessionRef.current = createConfiguredWorkoutSession();
       setWorkoutSession(workoutSessionRef.current);
     }
   }
 
   function handleSkipRest() {
+    if (programSessionRef.current && programSessionRef.current.phase === "resting") {
+      const nextProg = skipProgramRest(programSessionRef.current);
+      programSessionRef.current = nextProg;
+      setProgramSession(nextProg);
+      playSquatSound("rep");
+
+      if (nextProg.phase === "completed") {
+        playGameSound(null, true);
+        const summary = generateProgramSummary(nextProg, WORKOUT_PROGRAMS[nextProg.programId]);
+        setProgramSummary(summary);
+        speakSquatInstruction(
+          `Grymt jobbat! Hela passet är avklarat. ${summary.totalReps} repetitioner och ${summary.xpEarned} erfarenhetspoäng intjänade!`,
+          true,
+        );
+      } else {
+        const nextExId = nextProg.activeExercise.exerciseId;
+        const exName = EXERCISE_LIBRARY[nextExId]?.name ?? nextExId;
+        speakSquatInstruction(
+          `Startar Set ${nextProg.currentSet} av ${nextProg.activeExercise.sets} för ${exName}.`,
+          true,
+        );
+        const tracker = createUnifiedExerciseTracker(nextExId);
+        unifiedTrackerRef.current = tracker;
+        setUnifiedTracker(tracker);
+        lastUnifiedRepRef.current = 0;
+        lastUnifiedHoldRef.current = 0;
+      }
+      return;
+    }
+
     const nextSession = skipWorkoutRest(workoutSessionRef.current, performance.now());
     workoutSessionRef.current = nextSession;
     setWorkoutSession(nextSession);
@@ -866,6 +1243,51 @@ export function MotionLab() {
       speakSquatInstruction(`Startar set ${nextSession.currentSetIndex + 1}! Gör dig redo.`, true);
     }
   }
+
+  function handleRecordRpe(setIndex: number, rpe: "easy" | "moderate" | "hard") {
+    const current = workoutSessionRef.current;
+    const updated = recordSetRpe(current, setIndex, rpe);
+    const completedSet = updated.completedSets[setIndex];
+    if (completedSet) {
+      const adjustment = calculateNextSetTarget(completedSet, current.config.targetRepsPerSet);
+      const withAdjustment = applyNextSetAdjustment(updated, adjustment.targetReps);
+      workoutSessionRef.current = withAdjustment;
+      setWorkoutSession(withAdjustment);
+      const rpeSwedish = rpe === "easy" ? "Lätt" : rpe === "moderate" ? "Lagom" : "Tungt";
+      speakSquatInstruction(`${rpeSwedish}. ${adjustment.adjustmentReason}`, false);
+      return;
+    }
+    workoutSessionRef.current = updated;
+    setWorkoutSession(updated);
+  }
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (workoutSession.status !== "resting") return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+
+      const lastSetIndex = workoutSession.completedSets.length - 1;
+      if (lastSetIndex < 0) return;
+
+      if (event.key === "1") {
+        event.preventDefault();
+        handleRecordRpe(lastSetIndex, "easy");
+      } else if (event.key === "2") {
+        event.preventDefault();
+        handleRecordRpe(lastSetIndex, "moderate");
+      } else if (event.key === "3") {
+        event.preventDefault();
+        handleRecordRpe(lastSetIndex, "hard");
+      } else if (event.key === " " || event.code === "Space") {
+        event.preventDefault();
+        handleSkipRest();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [workoutSession.status, workoutSession.completedSets.length]);
 
   async function copySquatReport() {
     let reportJson: string;
@@ -934,12 +1356,47 @@ export function MotionLab() {
         setVoiceGuidance(true);
       }
       lastSquatCoachAtRef.current = performance.now();
+      const prog = WORKOUT_PROGRAMS[activeWorkoutExercise as ProgramId];
+      if (prog) {
+        const sess = createProgramSession(prog);
+        programSessionRef.current = sess;
+        setProgramSession(sess);
+        setProgramSummary(null);
+        const firstExId = sess.activeExercise.exerciseId;
+        const initialTracker = createUnifiedExerciseTracker(firstExId);
+        unifiedTrackerRef.current = initialTracker;
+        setUnifiedTracker(initialTracker);
+        lastUnifiedRepRef.current = 0;
+        lastUnifiedHoldRef.current = 0;
+        const firstExName = EXERCISE_LIBRARY[firstExId]?.name ?? firstExId;
+        speakSquatInstruction(
+          `Startar program: ${prog.title}. Första övningen är ${firstExName}. Set 1 av ${sess.activeExercise.sets}. Gör dig redo!`,
+          true,
+        );
+        return;
+      }
+
+      const activeLibraryId = activeWorkoutExercise as TrackableExerciseId;
+      const libEx = EXERCISE_LIBRARY[activeLibraryId];
+      if (libEx && activeWorkoutExercise !== "squat") {
+        const initialTracker = createUnifiedExerciseTracker(activeLibraryId);
+        unifiedTrackerRef.current = initialTracker;
+        setUnifiedTracker(initialTracker);
+        lastUnifiedRepRef.current = 0;
+        lastUnifiedHoldRef.current = 0;
+        const guide = getLibraryCameraGuidance(activeLibraryId);
+        speakSquatInstruction(`${libEx.name}. ${guide.instruction}. Börja när du är redo!`, true);
+        return;
+      }
+
       if (squatProtocolRef.current === "workout-step-31") {
-        workoutSessionRef.current = startWorkoutSession(createWorkoutSession(), performance.now());
+        workoutSessionRef.current = startWorkoutSession(createConfiguredWorkoutSession(), performance.now());
         setWorkoutSession(workoutSessionRef.current);
         coachDisciplineRef.current = createWorkoutCoachDisciplineState();
         speakSquatInstruction(
-          "Träningspass 3 gånger 10 knäböj startar! Gör dig redo för set 1.",
+          initialMissionLaunch?.exerciseId === "squat"
+            ? `Dagens knäböjsset startar. Målet är ${initialMissionLaunch.targetReps} repetitioner.`
+            : "Träningspass 3 gånger 10 knäböj startar! Gör dig redo för set 1.",
           true,
         );
       } else if (squatProtocolRef.current === "symmetry-step-26") {
@@ -960,6 +1417,127 @@ export function MotionLab() {
       }
     } else {
       window.speechSynthesis?.cancel();
+    }
+  }
+
+  function acceptUnifiedExerciseSnapshot(snapshot: MotionPoseSnapshot) {
+    if (!squatTrackingEnabledRef.current) return;
+    const canvas = canvasRef.current;
+    const aspectRatio = canvas && canvas.height > 0 ? canvas.width / canvas.height : 1;
+    const deltaSec = 0.033;
+
+    const currentProg = programSessionRef.current;
+    let currentExId: TrackableExerciseId = "squat";
+    if (currentProg && currentProg.phase === "active-set") {
+      currentExId = currentProg.activeExercise.exerciseId;
+    } else if (EXERCISE_LIBRARY[activeWorkoutExercise as TrackableExerciseId]) {
+      currentExId = activeWorkoutExercise as TrackableExerciseId;
+    } else {
+      return;
+    }
+
+    if (unifiedTrackerRef.current.exerciseId !== currentExId) {
+      unifiedTrackerRef.current = createUnifiedExerciseTracker(currentExId);
+      lastUnifiedRepRef.current = 0;
+      lastUnifiedHoldRef.current = 0;
+    }
+
+    const prevTracker = unifiedTrackerRef.current;
+
+    // Steg 80: Utvärdera kameravinkel, höjd och utsnitt för vardagsrumstolerans
+    const framing = evaluateExerciseFraming(snapshot.landmarks, currentExId);
+    setFramingFeedback(framing);
+
+    if (!framing.isOptimal && voiceGuidanceRef.current) {
+      const now = performance.now();
+      if (
+        framing.advice !== lastSpokenFramingRef.current ||
+        now - lastSpokenFramingTimeRef.current > 12_000
+      ) {
+        // Röstguidning under uppställning / innan repetitioner startat
+        const isSetupPhase = !prevTracker || (prevTracker.reps === 0 && (!prevTracker.holdSeconds || prevTracker.holdSeconds < 1));
+        if (isSetupPhase) {
+          lastSpokenFramingRef.current = framing.advice;
+          lastSpokenFramingTimeRef.current = now;
+          speakSquatInstruction(framing.advice, false);
+        }
+      }
+    } else if (framing.isOptimal) {
+      lastSpokenFramingRef.current = null;
+    }
+
+    const nextTracker = advanceUnifiedExerciseTracker(
+      prevTracker,
+      snapshot.landmarks,
+      deltaSec,
+      aspectRatio,
+      snapshot.timestampMs,
+    );
+    unifiedTrackerRef.current = nextTracker;
+    setUnifiedTracker(nextTracker);
+
+    const isHold = currentExId === "handstand-hold" || currentExId === "plank";
+
+    if (!isHold && nextTracker.reps > lastUnifiedRepRef.current) {
+      lastUnifiedRepRef.current = nextTracker.reps;
+      playSquatSound("rep");
+      speakSquatInstruction(`${nextTracker.reps}`, false);
+
+      if (currentProg && currentProg.phase === "active-set") {
+        const targetReps = currentProg.activeExercise.reps;
+        if (nextTracker.reps >= targetReps) {
+          const updatedProg = completeProgramSet(currentProg, nextTracker.reps);
+          programSessionRef.current = updatedProg;
+          setProgramSession(updatedProg);
+          playSquatSound("milestone");
+
+          if (updatedProg.phase === "completed") {
+            playGameSound(null, true);
+            const summary = generateProgramSummary(updatedProg, WORKOUT_PROGRAMS[updatedProg.programId]);
+            setProgramSummary(summary);
+            speakSquatInstruction(
+              `Grymt jobbat! Hela styrkepasset är avklarat. ${summary.totalReps} repetitioner och ${summary.xpEarned} erfarenhetspoäng intjänade!`,
+              true,
+            );
+          } else {
+            speakSquatInstruction(
+              `Set ${currentProg.currentSet} klart! Vila i ${currentProg.activeExercise.restSeconds} sekunder.`,
+              true,
+            );
+          }
+        }
+      }
+    } else if (isHold && Math.floor(nextTracker.holdSeconds) > lastUnifiedHoldRef.current) {
+      lastUnifiedHoldRef.current = Math.floor(nextTracker.holdSeconds);
+      if (lastUnifiedHoldRef.current > 0 && lastUnifiedHoldRef.current % 5 === 0) {
+        playSquatSound("rep");
+        speakSquatInstruction(`${lastUnifiedHoldRef.current} sekunder`, false);
+      }
+
+      if (currentProg && currentProg.phase === "active-set") {
+        const targetHold = currentProg.activeExercise.reps;
+        if (nextTracker.holdSeconds >= targetHold) {
+          const updatedProg = completeProgramSet(currentProg, Math.round(nextTracker.holdSeconds));
+          programSessionRef.current = updatedProg;
+          setProgramSession(updatedProg);
+          playSquatSound("milestone");
+
+          if (updatedProg.phase === "completed") {
+            playGameSound(null, true);
+            const summary = generateProgramSummary(updatedProg, WORKOUT_PROGRAMS[updatedProg.programId]);
+            setProgramSummary(summary);
+            speakSquatInstruction(
+              `Grymt jobbat! Handstående-passet är avklarat. ${summary.xpEarned} erfarenhetspoäng intjänade!`,
+              true,
+            );
+          } else {
+            speakSquatInstruction(
+              `Set ${currentProg.currentSet} klart! Vila i ${currentProg.activeExercise.restSeconds} sekunder.`,
+              true,
+            );
+          }
+        }
+      }
     }
   }
 
@@ -985,15 +1563,41 @@ export function MotionLab() {
         setWorkoutSession(workoutResult.session);
       }
       if (workoutResult.cue) {
+        let cueText = workoutResult.cue.text;
         if (workoutResult.cue.sound === "workout-complete") {
           playGameSound(null, true);
+          const report = buildWorkoutSessionReport(workoutResult.session);
+          const { updatedMemory, newPersonalRecords } = updateCoachMemoryWithSession(coachMemoryRef.current, report);
+          coachMemoryRef.current = updatedMemory;
+          setCoachMemory(updatedMemory);
+          try {
+            localStorage.setItem("p100_motion_coach_memory", JSON.stringify(updatedMemory));
+          } catch {
+            // safe
+          }
+          if (newPersonalRecords.length > 0) {
+            const prAnnouncement = newPersonalRecords.join(". ");
+            setNewPrNotice(prAnnouncement);
+            cueText = `${cueText} ${prAnnouncement}`;
+          }
         } else if (workoutResult.cue.sound === "set-complete") {
           playSquatSound("milestone");
+          const lastSet = workoutResult.session.completedSets[workoutResult.session.completedSets.length - 1];
+          if (lastSet) {
+            cueText = formatCoachSetCompleteCue(
+              lastSet.setNumber,
+              lastSet.completedReps,
+              getRestDurationForSet(workoutResult.session.config, workoutResult.session.currentSetIndex),
+              lastSet.primaryObservation,
+              coachSettingsRef.current,
+            );
+          }
         } else if (workoutResult.cue.sound === "rest-end") {
           playSquatSound("rep");
         }
-        speakSquatInstruction(workoutResult.cue.text, workoutResult.cue.priority);
-        setSquatCoachCue(workoutResult.cue.text);
+        const safetyChecked = validateCoachSafetyPrompt(cueText);
+        speakSquatInstruction(safetyChecked.sanitizedText, workoutResult.cue.priority);
+        setSquatCoachCue(safetyChecked.sanitizedText);
         lastSquatCoachAtRef.current = now;
       }
       if (workoutResult.shouldResetSquatTracker) {
@@ -1002,17 +1606,19 @@ export function MotionLab() {
         return;
       }
 
-      // Spoken counting and sound during active workout set (Steg 33, 34 & 35)
+      // Spoken counting and sound during active workout set (Steg 33, 34, 35, 41 & 46)
       if (workoutSessionRef.current.status === "active-set" && next.reps > previous.reps) {
         playSquatSound("rep");
-        const speechCue = getWorkoutRepSpeechCue(
+        const speechCue = formatCoachRepCue(
           next.reps,
           workoutSessionRef.current.config.targetRepsPerSet,
+          coachSettingsRef.current,
           next.lastRep,
           coachDisciplineRef.current,
         );
         coachDisciplineRef.current = speechCue.nextDiscipline;
-        speakSquatInstruction(speechCue.text, speechCue.isMilestone);
+        const safetyChecked = validateCoachSafetyPrompt(speechCue.text);
+        speakSquatInstruction(safetyChecked.sanitizedText, speechCue.isMilestone);
         setSquatCoachCue(
           `Set ${workoutSessionRef.current.currentSetIndex + 1}: ${speechCue.displayCue} (${next.reps}/${workoutSessionRef.current.config.targetRepsPerSet})`,
         );
@@ -1074,6 +1680,7 @@ export function MotionLab() {
     const receivedAtMs = performance.now();
     snapshotRef.current = snapshot;
     acceptSquatSnapshot(snapshot);
+    acceptUnifiedExerciseSnapshot(snapshot);
     if (canStartMotionGame(snapshot)) {
       recentGamePoseRef.current = { snapshot, receivedAtMs };
     }
@@ -1802,7 +2409,7 @@ export function MotionLab() {
     }
   }
 
-  function startGame() {
+  function startGame(mode: "arcade" | "boss-fight" = "arcade") {
     if (baselineRef.current) {
       setError("Avsluta baslinjemätningen innan bossfighten startar.");
       return;
@@ -1837,9 +2444,12 @@ export function MotionLab() {
     if (!audioContextRef.current) audioContextRef.current = new AudioContext();
     void audioContextRef.current.resume();
     const diff = difficultyRef.current;
+    const isBoss = mode === "boss-fight";
     const game = startMotionGame(snapshot, performance.now(), canvas.width / canvas.height, {
       difficulty: diff,
       allowKicks: diff !== "easy" || fullBodyVisibleRef.current || hasUsableFullBody(snapshot.landmarks),
+      bossFight: isBoss,
+      durationMs: isBoss ? 300_000 : 60_000,
     });
     if (!game) {
       setError("Kunde inte läsa båda axlarna. Vänd dig mot kameran och försök igen.");
@@ -1928,6 +2538,25 @@ export function MotionLab() {
     ? Object.values(baselineReport.checks).filter(Boolean).length
     : 0;
   const baselinePhase = motionBaselinePhase(baselineElapsedMs);
+  const activeTrackableExerciseId = EXERCISE_LIBRARY[activeWorkoutExercise as TrackableExerciseId]
+    ? activeWorkoutExercise as TrackableExerciseId
+    : null;
+  const matchingCameraSetupProfile = cameraSetupProfile !== null
+    && cameraSetupProfile.exerciseId === activeTrackableExerciseId
+    && (!initialMissionLaunch || cameraSetupProfile.environment === initialMissionLaunch.environment)
+    ? cameraSetupProfile
+    : null;
+
+  function resetAfterCameraCalibration(exerciseId: TrackableExerciseId) {
+    squatTrackingEnabledRef.current = false;
+    setSquatTrackingEnabled(false);
+    const tracker = createUnifiedExerciseTracker(exerciseId);
+    unifiedTrackerRef.current = tracker;
+    setUnifiedTracker(tracker);
+    lastUnifiedRepRef.current = 0;
+    lastUnifiedHoldRef.current = 0;
+    if (exerciseId === "squat") resetSquatTracking(true);
+  }
 
   return (
     <div className="p100-motion-lab">
@@ -1942,7 +2571,7 @@ export function MotionLab() {
           <button
             className="p100-button p100-button-bossfight"
             type="button"
-            onClick={startGame}
+            onClick={() => startGame("boss-fight")}
             disabled={replaying || gameActive || baselineRunning || performanceProfileRunning || squatTrackingEnabled}
             title={!isLive ? "Tryck för att se vad som saknas" : !poseVisible ? "Tryck för hjälp med kroppspositionen" : baselineRunning ? "Baslinjemätningen pågår" : performanceProfileRunning ? "Prestandamätningen pågår" : gameActive ? "Bossfighten pågår" : "Starta bossfight"}
           >
@@ -1959,6 +2588,55 @@ export function MotionLab() {
           </button>
         </div>
       </header>
+
+      {activeTrackableExerciseId ? (
+        <AdaptiveCameraSetupPanel
+          key={`${activeTrackableExerciseId}-${initialMissionLaunch?.environment ?? "free"}`}
+          exerciseId={activeTrackableExerciseId}
+          environment={initialMissionLaunch?.environment ?? "home"}
+          environmentLocked={Boolean(initialMissionLaunch)}
+          resolution={actualResolution ?? resolution.replace("x", " × ")}
+          isLive={isLive}
+          poseVisible={poseVisible}
+          fullBodyVisible={fullBodyVisible}
+          luminance={luminance}
+          framing={framingFeedback}
+          measuredReps={unifiedTracker.reps}
+          measuredHoldSeconds={unifiedTracker.holdSeconds}
+          onBegin={() => {
+            setCameraSetupProfile(null);
+            if (!squatTrackingEnabledRef.current) toggleSquatTracking();
+          }}
+          onFinish={(profile) => {
+            setCameraSetupProfile(profile);
+            resetAfterCameraCalibration(activeTrackableExerciseId);
+          }}
+          onCancel={() => resetAfterCameraCalibration(activeTrackableExerciseId)}
+        />
+      ) : null}
+
+      {initialMissionLaunch ? (
+        <MotionMissionSyncPanel
+          launch={initialMissionLaunch}
+          activeExerciseId={activeTrackableExerciseId}
+          measuredReps={unifiedTracker.reps}
+          measuredHoldSeconds={unifiedTracker.holdSeconds}
+          trackingEnabled={squatTrackingEnabled}
+          cameraSetupProfile={matchingCameraSetupProfile}
+          onSetSaved={() => {
+            squatTrackingEnabledRef.current = false;
+            setSquatTrackingEnabled(false);
+            const tracker = createUnifiedExerciseTracker(initialMissionLaunch.exerciseId);
+            unifiedTrackerRef.current = tracker;
+            setUnifiedTracker(tracker);
+            lastUnifiedRepRef.current = 0;
+            lastUnifiedHoldRef.current = 0;
+            if (initialMissionLaunch.exerciseId === "squat") {
+              resetSquatTracking(true);
+            }
+          }}
+        />
+      ) : null}
 
       <section className="p100-motion-grid">
         <div ref={stageRef} className={`p100-motion-stage ${replaying ? "replaying" : ""} ${gameActive ? "game-active" : ""} ${viewportFullscreen ? "viewport-fullscreen" : ""}`} style={{ aspectRatio: cameraAspectRatio ?? `${requestedWidth} / ${requestedHeight}` }}>
@@ -1981,16 +2659,31 @@ export function MotionLab() {
             performanceProfileSecondsLeft={performanceProfileSecondsLeft}
             fullscreen={fullscreen}
             voiceGuidance={voiceGuidance}
+            inputSource={inputSource}
+            remoteSensorNotice={remoteNotice}
             onStopGame={stopGame}
             onToggleFullscreen={toggleFullscreen}
             onToggleVoiceGuidance={toggleVoiceGuidance}
           />
-          {status === "idle" ? (
+          {status === "idle" && inputSource === "webcam" ? (
             <div className="p100-motion-stage-empty">
               <span><Video /></span>
               <strong>Redo för första rörelsen</strong>
               <p>Välj bildläge, tillåt kameran och se till att hela kroppen ryms i bild.</p>
               <button type="button" onClick={() => void startCamera()}><Play /> Starta Motion Lab</button>
+            </div>
+          ) : null}
+          {inputSource === "remote-sensor" && !remoteConnected ? (
+            <div className="p100-motion-stage-empty">
+              <span><Smartphone /></span>
+              <strong>Trådlös iPhone Sensor</strong>
+              <p>Öppna sensorsidan på din iPhone via Wi-Fi och ange parningskoden:</p>
+              <div style={{ margin: "12px 0", padding: "8px 24px", borderRadius: 12, background: "rgba(125,232,255,0.14)", border: "1px solid rgba(125,232,255,0.32)", fontSize: "1.6rem", letterSpacing: "0.18em", color: "#7de8ff", fontWeight: 900 }}>
+                {remotePairingCode}
+              </div>
+              <p style={{ fontSize: "0.72rem", color: "#8a968f", maxWidth: "44ch" }}>
+                Gå till <code>/projekt-100/traning/motion/sensor?pair={remotePairingCode}</code> på iPhonen och ställ telefonen lutad under TV:n.
+              </p>
             </div>
           ) : null}
           {isStarting ? (
@@ -2012,8 +2705,16 @@ export function MotionLab() {
               squatView={squatView}
               squatProtocol={squatProtocol}
               squatCoachCue={squatCoachCue}
+              coachSettings={coachSettings}
+              newPrNotice={newPrNotice}
               onSkipRest={handleSkipRest}
+              onRecordRpe={handleRecordRpe}
               nowMs={performance.now()}
+              activeExerciseTitle={activeExerciseTitle}
+              unifiedTracker={activeWorkoutExercise !== "squat" || programSession !== null ? unifiedTracker : null}
+              programSession={programSession}
+              programSummary={programSummary}
+              framingFeedback={framingFeedback}
             />
           ) : null}
           <MotionArenaOverlay
@@ -2078,6 +2779,9 @@ export function MotionLab() {
             lightOkay={lightOkay}
             luminance={luminance}
             disabled={isStarting || isRecovering || changingResolution || baselineRunning || performanceProfileRunning}
+            inputSource={inputSource}
+            remotePairingCode={remotePairingCode}
+            onChangeInputSource={changeInputSource}
             onChangeResolution={changeResolution}
             onChangeArenaLanguage={changeArenaLanguage}
             onChangeDifficulty={changeDifficulty}
@@ -2089,14 +2793,41 @@ export function MotionLab() {
             squatProtocol={squatProtocol}
             squatTrackingEnabled={squatTrackingEnabled}
             restPreset={restPreset}
+            coachSettings={coachSettings}
+            coachMemory={coachMemory}
             squatReportCopied={squatReportCopied}
             nowMs={performance.now()}
+            activeExercise={activeWorkoutExercise}
+            onChangeExercise={(exercise) => {
+              setCameraSetupProfile(null);
+              setActiveWorkoutExercise(exercise);
+              const progItem = WORKOUT_PROGRAMS[exercise as ProgramId];
+              const libraryExerciseId = exercise as TrackableExerciseId;
+              const libItem = EXERCISE_LIBRARY[libraryExerciseId];
+
+              if (progItem) {
+                const firstEx = EXERCISE_LIBRARY[progItem.exercises[0].exerciseId]?.name || "Knäböj";
+                speakSquatInstruction(`Startar program: ${progItem.title}. Första övningen är ${firstEx}. Gör dig redo!`);
+              } else if (libItem) {
+                const guide = getLibraryCameraGuidance(libraryExerciseId);
+                speakSquatInstruction(`${libItem.name}. ${guide.instruction}`);
+              } else if (exercise === "circuit") {
+                speakSquatInstruction("15 minuters helkroppscirkel. Första övningen är Knäböj. Kör!");
+              } else {
+                const guide = getExerciseCameraGuidance(exercise as ExerciseType);
+                const profile = getExerciseProfile(exercise as ExerciseType);
+                speakSquatInstruction(`${profile.name}. ${guide.instruction}`);
+              }
+            }}
             onChangeRestPreset={changeRestPreset}
+            onChangeCoachSettings={changeCoachSettings}
             onToggleSquatTracking={toggleSquatTracking}
             onResetSquatTracking={resetSquatTracking}
             onCopySquatReport={copySquatReport}
             onDownloadSquatReport={downloadSquatReport}
             onSkipRest={handleSkipRest}
+            onRecordRpe={handleRecordRpe}
+            framingFeedback={framingFeedback}
           />
 
           <MotionDiagnosticsPanel
@@ -2146,6 +2877,16 @@ export function MotionLab() {
             isRecovering={isRecovering}
             gameActive={gameActive}
             squatTrackingEnabled={squatTrackingEnabled}
+            remoteSensorDiagnostics={{
+              inputSource,
+              pairingCode: remotePairingCode,
+              connected: remoteConnected,
+              fps: remoteFps,
+              batteryLevel: remoteBattery,
+              latencyStats: remoteLatencyTrackerRef.current.getStats(),
+              notice: remoteNotice,
+              onSelectInputSource: changeInputSource,
+            }}
           />
         </aside>
       </section>

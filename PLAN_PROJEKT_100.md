@@ -357,6 +357,27 @@ Träningssidan är en riktig arbetsyta, inte ett formulärkort.
 - Historik med sök, filter och jämförelse.
 - Övningsdetaljer, personbästa, volym, tid och distans.
 - Detaljsida för varje planerat eller genomfört pass.
+- Ett **Dagens träningsuppdrag** kan vara Överkropp eller Underkropp och fyllas
+  av flera tidsstämplade träningsblock hemma, på utegym, på gräsmatta eller på
+  annan plats. Motion Lab, Jarvis och manuell loggning ska skriva till samma
+  uppdrag i stället för att skapa parallella journaler.
+- Dagsvyn skiljer på deterministisk plantäckning och en försiktig,
+  källredovisad stimulansbedömning. “100 %” betyder att dagens beslutade plan är
+  täckt, aldrig en garanti om framtida muskeltillväxt.
+- Övningsbiblioteket prioriterar ett kuraterat **Core 24** med cirka 20–30
+  djupt verifierade övningsfamiljer och kontrollerade variationer framför en
+  uppblåst lista. Motion-stöd märks Guld, Silver eller Manuell utifrån faktisk
+  repräkning, kameratäckning, säker degradering, tester och livevalidering.
+- Progression väljs efter avkastning för aktuellt mål. En lätt knäböj kan bli
+  mer belastad, få större kontrollerad ROM eller gå mot ensidiga varianter;
+  pistol squat används när styrka, balans och rörlighet är själva målet och
+  antas inte automatiskt vara bättre för hypertrofi än en stabilare variant.
+- Tillgänglig utrustning omfattar även säker improviserad belastning. En
+  ryggsäck med vattenflaskor kan loggas med uppskattad vikt och bärposition och
+  användas för lämpliga stabila övningar; kameran uppskattar aldrig vikten och
+  programmotorn föreslår inte instabil last för explosiva eller överhuvudrörelser.
+- Den detaljerade leverans- och acceptansplanen styrs av Fas K i
+  `PLAN_MOTION_ENGINE.md`.
 
 ### Kost
 

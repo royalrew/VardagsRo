@@ -389,6 +389,7 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
           const agentResult = await processJarvisAgentMessage(actor, prompt, {
             channel: "telegram",
             personName: account.personName,
+            sourceEventId: `telegram:${update.update_id}`,
           });
           await sendTelegramMessage(chatId, agentResult.text, {
             replyMarkup: getTelegramReplyKeyboard(),
@@ -588,6 +589,7 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
           const agentResult = await processJarvisAgentMessage(actor, quickPrompt, {
             channel: "telegram",
             personName: account.personName,
+            sourceEventId: `telegram:${update.update_id}`,
           });
           await sendTelegramMessage(chatId, agentResult.text, {
             replyMarkup: getTelegramReplyKeyboard(),
@@ -669,6 +671,7 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
         const agentResult = await processJarvisAgentMessage(actor, messageText, {
           channel: "telegram",
           personName: account.personName,
+          sourceEventId: `telegram:${update.update_id}`,
         });
 
         const isBriefingResponse = agentResult.executedActions.includes("get_daily_briefing");

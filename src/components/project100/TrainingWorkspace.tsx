@@ -33,6 +33,7 @@ import { useMemo, useState } from "react";
 
 import { RunningQuickLogModal } from "./RunningQuickLogModal";
 import { WorkoutQuickModal } from "./WorkoutQuickModal";
+import { DailyTrainingMission, type DailyMissionView } from "./DailyTrainingMission";
 import {
   buildRunningAnalytics,
   evaluateProject100Benchmarks,
@@ -749,10 +750,12 @@ function PlanActionSheet({
 export function TrainingWorkspace({
   initialView,
   nextWorkLabel,
+  initialMission,
   initialComposer = null,
 }: {
   initialView: Project100TrainingView;
   nextWorkLabel: string | null;
+  initialMission: DailyMissionView | null;
   initialComposer?: Composer;
 }) {
   const router = useRouter();
@@ -1088,6 +1091,8 @@ export function TrainingWorkspace({
           </button>
         </div>
       </header>
+
+      <DailyTrainingMission today={initialView.today} initialMission={initialMission} />
 
       {/* Program installer banner if few templates or requested */}
       <section className="p100-program-banner">

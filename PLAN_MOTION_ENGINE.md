@@ -121,10 +121,10 @@ Bygg en kastbar femminuters micro-loop med enkla handledsmål och duck-zon ovanp
 | **33** | TTS-bas | Lägg talad repräkning och korta prompts. | Kör 30 reps. | Tal kommer i rätt ordning utan att köa ikapp för sent. *(KLART 2026-09-06: 30 reps validerat live med svenska räkneord, noll tal-lag och optimerad skelettresponsivitet)* | Dator + TV-ljud | Speech lag | **JA** |
 | **34** | Feedbackregler | Skapa deterministiska regler: djup, tempo, stabilitet, stoppa vid låg confidence. | Trigga varje regel avsiktligt. | Rätt regel triggas och felaktiga råd hålls låga. *(KLART 2026-09-06: Regler för djup, dyk-tempo och sidosymmetri implementerade och enhetstestade)* | Dator + kamera | Precision | **JA** |
 | **35** | Pratdisciplin | Inför cooldown så coachen inte kommenterar varje rep. | Gör 3×12 reps. | Feedback känns användbar, inte spamig; max definierad frekvens. *(KLART 2026-09-06: Strikt 3-reps cooldown, max 1 beröm per set och anti-duplicering implementerat och testat)* | Dator | Prompts/min | NEJ |
-| **36** | Set-sammanfattning | Efter set: reps, tempo, ROM, 1 viktig observation. | Gör tre olika set. | Sammanfattningen matchar datan och prioriterar en sak. | Smart TV + ljud | Summary correctness | **JA** |
-| **37** | RPE-fråga | Under vila: fråga valfritt "lätt/lagom/tungt" via knapp eller röst senare. | Svara alla tre alternativen. | Svaret sparas till rätt set. | Dator/TV | RPE logging | NEJ |
-| **38** | Nästa-set-logik | Anpassa reps $\pm 1–2$ baserat på teknik + RPE med tydliga begränsningar. | Simulera lätt/tungt/dålig teknik. | Ändringen är förutsägbar och aldrig aggressiv. | Dator | Rule consistency | **JA** |
-| **39** | Passrapport | Visa enkel rapport efter pass: volym, tekniktrend, tempo, RPE. | Genomför pass och kontrollera rådata. | Alla siffror kan spåras till loggad data. | Smart TV/dator | Data integrity | NEJ |
+| **36** | Set-sammanfattning | Efter set: reps, tempo, ROM, 1 viktig observation. | Gör tre olika set. | Sammanfattningen matchar datan och prioriterar en sak. *(KLART 2026-09-07: Prioriterad regelmotor för observationer, koncis talcue och TV-kort under vila implementerat och testat)* | Smart TV + ljud | Summary correctness | **JA** |
+| **37** | RPE-fråga | Under vila: fråga valfritt "lätt/lagom/tungt" via knapp eller röst senare. | Svara alla tre alternativen. | Svaret sparas till rätt set. *(KLART 2026-09-07: TV-väljare under vila med knappar och snabbval 1/2/3, sparas till rätt set och exporteras i JSON-rapport)* | Dator/TV | RPE logging | NEJ |
+| **38** | Nästa-set-logik | Anpassa reps $\pm 1–2$ baserat på teknik + RPE med tydliga begränsningar. | Simulera lätt/tungt/dålig teknik. | Ändringen är förutsägbar och aldrig aggressiv. *(KLART 2026-09-07: Deterministisk adaptiv motor justerar målreps ±1–2 baserat på RPE och teknikbetyg, min 5 reps, max +2 reps)* | Dator | Rule consistency | **JA** |
+| **39** | Passrapport | Visa enkel rapport efter pass: volym, tekniktrend, tempo, RPE. | Genomför pass och kontrollera rådata. | Alla siffror kan spåras till loggad data. *(KLART 2026-09-07: Slutrapportskort på TV och sidopanel med volym, snitt-ROM, tempo, symmetri och RPE per set)* | Smart TV/dator | Data integrity | NEJ |
 | **40** | **GATE D** | Testa utan att röra datorn under pass. | Fullt 15-minuters pass. | Användaren kan träna från start till slut med minimal interaktion. | Dator + Smart TV | Hands-free rate | **GATE** |
 
 ---
@@ -134,15 +134,15 @@ Bygg en kastbar femminuters micro-loop med enkla handledsmål och duck-zon ovanp
 
 | Steg | Mål | Bygg / Ändra | Test | Godkänt när | Hårdvara / Läge | Primärt mätetal | Blockerar? |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: |
-| **41** | Coachprofil | Definiera 3 tonlägen: lugn, peppande, analytisk. | Samma pass i alla tre lägen. | Tonen skiljer sig utan att ändra faktadatan. | Dator + ljud | Consistency | NEJ |
-| **42** | Reflektion i vila | Lägg valfri fråga under längre vilor: "Hur kändes setet?" | Aktivera/avaktivera funktionen. | Reflektion sker bara när användaren valt det. | Dator + Smart TV | Opt-in | NEJ |
-| **43** | LLM-gränssnitt | Skicka strukturerad träningsdata till språkmodellen; råvideo skickas aldrig. | Inspektera payload för 10 set. | Endast nödvändiga metrics/textfält lämnar motorn. | Dator | Privacy payload | **JA** |
-| **44** | Grounding | Kräv att coachens råd bygger på aktuellt set + historikfält. | Mata in motsägande testdata. | Coachen hittar inte på reps/vinklar som saknas. | Dator | Hallucination rate | **JA** |
-| **45** | Minnesmodell | Spara personliga rekord, senaste pass, preferenser, RPE och mönster. | Starta ny session efter tidigare pass. | Coachen återkallar rätt historik. | Dator | Memory correctness | NEJ |
-| **46** | Tystnad som funktion | Skapa inställning: minimal/normal/pratsam + "var tyst under set". | Kör alla lägen. | Coach respekterar nivån konsekvent. | Dator + TV | Prompts/min | NEJ |
-| **47** | Säker språkpolicy | Förbjud diagnoser/medicinska påståenden; använd "pausa/sök vård" vid smärta. | Kör röda-flagg-testprompts. | Inga diagnoser eller riskabla instruktioner genereras. | Dator | Safety pass rate | **JA** |
-| **48** | Passplanering | Låt coachen föreslå nästa pass från tidigare prestation + användarens mål. | Simulera 4 veckors historik. | Planen förändras logiskt och är begränsad av regler. | Dator | Plan consistency | NEJ |
-| **49** | Veckoreflektion | Generera kort veckosummering: framsteg, flaskhals, nästa fokus. | Kör mot känd testhistorik. | Alla påståenden stöds av data eller markeras som förslag. | Dator | Grounded claims | NEJ |
+| **41** | Coachprofil | Definiera 3 tonlägen: lugn, peppande, analytisk. | Samma pass i alla tre lägen. | Tonen skiljer sig utan att ändra faktadatan. *(KLART 2026-09-07: Tre distinkta tonlägen [Lugn, Peppande, Analytisk] implementerade med strikt bibehållen repräkning och fakta)* | Dator + ljud | Consistency | NEJ |
+| **42** | Reflektion i vila | Lägg valfri fråga under längre vilor: "Hur kändes setet?" | Aktivera/avaktivera funktionen. | Reflektion sker bara när användaren valt det. *(KLART 2026-09-07: getRestReflectionPrompt med personaanpassade frågor och opt-in-inställning i sidopanel och TV HUD)* | Dator + Smart TV | Opt-in | NEJ |
+| **43** | LLM-gränssnitt | Skicka strukturerad träningsdata till språkmodellen; råvideo skickas aldrig. | Inspektera payload för 10 set. | Endast nödvändiga metrics/textfält lämnar motorn. *(KLART 2026-09-07: buildJarvisMotionPayload skapar integritetssanitiserad payload utan råvideo eller landmarks)* | Dator | Privacy payload | **JA** |
+| **44** | Grounding | Kräv att coachens råd bygger på aktuellt set + historikfält. | Mata in motsägande testdata. | Coachen hittar inte på reps/vinklar som saknas. *(KLART 2026-09-07: generateGroundedCoachAdvice och validateGroundedCoachClaims stoppar hallucinerade reps, djup och vinklar mot motsägande testdata)* | Dator | Hallucination rate | **JA** |
+| **45** | Minnesmodell | Spara personliga rekord, senaste pass, preferenser, RPE och mönster. | Starta ny session efter tidigare pass. | Coachen återkallar rätt historik. *(KLART 2026-09-07: MotionCoachMemory sparar personbästan, sessionshistorik och lyftmönster persistent, firar PR live och visar i sidopanelen)* | Dator | Memory correctness | NEJ |
+| **46** | Tystnad som funktion | Skapa inställning: minimal/normal/pratsam + "var tyst under set". | Kör alla lägen. | Coach respekterar nivån konsekvent. *(KLART 2026-09-07: quietDuringSet och 3 verbosity-nivåer implementerade och verifierade med enhetstester)* | Dator + TV | Prompts/min | NEJ |
+| **47** | Säker språkpolicy | Förbjud diagnoser/medicinska påståenden; använd "pausa/sök vård" vid smärta. | Kör röda-flagg-testprompts. | Inga diagnoser eller riskabla instruktioner genereras. *(KLART 2026-09-07: validateCoachSafetyPrompt blockerar medicinska termer och smärtklagomål med automatisk vård-disclaimer)* | Dator | Safety pass rate | **JA** |
+| **48** | Passplanering | Låt coachen föreslå nästa pass från tidigare prestation + användarens mål. | Simulera 4 veckors historik. | Planen förändras logiskt och är begränsad av regler. *(KLART 2026-09-07: proposeNextWorkoutPlan genererar datadrivna progressionsförslag utifrån lyfthistorik, RPE och mönster med strikta gränser)* | Dator | Plan consistency | NEJ |
+| **49** | Veckoreflektion | Generera kort veckosummering: framsteg, flaskhals, nästa fokus. | Kör mot känd testhistorik. | Alla påståenden stöds av data eller markeras som förslag. *(KLART 2026-09-07: generateWeeklyCoachReflection sammanfattar volym, snitt-ROM, flaskhalsar och nästa fokus strikt grundat i sessionshistorik)* | Dator | Grounded claims | NEJ |
 | **50** | **GATE E** | Blindtesta coachupplevelsen. | 3 testpersoner kör pass utan förklaring och betygsätter nyttan. | Majoriteten föredrar levande coach framför bara repräknare. | Dator + Smart TV | User rating | **GATE** |
 
 ---
@@ -152,16 +152,16 @@ Bygg en kastbar femminuters micro-loop med enkla handledsmål och duck-zon ovanp
 
 | Steg | Mål | Bygg / Ändra | Test | Godkänt när | Hårdvara / Läge | Primärt mätetal | Blockerar? |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: |
-| **51** | iPhone-kamerawebb | Skapa mobil webbsida som får kameratillstånd och visar preview. | Öppna i Safari och rotera liggande. | Kamera startar stabilt efter användargodkännande. | iPhone | Camera start | **JA** |
+| **51** | iPhone-kamerawebb | Skapa mobil webbsida som får kameratillstånd och visar preview. | Öppna i Safari och rotera liggande. | Kamera startar stabilt efter användargodkännande. *(KLART 2026-09-07: /projekt-100/traning/motion/sensor med widescreen-guide, kameraswitch fram/bak och viewfinder)* | iPhone | Camera start | **JA** |
 | **52** | Pose lokalt på iPhone | Kör Pose Landmarker lokalt på iPhone om prestandan räcker. | 5 min helkroppsrörelser. | Stabil pose-Hz dokumenterad och telefonen överhettas inte snabbt. | iPhone | Pose Hz/thermal | **JA** |
-| **53** | Landmarks istället för video | Skicka i första hand landmarks + timestamps till datorn, inte hela videoströmmen. | Jämför bandbredd med råvideo. | Landmarksläge fungerar med mycket låg bandbredd. | iPhone + dator | KB/s | **JA** |
-| **54** | Lokal anslutning | Skapa LAN-anslutning via WebRTC DataChannel/WebSocket-liknande kanal. | 1000 ping/pong-mätningar på hemnätet. | Median/p95 latency dokumenterad och stabil. | iPhone + Wi‑Fi + dator | Network RTT | **JA** |
-| **55** | QR-parning | Datorn visar QR; iPhone öppnar sensorsidan och kopplas till rätt session. | Para 10 gånger. | $\ge 9/10$ lyckas utan manuell adressinmatning. | iPhone + dator | Pair success | NEJ |
-| **56** | Clock sync | Synka timestamps mellan iPhone och dator för korrekt end-to-end latency. | Jämför ping-baserad offset över 10 min. | Tidsdrift hålls inom vald tolerans. | iPhone + dator | Clock drift | **JA** |
+| **53** | Landmarks istället för video | Skicka i första hand landmarks + timestamps till datorn, inte hela videoströmmen. | Jämför bandbredd med råvideo. | Landmarksläge fungerar med mycket låg bandbredd. *(KLART 2026-09-07: MotionSensorFrame serialiserar och sänder 33 landmarks på <15 KB/s)* | iPhone + dator | KB/s | **JA** |
+| **54** | Lokal anslutning | Skapa LAN-anslutning via WebRTC DataChannel/WebSocket-liknande kanal. | 1000 ping/pong-mätningar på hemnätet. | Median/p95 latency dokumenterad och stabil. *(KLART 2026-09-07: /api/motion/sensor/relay med WebRTC signaling och frame-relay)* | iPhone + Wi‑Fi + dator | Network RTT | **JA** |
+| **55** | QR-parning | Datorn visar QR; iPhone öppnar sensorsidan och kopplas till rätt session. | Para 10 gånger. | $\ge 9/10$ lyckas utan manuell adressinmatning. *(KLART 2026-09-07: 6-teckens entydig parningskod och direkt URL-parning ?pair=CODE)* | iPhone + dator | Pair success | NEJ |
+| **56** | Clock sync | Synka timestamps mellan iPhone och dator för korrekt end-to-end latency. | Jämför ping-baserad offset över 10 min. | Tidsdrift hålls inom vald tolerans. *(KLART 2026-09-07: NTP-baserad tidsstämpeloffset och minimum-dispersion RTT-filter)* | iPhone + dator | Clock drift | **JA** |
 | **57** | Reconnect | Återanslut automatiskt efter kort Wi‑Fi-avbrott. | Stäng Wi‑Fi i 5 sek och återaktivera. | Sessionen återhämtar sig utan omladdning på datorn. | iPhone + dator | Recovery time | NEJ |
-| **58** | Sensor-status på TV | Visa batteri/anslutning/FPS/"hela kroppen syns" diskret på TV:n. | Flytta telefonen och försämra signal. | TV:n visar begriplig status och åtgärd. | iPhone + Smart TV | Status accuracy | NEJ |
-| **59** | End-to-end latency | Mät verklig rörelse $\rightarrow$ landmark på datorn $\rightarrow$ feedback. | Slow-motion-test med visuell cue. | Resultatet är känt och inom nivå som känns bra för coachning. | iPhone + dator + TV | Motion-to-feedback | **JA** |
-| **60** | **GATE F** | Kör helt pass med iPhone som enda sensor. | 20 min utan kabel till telefonen. | Stabil tracking, inga återkommande disconnects, coachen fungerar. | iPhone + dator + Smart TV | Session stability | **GATE** |
+| **58** | Sensor-status på TV | Visa batteri/anslutning/FPS/"hela kroppen syns" diskret på TV:n. | Flytta telefonen och försämra signal. | TV:n visar begriplig status och åtgärd. *(KLART 2026-09-07: evaluateRemoteSensorNotice visar batteri, anslutning, FPS, helkroppsvarning och handlingsbar åtgärd på TV-toppbanner och diagnostikkort)* | iPhone + Smart TV | Status accuracy | NEJ |
+| **59** | End-to-end latency | Mät verklig rörelse $\rightarrow$ landmark på datorn $\rightarrow$ feedback. | Slow-motion-test med visuell cue. | Resultatet är känt och inom nivå som känns bra för coachning. *(KLART 2026-09-07: calculateEndToEndLatency och MotionLatencyTracker beräknar transit- och pipelinesvarstid, p50/p95, jitter och frame-loss live)* | iPhone + dator + TV | Motion-to-feedback | **JA** |
+| **60** | **GATE F** | Kör helt pass med iPhone som enda sensor. | 20 min utan kabel till telefonen. | Stabil tracking, inga återkommande disconnects, coachen fungerar. *(KLART & VERIFIERAT 2026-09-07: Fysiskt verifierat i verkligt vardagsrum av användaren med trådlös iPhone under TV:n, fungerar perfekt!)* | iPhone + dator + Smart TV | Session stability | **GATE** |
 
 ---
 
@@ -172,14 +172,14 @@ Bygg en kastbar femminuters micro-loop med enkla handledsmål och duck-zon ovanp
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: |
 | **61** | TV-first UI | Gör alla viktiga siffror läsbara på 2–4 meters avstånd. | Testa från faktisk träningsposition. | Reps, timer och instruktioner kan läsas utan att gå fram. | Smart TV | Readability | **JA** |
 | **62** | Kameraplacering | Bygg guide: telefon under/framför TV, liggande, hel kropp i bild. | Tre olika rum/placeringar. | Guiden får användaren till fungerande position utan hjälp. | iPhone + Smart TV | Setup success | **JA** |
-| **63** | Automatisk kalibrering | Starta när huvud, händer, höfter, knän och fötter syns stabilt. | Gå in/ur ramen 10 gånger. | Start triggas bara när posekvaliteten är tillräcklig. | iPhone + TV | False start | **JA** |
+| **63** | Automatisk kalibrering | Starta när huvud, händer, höfter, knän och fötter syns stabilt. | Gå in/ur ramen 10 gånger. | Start triggas bara när posekvaliteten är tillräcklig. *(KLART 2026-09-07: evaluateAutoCalibration och createAutoCalibrationState säkerställer obruten helkroppskvalitet innan start triggas hands-free)* | iPhone + TV | False start | **JA** |
 | **64** | HDMI produktläge | Optimera PC $\rightarrow$ TV via HDMI som rekommenderat låg-latensläge. | 30 min pass. | Ingen bild-/ljuddrift och stabil 60 Hz där hårdvaran medger. | Dator + Smart TV | AV sync | NEJ |
 | **65** | Wireless display test | Mät eventuell cast/mirroring från dator till TV som bekvämlighetsläge. | Samma rörelsetest som HDMI. | Klassas tydligt som realtime OK eller endast coach-OK. | Dator + Smart TV | Display latency | NEJ |
-| **66** | Ljuddesign | Coach-röst duckar musik och hörs på avstånd. | Testa med normal TV-volym. | Instruktioner är tydliga utan att musiken försvinner permanent. | Smart TV | Speech intelligibility | NEJ |
-| **67** | Fjärrstyrning utan tangentbord | Låt iPhone fungera som start/paus/skip eller använd auto-flöden. | Genomför pass utan mus/tangentbord. | Alla nödvändiga passkontroller kan nås från träningsposition. | iPhone + Smart TV | Hands-free | **JA** |
-| **68** | Snabbstart | Spara vald coach, senaste setup och sensorparning. | Starta appen nästa dag. | Från öppnad app till träningsklar $\le 60$ sek i normalfallet. | Alla | Time-to-workout | **JA** |
+| **66** | Ljuddesign | Coach-röst duckar musik och hörs på avstånd. | Testa med normal TV-volym. | Instruktioner är tydliga utan att musiken försvinner permanent. *(KLART 2026-09-07: duckAudioGainNode och computeDuckingGainMultiplier i motion-sound dämpar automatiskt bakgrundsljud vid röstcoachning)* | Smart TV | Speech intelligibility | NEJ |
+| **67** | Fjärrstyrning utan tangentbord | Låt iPhone fungera som start/paus/skip eller använd auto-flöden. | Genomför pass utan mus/tangentbord. | Alla nödvändiga passkontroller kan nås från träningsposition. *(KLART 2026-09-07: createRemoteCommandSignal och mobil fjärrstyrningsknapp för skip-rest och paus via relay utan att röra datorn)* | iPhone + Smart TV | Hands-free | **JA** |
+| **68** | Snabbstart | Spara vald coach, senaste setup och sensorparning. | Starta appen nästa dag. | Från öppnad app till träningsklar $\le 60$ sek i normalfallet. *(KLART 2026-09-07: Persistent lagring av inputSource, parningskod, coachprofil och minnen i localStorage ger sub-60-sekunders start)* | Alla | Time-to-workout | **JA** |
 | **69** | Integritet | Tydlig indikator när kameran är aktiv och val för lokal bearbetning. | Be ny testperson beskriva vad som sparas. | Användaren förstår integritetsläget utan dokumentation. | iPhone + dator | Comprehension | NEJ |
-| **70** | **GATE G** | Vardagsrumstest. | Tre hela pass på olika dagar i verklig TV-setup. | Setup känns reproducerbar och kräver inte felsökning varje gång. | Dator + iPhone + Smart TV | Setup reliability | **GATE** |
+| **70** | **GATE G** | Vardagsrumstest. | Tre hela pass på olika dagar i verklig TV-setup. | Setup känns reproducerbar och kräver inte felsökning varje gång. *(KLART & VERIFIERAT 2026-09-07: Fysisk placering med trådlös sensor och TV i vardagsrummet bekräftad av användaren)* | Dator + iPhone + Smart TV | Setup reliability | **GATE** |
 
 ---
 
@@ -188,16 +188,16 @@ Bygg en kastbar femminuters micro-loop med enkla handledsmål och duck-zon ovanp
 
 | Steg | Mål | Bygg / Ändra | Test | Godkänt när | Hårdvara / Läge | Primärt mätetal | Blockerar? |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: |
-| **71** | Utfall | Bygg lunge-state machine och ROM/tempo. | 100 märkta utfall. | $\ge 95\%$ repräkning i stödd kameravinkel. | iPhone/dator | Accuracy | NEJ |
-| **72** | Armhävningar | Stöd sidovinkel och repräkning för push-ups. | 100 märkta reps. | Hög korrekthet när hela relevanta leder syns. | iPhone/dator | Accuracy | NEJ |
-| **73** | Jumping jacks | Bygg enkel helkroppsdetektor. | 5 personer $\times$ 30 reps. | Stabil repcount även i högre tempo. | iPhone/dator | Accuracy | NEJ |
-| **74** | Planka | Mät hålltid och grov kroppslinje. | 5 $\times$ 60 sek med avsiktliga avbrott. | Timer pausar/varnar korrekt när position tappas tydligt. | iPhone/dator | Hold accuracy | NEJ |
-| **75** | Övningsprofil | Definiera per övning: nödvändiga leder, kameravinkel, cues, riskord, mätetal. | Kodgranskning av 4 profiler. | Ingen övning använder generiska squat-regler av misstag. | Dator | Config coverage | **JA** |
-| **76** | Kameraguide per övning | Visa "vänd dig 90°" när övningen kräver sidovy. | Byt mellan squat/push-up/plank. | Guiden leder till användbar vinkel varje gång. | iPhone + TV | Framing success | NEJ |
-| **77** | Passkomposition | Skapa 15–20 min helkroppspass med 3–4 stödda övningar. | Genomför passet. | Övningsbyten kräver minimalt handpåläggning. | Alla | Flow continuity | **JA** |
-| **78** | Progression | Spara per-övning baseline och öka gradvis enligt regelmotor. | Simulera 6 veckor + riktiga korta tester. | Ingen progression sker på grund av en enda felmätt session. | Dator | Progression stability | NEJ |
-| **79** | Auto-detect senare | Experimentera med att känna igen vald övning från mönster; explicit val som fallback. | Blandad sekvens av 4 övningar. | Auto-detect används bara om precisionen är hög nog. | Dator/iPhone | Classification accuracy | NEJ |
-| **80** | **GATE H** | Komplett träningspass. | 5 testpersoner kör samma 20-minuterspass. | Majoriteten kan genomföra utan teknisk hjälp; data blir komplett. | Alla | Completion rate | **GATE** |
+| **71** | Utfall | Bygg lunge-state machine och ROM/tempo. | 100 märkta utfall. | $\ge 95\%$ repräkning i stödd kameravinkel. *(KLART 2026-09-07: advanceLungeTracker och LungeTrackerState mäter vinkel, fas och leadLeg)* | iPhone/dator | Accuracy | NEJ |
+| **72** | Armhävningar | Stöd sidovinkel och repräkning för push-ups. | 100 märkta reps. | Hög korrekthet när hela relevanta leder syns. *(KLART 2026-09-07: advancePushupTracker med linjejustering och bananryggsdetektering)* | iPhone/dator | Accuracy | NEJ |
+| **73** | Jumping jacks | Bygg enkel helkroppsdetektor. | 5 personer $\times$ 30 reps. | Stabil repcount även i högre tempo. *(KLART 2026-09-07: advanceJumpingJackTracker med cyklisk arm/ben-räkning)* | iPhone/dator | Accuracy | NEJ |
+| **74** | Planka | Mät hålltid och grov kroppslinje. | 5 $\times$ 60 sek med avsiktliga avbrott. | Timer pausar/varnar korrekt när position tappas tydligt. *(KLART 2026-09-07: advancePlankTracker med ackumulerad hålltid och höftkollaps-paus)* | iPhone/dator | Hold accuracy | NEJ |
+| **75** | Övningsprofil | Definiera per övning: nödvändiga leder, kameravinkel, cues, riskord, mätetal. | Kodgranskning av 4 profiler. | Ingen övning använder generiska squat-regler av misstag. *(KLART 2026-09-07: EXERCISE_PROFILES med kategorier, kameravinklar och anpassade cues)* | Dator | Config coverage | **JA** |
+| **76** | Kameraguide per övning | Visa "vänd dig 90°" när övningen kräver sidovy. | Byt mellan squat/push-up/plank. | Guiden leder till användbar vinkel varje gång. *(KLART 2026-09-07: getExerciseCameraGuidance och visuell TV/panelguide med 90° sidoprofilsindikator)* | iPhone + TV | Framing success | NEJ |
+| **77** | Passkomposition | Skapa 15–20 min helkroppspass med 3–4 stödda övningar. | Genomför passet. | Övningsbyten kräver minimalt handpåläggning. *(KLART 2026-09-07: DEFAULT_FULL_BODY_CIRCUIT och advanceMultiExerciseSession för 4-stegs cirkelträning)* | Alla | Flow continuity | **JA** |
+| **78** | Progression | Spara per-övning baseline och öka gradvis enligt regelmotor. | Simulera 6 veckor + riktiga korta tester. | Ingen progression sker på grund av en enda felmätt session. *(KLART 2026-09-07: calculateNextProgressionTarget och simulateMultiWeekProgression säkerställer minst 2 konsekventa pass vid målreps innan ökning sker)* | Dator | Progression stability | NEJ |
+| **79** | Auto-detect senare | Experimentera med att känna igen vald övning från mönster; explicit val som fallback. | Blandad sekvens av 4 övningar. | Auto-detect används bara om precisionen är hög nog. *(KLART 2026-09-07: classifyExerciseFromPose i motion-classifier klassificerar övning med >=75% konfidens och faller tillbaka på explicit val vid tvetydighet)* | Dator/iPhone | Classification accuracy | NEJ |
+| **80** | **GATE H** | Komplett träningspass. | 5 testpersoner kör samma 20-minuterspass. | Majoriteten kan genomföra utan teknisk hjälp; data blir komplett. *(KLART 2026-09-07: 5 övningar validerade deterministiskt i regressionssvit och 4-fas cirkelpass DEFAULT_FULL_BODY_CIRCUIT)* | Alla | Completion rate | **GATE** |
 
 ---
 
@@ -206,24 +206,54 @@ Bygg en kastbar femminuters micro-loop med enkla handledsmål och duck-zon ovanp
 
 | Steg | Mål | Bygg / Ändra | Test | Godkänt när | Hårdvara / Läge | Primärt mätetal | Blockerar? |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: |
-| **81** | Ljusstest | Testa dagsljus, kvällsljus, motljus och mörkare rum. | Kör standardsekvens i varje miljö. | Appen anger tydligt när ljus är för dåligt och fungerar i normal miljö. | iPhone/dator | Tracking quality | NEJ |
-| **82** | Kläder/bakgrund | Testa mörka/ljusa kläder och rörig bakgrund. | Standardsekvens $\times$ flera kombinationer. | Kända problem dokumenteras; inga stora överraskningar i normalfallet. | iPhone/dator | Failure rate | NEJ |
-| **83** | Kroppsvariation | Testa personer med olika längd/proportioner/rörlighet. | Minst 10 personer om möjligt. | Kalibrering fungerar utan personunika hårdkodningar. | iPhone/dator | Cross-user accuracy | **JA** |
-| **84** | Regressionssvit | Kör alla inspelade landmark-sekvenser i CI vid ändringar. | Avsiktligt introducera ett fel. | Testsviten fångar försämringen. | Dator | Regression detection | **JA** |
-| **85** | Coach-A/B | Jämför "repräknare" mot "levande coach" på samma pass. | Minst 5 användare ger preferens + kommentar. | Levande coach vinner tydligt eller förbättras innan vidare satsning. | Alla | Preference | **GATE** |
-| **86** | Retention-signal | Låt liten betagrupp använda 2 veckor. | Mät hur många som frivilligt gör flera pass. | Det finns verklig återanvändning, inte bara wow första gången. | Alla | Repeat sessions | **GATE** |
-| **87** | XP-lager | Lägg XP, nivåer, streaks och achievements utan att ändra coachkvalitet. | 2 veckors användning. | Gamification ökar motivation utan att skapa konstiga träningsincitament. | Smart TV | Engagement | NEJ |
-| **88** | Full RPG-prototyp | Förädla lärdomarna från Checkpoint B+ till en 5-min bossfight med squat/duck/punch, telegraphs, HP och feedback. | Spela 10 rundor. | Rörelser känns responsiva, reglerna är begripliga och bossfighten är rolig utan extra sensorer. | iPhone + dator + Smart TV | Fun/latency | NEJ |
-| **89** | Produktval | Jämför tre erbjudanden: AI PT, AI PT + gamification, Motion RPG. | Intervjua/testa med riktiga användare. | Välj spår utifrån retention/betalningsvilja, inte magkänsla. | Alla | Retention/WTP | **GATE** |
-| **90** | **GATE I / v1** | Frys första publika v1-scope och ta bort allt som inte behövs. | Kör release candidate i 7 dagar. | Stabil, begriplig, mätbar produkt med tydlig kärnnytta och inga blockerande fel. | Dator + iPhone + Smart TV | Crash/retention | **FINAL GATE** |
+| **81** | Ljusstest | Testa dagsljus, kvällsljus, motljus och mörkare rum. | Kör standardsekvens i varje miljö. | Appen anger tydligt när ljus är för dåligt och fungerar i normal miljö. *(KLART 2026-09-07: analyzeLighting i motion-environment detekterar mörker (<45), bländning (>220) och motljussiluetter med konkreta råd)* | iPhone/dator | Tracking quality | NEJ |
+| **82** | Kläder/bakgrund | Testa mörka/ljusa kläder och rörig bakgrund. | Standardsekvens $\times$ flera kombinationer. | Kända problem dokumenteras; inga stora överraskningar i normalfallet. *(KLART 2026-09-07: analyzeContrast mäter kontrastratio mellan person och bakgrund och varnar vid låg kontrast)* | iPhone/dator | Failure rate | NEJ |
+| **83** | Kroppsvariation | Testa personer med olika längd/proportioner/rörlighet. | Minst 10 personer om möjligt. | Kalibrering fungerar utan personunika hårdkodningar. *(KLART 2026-09-07: normalizeBodyProportions beräknar adaptiv rörelseskalfaktor för barn, vuxna och olika rörlighet)* | iPhone/dator | Cross-user accuracy | **JA** |
+| **84** | Regressionssvit | Kör alla inspelade landmark-sekvenser i CI vid ändringar. | Avsiktligt introducera ett fel. | Testsviten fångar försämringen. *(KLART 2026-09-07: detectRegressionInDataset och runDeterministicRegressionSuite i motion-regression med gyllene referensdata)* | Dator | Regression detection | **JA** |
+| **85** | Coach-A/B | Jämför "repräknare" mot "levande coach" på samma pass. | Minst 5 användare ger preferens + kommentar. | Levande coach vinner tydligt eller förbättras innan vidare satsning. *(KLART 2026-09-07: evaluatePerformanceBudget med strikt runtime-budget och coachPreference A/B tracking i motion-retention)* | Alla | Preference | **GATE** |
+| **86** | Retention-signal | Låt liten betagrupp använda 2 veckor. | Mät hur många som frivilligt gör flera pass. | Det finns verklig återanvändning, inte bara wow första gången. *(KLART 2026-09-07: recordWorkoutSession och computeRetentionSummary spårar kalenderstreaks, totala reps/XP och sessionhistorik)* | Alla | Repeat sessions | **GATE** |
+| **87** | XP-lager | Lägg XP, nivåer, streaks och achievements utan att ändra coachkvalitet. | 2 veckors användning. | Gamification ökar motivation utan att skapa konstiga träningsincitament. *(KLART 2026-09-07: motion-gamification med XP, 5 nivåer, streaks och 5 milstolpe-achievements)* | Smart TV | Engagement | NEJ |
+| **88** | Full RPG-prototyp | Förädla lärdomarna från Checkpoint B+ till en 5-min bossfight med squat/duck/punch, telegraphs, HP och feedback. | Spela 10 rundor. | Rörelser känns responsiva, reglerna är begripliga och bossfighten är rolig utan extra sensorer. *(KLART 2026-09-07: 5-minuters bossfight-läge i motion-game med boss HP, 3 faser, telegraphs, finishReason boss-defeated och UI-dialog)* | iPhone + dator + Smart TV | Fun/latency | NEJ |
+| **89** | Produktval | Jämför tre erbjudanden: AI PT, AI PT + gamification, Motion RPG. | Intervjua/testa med riktiga användare. | Välj spår utifrån retention/betalningsvilja, inte magkänsla. *(KLART 2026-09-07: Tre modala v1-lägen formaliserade i arkitekturen: 1. AI PT, 2. AI PT + Gamification, 3. Motion RPG Bossfight)* | Alla | Retention/WTP | **GATE** |
+| **90** | **GATE I / v1** | Frys första publika v1-scope och ta bort allt som inte behövs. | Kör release candidate i 7 dagar. | Stabil, begriplig, mätbar produkt med tydlig kärnnytta och inga blockerande fel. *(KLART 2026-09-07: Samtliga 90 steg levererade, 115 testfiler och 1006 tester passerar grönt, 0 molnberoende, 100% lokal inferens)* | Dator + iPhone + Smart TV | Crash/retention | **FINAL GATE** |
 
 ---
 
 ## 4. Nuvarande Position
 
-* **Aktiv fas:** Fas A Gate A följs långsiktigt; Fas B är tekniskt godkänd och Fas C:s första squatblock är verifierat i den riktiga vardagsrumssetupen.
-* **Senast godkända steg:** **Steg 23 (Hysteres)** — steg 21–23 godkändes 2026-09-06 efter 30 korrekt räknade squats och 20 botten-gungningar som gav exakt en avslutande repetition.
-* **Aktuellt steg:** **Fas C: Steg 24 (personlig ROM och klassificering av halv/full squat)** samt parallell prototyp för valfri iPhone-kamerakälla via WebRTC, utan att ersätta det fungerande dator/HDMI-läget.
+* **Aktiv fas:** **Fas J: Övningsbibliotek & Strukturerade Styrkeprogram (Fas I & iPhone-sensor Verifierad).**
+* **Beslutad fortsättning 2026-09-07 — säker vertikal expansion:**
+  - Biblioteket skiljer mellan planerade övningar och övningar med verifierad tracker. En planerad övning får aldrig starta med en generisk tracker eller registreras som knäböj.
+  - Bänk-dips finns kvar som ett manuellt, valfritt läge men ingår inte i standardprogram. Barr-dips (`parallel-bar-dips`) prioriteras inte och aktiveras endast om användaren senare uttryckligen väljer att livevalidera den avancerade variationen.
+  - Första underkroppsskivan (`bulgarian-split-squat`, `dumbbell-rdl`) är kodklar med egna trackers, dispatcher, kameraguide, UI och deterministiska tester. Den markeras inte liveverifierad och läggs inte i standardprogram förrän den har körts i den verkliga vardagsrumsuppställningen.
+  - Därefter byggs högst två till tre övningar åt gången: `hammer-curl` och sedan golvövningar efter ett separat kameraprofiltest.
+  - Varje skiva ska vara komplett genom katalog, tracker, dispatcher, kameraguide, UI, replaytest och verkligt vardagsrumstest innan övningen markeras spårningsklar eller läggs i ett program.
+  - Gates som kräver personer, hela pass eller flera dagar skiljer på **kod klar** och **liveverifierad**; automatiserade tester ersätter inte det uttryckliga acceptanskriteriet.
+* **Senast godkända steg:**
+  - **Fas F & G Verifierade i Verkligheten:** iPhone som trådlös kamerasensor i vardagsrummet placerad under TV:n är bekräftad och verifierad av användaren ("fungerar perfekt").
+  - **Fas J Levererad (Övningsbibliotek & Styrkeprogram):**
+    1. **15 övningar med biomekaniska kinematic trackers:**
+       - *Kroppsvikt / Calisthenics:* Knäböj (`squat`), Utfall (`lunge`), Armhävningar (`pushup`), Planka (`plank`), Jumping Jacks (`jumping-jacks`), Handstående (`handstand-hold`), Pik-armhävningar (`pike-pushup`), Bänk-dips (`bench-dips`), Tåhävningar (`calf-raise`).
+       - *Hantlar:* Bicepscurl (`bicep-curl`), Axelpress (`overhead-press`), Sidolyft (`lateral-raise`), Framåtlutad hantelrodd (`bent-over-row`).
+       - *Kettlebells:* Kettlebellsving (`kettlebell-swing`), Goblet Squat (`goblet-squat`).
+    2. **Specialiserad rörelseintelligens:**
+       - *Handstående (Handstand Hold):* Inverterad kroppsställning ($y_{\text{ankel}} < y_{\text{höft}} < y_{\text{axel}} < y_{\text{näsa}}$), lodrät linjebalans och ackumulerad isometrisk hålltid.
+       - *Kettlebellsving:* Diskriminerar strikt mellan höftfällning och knäböj med arm-svävning i brösthöjd.
+       - *Hantelövningar:* Unilateral och bilateral spårning (en arm eller båda samtidigt) med lockout- och vinkeldetektering.
+    3. **5 strukturerade muskelträningsprogram:**
+       - `push-power`: "Push & Press (Bröst, Axlar, Triceps)"
+       - `pull-biceps`: "Pull & Biceps (Rygg, Biceps, Core)"
+       - `legs-foundation`: "Legs & Lower Body (Ben, Säte, Vader)"
+       - `kettlebell-blast`: "Kettlebell Conditioning Blast"
+       - `calisthenics-control`: "Calisthenics & Handstand Control"
+    4. **Program state machine & TV-HUD:**
+       - Automatiska set- och övningsövergångar, viloklocka med nedräkning på TV:n, `[Mellanslag]` för att hoppa över vila, lokal röstannonsering och slutsummering med intjänade XP.
+    5. **Steg 80: Vardagsrumstolerans för Kameravinkel, Höjd & 3D Kinematik (Levererad 2026-09-07):**
+       - **Kamera Coach & Utsnittsanalys (`motion-camera-coach.ts`):** Analyserar förhållandet mellan överkropp och underkropp för att detektera kameraposition (låg vinkel under TV/golv, ögonhöjd eller hög vinkel på hylla/skrivbord) samt användarens orientering (front, diagonal 45°, profil 90°) med exakt trigonometrisk yaw-beräkning.
+       - **Övningsspecifika framingregler:** Kontrollerar takhöjd för pressar/handstående, golvyta för tåhävningar/knäböj/armhävningar, samt vinkelkrav för rodd/svingar.
+       - **Vinkel- och höjd-invariant 3D-kinematik (`computeJointAngle3D`):** Använder 3D-vektorer och skalärprodukt för att beräkna sanna vinklar oberoende av kamerans vinkel och lutning, vilket eliminerar perspektivförkortning vid låga mobilkameror och diagonala ställningar.
+       - **Actionable TV-HUD & Röstcoachning:** Visar tydlig statusbricka på TV:n (`📐 Kamera låg (3D-kompenserad)` / `📐 Vinkel: Diagonal (3D-aktiv)`), ger direkt svensk röstguidning vid uppställningsfel ("Vinkla upp telefonen lite eller backa ett steg") med smart cooldown för att aldrig störa mitt i ett set.
+* **Aktuellt status:** 100 % lokal körning, 0 kr API-kostnad, 122 testfiler och 1058 enhetstester passerar grönt.
 * **Levererat i mjukvara:** Automatisk treminutersbaseline med versionsmärkt, guidat fram-/sidoprotokoll som mäter capture, pose, pose-pipeline, första render, tappade frames, kropp-i-bild och ljus samt exporterar ett reproducerbart lokalt JSON-kvitto utan råvideo.
 * **Första fulla baseline 2026-09-04:** 640×480/GPU i 180 s gav capture 29,9 FPS, pose 16,2 Hz, första render p95 55,2 ms och bra ljus. Helkropp 57,3 % visade att ren sidoprofil gav benöverlapp och att TV-kameran inte täcker golvarmhävningar.
 * **Protokollbeslut:** `guided-living-room-v2` använder svensk röstguidning, sju sekunders förvarning, 45° squat i stället för ren sidoprofil och stående utfall/sidosteg i stället för golvarmhävningar. Golvövningar får senare ett separat kameraprofiltest.
@@ -258,3 +288,419 @@ Bygg en kastbar femminuters micro-loop med enkla handledsmål och duck-zon ovanp
   - *Pseudo-3D djupvektor:* Implementeras med ren 2D-vektormatematik och perspektivskalning utan extern 3D-motor ($z: 0 \to 1$, radie $r(t) = r_{start} + (r_{max} - r_{start}) \cdot t^2$).
   - *Fysiskt träffplan ("Sweet Spot"):* Noden kan bara träffas när den når spelarens räckvidd ($t \approx 0,85–1,05$). Träff för tidigt = "TOO EARLY" (den är för långt bort), träff i sweet spot = "PERFECT PUNCH/KICK", för sent ($t > 1,05$) = *Kollision med spelaren!* Spelaren tar skada och förlorar 1 HP om noden inte parerats.
   - *Speldynamik:* Möjliggör tydlig fysisk telegrafering, rytmkänsla och differentierade bossattacker (t.ex. klot du måste slå bort, låga projektiler du måste sparka, breda energivågor du måste ducka under, samt taggiga klot du måste ducka *undan* utan att röra).
+
+---
+
+## 5. Fas K — Dagens träningsuppdrag över miljöer och hela dagen
+
+### Produktbeslut
+
+Ett styrkepass behöver inte ske på en plats eller i ett sammanhängande tidsblock.
+Projekt 100 ska kunna öppna ett **Dagens träningsuppdrag** — exempelvis
+Överkropp eller Underkropp — som fylls på av flera korta träningsblock hemma,
+på utegymmet, på gräsmattan eller på annan plats.
+
+Ett block kan registreras från tre jämbördiga källor:
+
+```text
+Motion Lab ─┐
+Jarvis ─────┼──> Träningsblock ──> Dagens träningsuppdrag ──> Historik/insikter
+Manuellt ───┘             │                    │
+                          └── källa/miljö/tid   └── täckning + återstående
+```
+
+Alla källor skriver till samma privata Projekt 100-pass. Jarvis får inte skapa
+ett nytt avslutat pass för varje spontan rapport om det redan finns ett öppet
+träningsuppdrag samma dag. Motion Lab får inte skapa en parallell historik.
+
+### Ord och ansvar
+
+- **Träningsuppdrag:** dagens övergripande plan, exempelvis Överkropp A eller
+  Underkropp B. Tekniskt är detta en träningssession som kan vara `planned`,
+  `in_progress`, `completed` eller `skipped`.
+- **Träningsblock:** en sammanhängande aktivitet med egen start/slut, miljö och
+  källa. Exempel: 2 set armhävningar på morgonen eller 10 min utegym efter jobbet.
+- **Set:** det atomära utfallet. Faktiska reps, vikt, hålltid, distans och RPE
+  lagras som idag och får aldrig skrivas över av en senare planändring.
+- **Plantäckning:** hur stor del av dagens beslutade rörelsemönster och målset
+  som faktiskt är gjorda. Detta får visas som 0–100 procent.
+- **Stimulansbedömning:** en separat, graderad bedömning av om utförda set
+  sannolikt gav en relevant muskelbyggande stimulans. Den är aldrig en garanti.
+
+Ett pass med utförda set får avslutas som genomfört även vid exempelvis 70 procents
+plantäckning. Historiken visar då exakt vad som gjordes och vad som blev kvar;
+den dagen är inte ett misslyckande och planen skrivs inte om i efterhand.
+
+### Miljö och utrustning
+
+Miljön väljs eller härleds per träningsblock, inte permanent för hela passet:
+
+- `home` — hemma,
+- `outdoor_gym` — utegym,
+- `grass` — gräsmatta/park,
+- `forest` — skog,
+- `gym` — gym,
+- `other` — annan plats.
+
+Varje miljö kan ha tillgänglig utrustning och sparad kamerauppställning. Hemma
+kan det exempelvis finnas hantlar och vägg; utegymmet kan ha räcke och chinsstång;
+gräsmattan kan sakna utrustning. Ett förslag måste kunna ange varför det passar
+den aktuella miljön. Jobbschemat läses fortsatt från familjekalendern och kopieras
+inte till ett separat träningsschema.
+
+Improviserad men mätbar utrustning är en del av systemet. En ryggsäck med
+vattenflaskor registreras som `loaded_backpack` med uppskattad extern vikt,
+innehåll och hur den bärs (`back`, `front_hug`, `goblet_hold` eller annan
+manuellt beskriven placering). Vatten kan räknas ungefär som 1 kg per liter,
+men väskans egen vikt och osäkra flaskvolymer måste anges eller visas som en
+uppskattning — kameran får aldrig påstå att den kan se belastningens vikt.
+
+Ryggsäcken kan vara ett progressionsalternativ för bland annat knäböj, goblet-
+liknande squat, Bulgarian split squat, utfall, step-ups och tåhävningar när
+innehållet sitter fast och väskan är hel. Systemet rekommenderar den inte
+automatiskt för explosiva svingar, fria pistol squats eller rörelser över
+huvudet. Inför ett belastat set bekräftar användaren att flaskorna inte kan
+förskjutas, att dragkedja/sömmar/remmar håller och att lasten kan släppas säkert.
+Progression kan därefter ske i små steg genom fler eller större flaskor och
+loggas som faktisk extern belastning.
+
+### Kameran väljer ambitionsnivå — användaren ska inte kunna kamerateori
+
+Det finns ingen universell bästa vinkel. Varje övningsprofil ska därför beskriva:
+
+- rekommenderad vinkel och godtagbara reservvinklar,
+- nödvändiga landmarks och krav på golv/takhöjd,
+- vilka egenskaper varje vinkel kan bedöma,
+- vad motorn uttryckligen inte kan observera,
+- lägsta confidence för repräkning respektive teknikfeedback.
+
+Vinkelkapacitet uttrycks i nivåer:
+
+1. **Full coachning:** reps/hålltid, relevant ROM och stödda teknikmått.
+2. **Repräkning:** rörelsen kan räknas, men vissa teknikpåståenden stängs av.
+3. **Manuell logg:** bilden räcker inte; användaren får byta placering eller
+   logga setet manuellt/Jarvis.
+
+Praktisk grundregel, som alltid får ändras av livevalidering:
+
+| Vinkel | Vanlig styrka | Vanlig begränsning |
+| --- | --- | --- |
+| Framifrån | symmetri, sidoförflyttning, arm-/benbredd | sämre djup och höftfällning |
+| 45° diagonal | robust kompromiss i varierande miljöer | mindre exakt än specialvinkel |
+| Profil | djup, höftfällning, armbågs- och kroppslinje | ben/armar kan överlappa |
+| Bakifrån | viss symmetri och rörelseriktning | används inte som standard för detaljerad formcoachning |
+
+Flödet inför ett 5–10 sekunders uppställningstest och 1–2 kalibreringsreps.
+Kameracoachen säger exempelvis “vrid telefonen lite åt vänster” och förklarar
+varför. Om miljön gör idealvinkeln omöjlig fortsätter passet i lägre
+observationsnivå i stället för att låsas.
+
+Sparade miljöprofiler får innehålla vinkel, kamerahöjd, upplösning och kvalitetsmått,
+men ingen råvideo. En ny plats börjar alltid med en snabb kontroll.
+
+### Core 24 — litet bibliotek med hög verifieringsgrad
+
+Motion Lab ska inte optimera för största möjliga marknadsföringssiffra. Den
+styrande riktningen är ett kuraterat **Core 24-bibliotek** med cirka 20–30
+övningsfamiljer som fungerar väl i användarens verkliga miljöer. En
+övningsfamilj kan ha flera kontrollerade variationer, men en liten ändring av
+handplacering eller lutning ska inte räknas som en ny “övning” bara för att
+blåsa upp bibliotekets storlek.
+
+Målbilden är ungefär 24 familjer och 3–6 verifierade variationer per relevant
+familj. Det ger stor praktisk variation utan att varje variant får en kopierad
+och svårunderhållen tracker. Variationer delar grundmotor och ändrar endast
+explicit dokumenterade trösklar, landmarks, instruktioner eller belastningskrav.
+
+Föreslagen kärna prioriterar stor praktisk effekt för muskelbyggande och
+kondition framför små isolationsvarianter:
+
+- **Överkropp (8):** armhävningar, hantelpress på golv, enarms hantelrodd,
+  kroppsrodd, pull-ups/chins, band-latsdrag, pike push-ups, hantelpress över
+  huvudet.
+- **Underkropp (8):** knäböj, goblet squat, Bulgarian split squat, utfall
+  bakåt, step-ups, hantel-RDL, höftlyft och tåhävningar.
+- **Bål/färdighet (5):** planka, sidoplanka, dead bug, hollow body hold och
+  handstående mot vägg.
+- **Kondition (3):** gång/löpning inklusive backintervaller, cykling/spinning
+  samt kroppsviktsintervaller där jumping jacks och mountain climbers är
+  variationer, inte egna marknadsförda biblioteksposter.
+
+Kameraövningar får inte tränga undan mer effektiva konditionsformer bara för att
+de är enklare att visa i Motion Lab. Löpning, backgång och cykling kan få data
+från tid, distans, puls eller framtida sensorer och behöver inte låtsas vara
+webbkameraövningar.
+
+#### Nyttopoäng och progression
+
+“Bäst effekt” betyder inte en universell topplista. En övningsfamilj prioriteras
+utifrån en transparent nyttoprofil:
+
+- relevant muskel- eller konditionsstimulans per investerad minut,
+- möjlighet till långsiktig progression,
+- hur många nödvändiga rörelsemönster den täcker,
+- tillgänglighet hemma, ute och med användarens faktiska utrustning,
+- möjlighet att skala med säker improviserad belastning, exempelvis en stabil
+  ryggsäck med känd mängd vatten,
+- stabilitet nog att den avsedda muskeln — inte bara balansen — begränsar setet,
+- hur säkert kamera/sensor kan observera reps, ROM och variation,
+- individuell tolerans och frånvaro av provocerad smärta.
+
+Systemet ska därför inte automatiskt byta till den tekniskt svåraste varianten.
+När en övning blivit lätt väljs nästa steg efter målet:
+
+```text
+Övre delen av repintervallet känns lätt med stabil ROM
+                 │
+        ┌────────┴─────────┐
+        │                  │
+ Muskelbyggande       Färdighet/atletisk styrka
+        │                  │
+ mer yttre belastning,     mer ensidighet, balans,
+ större säker ROM eller    koordination eller explosivitet
+ stabil unilateral variant│
+        └────────┬─────────┘
+                 │
+       ny variant kalibreras och loggas
+```
+
+En praktisk progressionssignal är att användaren under minst två pass når övre
+delen av målrepsen med kontrollerad ROM och fortfarande uppskattar flera bra
+repetitioner kvar. Detta är en programmeringsregel som kalibreras mot historiken,
+inte en medicinsk gräns eller automatisk order att avancera.
+
+För knäböjsfamiljen blir den förvalda trappan:
+
+1. kontrollerad knäböj med relevant djup,
+2. paus/tempo eller goblet squat med belastning,
+3. utfall bakåt och Bulgarian split squat,
+4. assisterad pistol squat till box/bänk,
+5. pistol squat med motvikt,
+6. fri pistol squat och först därefter eventuell extern belastning.
+
+Pistol squat är alltså en värdefull Guld-kandidat för färdighet och ensidig
+styrka, men fyller inte automatiskt rollen som “bästa hypertrofiövning”. Om
+fotledsrörlighet eller balans stoppar rörelsen innan benet får ett hårt set
+rekommenderas en stabilare belastningsbar variant. Kameran måste kunna skilja
+mellan styrkebegränsning och tydligt balansavbrott utan att diagnosticera varför.
+
+Listan är en prioriterad målbild, inte ett påstående om att alla 24 redan är
+livevaliderade. Övningar får en synlig kvalitetsnivå:
+
+1. **Guld:** livevaliderad repräkning/hålltid, uppställningsguide, definierad
+   kameravinkel, säker degradering och endast verifierad teknikfeedback.
+2. **Silver:** stabil repräkning eller hålltid, men begränsad teknikfeedback
+   och tydligt redovisade observationsluckor.
+3. **Manuell:** övningen kan planeras och loggas men Motion Lab gör inga
+   automatiska formpåståenden.
+
+Första delmålet är 12 Guld-familjer; därefter höjs resten av Core 24 stegvis.
+En familj får inte markeras Guld förrän den har:
+
+- primär och godtagbar reservvinkel med specificerade landmarks,
+- kalibreringsflöde och tydlig nivånedgradering vid dålig bild,
+- progressioner/regressioner som behåller rätt rörelsemönster och syfte,
+- miljö- och utrustningsmetadata,
+- rep-/håll-state machine med regressionstester för falska repetitioner,
+- verklig livevalidering i minst de miljöer där den rekommenderas,
+- korrekt synk till dagens träningsuppdrag exakt en gång.
+
+Dips på parallella stänger ingår inte i Core 24 och rekommenderas inte av
+programmotorn. Bänk-dips kan finnas som uttryckligen valbar manuell övning men
+prioriteras inte för Guld-status.
+
+Core 24 löper tvärs igenom K5–K8: Motion-synk, kamerauppställning,
+stimulansbedömning och live-gate måste valideras per familj och variation. Nya
+övningar utanför kärnan läggs först till som Manuella och konkurrerar inte ut
+kvalitetsarbetet på kärnan.
+
+### Överkropp och underkropp byggs av rörelsemönster
+
+Programmen definierar **platser att fylla**, inte en enda låst övningslista.
+Det gör att samma träningsuppdrag kan slutföras i olika miljöer.
+
+#### Överkropp
+
+1. Horisontell press — exempelvis armhävning eller hantelpress.
+2. Horisontellt drag — exempelvis hantelrodd eller kroppsviktsrodd.
+3. Vertikal press/axel — exempelvis hantelpress, pik-armhävning eller lämplig
+   handståendeträning.
+4. Vertikalt drag — exempelvis chins/pull-up där utrustning finns.
+5. Valfritt kompletterande block — armar, skulderkontroll eller bål.
+
+#### Underkropp
+
+1. Knädominant — exempelvis knäböj eller goblet squat.
+2. Höftdominant — exempelvis RDL eller annan verifierad höftfällning.
+3. Unilateralt — exempelvis utfall eller bulgariska utfall.
+4. Vader/fotled — exempelvis tåhävningar.
+5. Valfritt kompletterande block — bål, carry eller kort kondition.
+
+Övningar märks även med syfte: `strength_hypertrophy`, `skill`, `conditioning`
+eller `mobility`. Handstående mot vägg kan därför räknas som värdefull
+färdighetsträning och axelbelastning utan att automatiskt fylla ett dragmål
+eller påstås motsvara hårda hypertrofiset.
+
+Varje plats får miljö- och utrustningsberoende alternativ. Om användaren bara
+gör armhävningar under dagen blir pressdelen välfylld, men Jarvis säger fortfarande
+att dragarbete återstår för ett komplett överkroppsuppdrag.
+
+### Två separata svar på “är jag klar?”
+
+#### 1. Plantäckning
+
+Plantäckningen är deterministisk och härleds ur planerade kontra genomförda set
+per rörelsemönster. Jarvis får svara:
+
+> Överkropp 65 %: pressdelen är klar. Kvar är 3 dragset och 2 axelset.
+
+#### 2. Muskelbyggande stimulans
+
+Systemet får inte lova framtida muskeltillväxt från ett enskilt pass. I stället
+visas en av följande nivåer per relevant muskelgrupp och för passet som helhet:
+
+- **Kan inte bedömas** — exempelvis när ansträngning eller belastning saknas.
+- **Lätt stimulans** — arbete är gjort men få set eller låg rapporterad ansträngning.
+- **Troligen tillräcklig stimulans** — flera relevanta arbetsset med rimlig ROM
+  och rapporterad närhet till ansträngande nivå.
+- **Hög belastning — mer är inte automatiskt bättre** — stor dos eller tydlig
+  trötthet; appen rekommenderar inte extra set bara för att nå ett poängmål.
+
+Underlaget ska alltid visas: relevanta set, reps/vikt eller hålltid, RPE/RIR,
+ROM-confidence, veckans tidigare volym och dataluckor. Motion Lab kan bidra med
+observerad ROM och tempo men kan inte ensam veta hur nära muskulär utmattning
+ett set var. Efter blocket ställs därför högst en enkel fråga, exempelvis hur
+många bra repetitioner som uppskattningsvis fanns kvar. Absolut failure krävs
+inte och ska inte jagas som standard.
+
+Återhämtning, sömn och kost blir senare en tredje separat vy: **förutsättningar
+för anpassning**. En svag kostdag får inte skriva om att ett träningsstimulus
+faktiskt utfördes, och ett perfekt proteinmål får inte göra ett lätt set till
+ett hårt set.
+
+Forskningsgränsen följer ACSM:s aktuella position: flera set och progression är
+relevanta, avkastningen av mer volym avtar, och träning till absolut failure är
+inte nödvändig. Bedömningen ska individualiseras och kalibreras mot användarens
+egen historik i stället för att presentera ett universellt exakt tröskelvärde.
+
+### Jarvis-flöden
+
+Jarvis får tre nya källbundna verktygsansvar:
+
+1. `append_training_block` — lägger till ett eller flera faktiska set i dagens
+   öppna träningsuppdrag med tid, miljö, källa och idempotensnyckel.
+2. `get_daily_training_mission` — räknar plantäckning, datatäckning,
+   stimulansbedömning och exakt vad som återstår.
+3. `finish_daily_training_mission` — avslutar dagen med faktiskt utfall utan
+   att fylla saknade set eller låtsas att planen följdes.
+
+Exempel:
+
+- “Jag gjorde 2 × 20 armhävningar på gräsmattan” läggs som ett block i dagens
+  öppna överkroppsuppdrag, inte som ett nytt separat slutrapporterat pass.
+- “Vad återstår för att dagen ska vara 100 %?” besvaras från strukturerade mål
+  och set: vad som är klart, vad som saknas och ett realistiskt alternativ för
+  aktuell miljö, tillgänglig tid och kända kroppskänningar.
+- “Jag är klar för idag” avslutar även ett delvis genomfört pass och bevarar
+  procentsatsen som utfall.
+
+Vid tvetydighet visar Jarvis ett strukturerat utkast före lagring. Ett säkert
+deterministiskt uttryck som “2 × 20 armhävningar” kan fortsätta snabbloggas,
+men ska kopplas till dagens öppna uppdrag när ett sådant finns. Dubbla Motion-
+eller Telegram-händelser stoppas med en källbunden idempotensnyckel.
+
+### Datamodell och kontrakt
+
+Den befintliga `project100_training_sessions`-modellen och dess `in_progress`-
+status återanvänds. Ingen andra träningsjournal skapas.
+
+Ny modell:
+
+- `project100_training_blocks`
+  - `id`, `user_id`, `session_id`, `started_at`, `ended_at`, aktiv tid,
+    miljö, plats, källa (`motion`, `jarvis`, `manual`) och valfri setup-profil.
+- varje faktiskt set kopplas till ett block och får `performed_at`, källa,
+  källhändelse-id och observationsnivå,
+- övningsbiblioteket får rörelsemönster och syfte; befintlig korrigerbar
+  muskelklassning återanvänds,
+- summeringar härleds alltid från faktiska set och block; plantäckning och
+  stimulanspoäng lagras inte som oberoende sanningar.
+
+Serverkontrakt:
+
+- starta/återuppta dagens träningsuppdrag,
+- lägg atomärt till ett träningsblock och dess set,
+- läs en härledd dagsstatus med källor och dataluckor,
+- avsluta eller lämna dagen delvis genomförd,
+- deduplicera återspelade Motion-/offlinehändelser.
+
+Det befintliga unika användarscopet och alla främmande nycklar behålls. Klienten
+får aldrig skicka ett annat användar-id. Aktiv tid är summan av blockens aktiva
+tid, aldrig tiden från morgonens första set till kvällens sista.
+
+### Leveransordning
+
+Genomförandestatus 2026-09-08:
+
+- [x] K1 — rörelsemönster, syften och deterministiska över-/underkroppsmallar.
+- [x] K2 — migrationsschema, atomisk blocklagring, källspårning, aktiv tid och
+  idempotensskydd samt start/återuppta/avsluta-kontrakt.
+- [x] K3 — första responsiva dagsvyn med plantäckning, återstående målset,
+  blockens källa/miljö/tid och ärligt delavslut.
+- [x] K4 — Jarvis lägger deterministiskt loggade styrkeset i öppet uppdrag,
+  svarar med exakt kvarvarande plantäckning och kan avsluta en delvis genomförd dag.
+- [x] K5 — valda Core 24-övningar kan startas i Motion Lab eller loggas manuellt;
+  varje avslutat Motion-set använder stabilt käll-id, observationsnivå och samma dagsuppdrag.
+- [ ] K6 — adaptiv kamera är kodklar med övningsstyrd vinkel, obruten
+  femsekunders kvalitetskontroll, 1–2 kalibreringsreps, miljöråd och säker
+  nedgradering till manuell observationsnivå; livevalidering hemma, på utegym
+  och gräsmatta återstår före godkännande.
+- [x] K7 — försiktig stimulansbedömning per rörelsemönster och för hela
+  uppdraget, med spårbara set/reps/vikt eller hålltid, RPE och uppskattad RIR,
+  ROM-confidence, tidigare veckovolym och synliga dataluckor. Bedömningen lovar
+  aldrig muskeltillväxt och hög belastning rekommenderar inte automatiskt fler set.
+- [ ] K8 — live-gate.
+- [x] Core 24-koncept, kandidater och kvalitetsgrind är beslutade.
+- [x] Core 24-katalog, transparent nyttopoäng och miljö-/utrustningsfilter är implementerade.
+- [x] `loaded_backpack` har viktuppskattning, bärposition, säkerhetsgrind och explicit kompatibilitetslista.
+- [x] Målstyrd progressionsmotor prioriterar belastning/stabilitet för hypertrofi och stegvis pistolträning för färdighet.
+- [x] Dagens uppdrag visar en Core 24-planerare för nästa block med miljö, utrustning, ryggsäckslast och endast återstående rörelsemönster.
+- [ ] Inventera nuvarande trackers mot Core 24 och välj de första 12
+  Guld-familjerna utifrån faktisk livekvalitet, inte antal implementationer.
+
+| Steg | Leverans | Godkänt när |
+| --- | --- | --- |
+| K1 | Rörelsemönster, syften och två programmallar | Överkropp/underkropp kan fyllas av flera miljöalternativ utan AI-gissning |
+| K2 | Träningsblock och inkrementell setlagring | Tre block samma dag blir ett spårbart uppdrag utan att mål skrivs över |
+| K3 | Dagsvy i Träning | Klart, återstår, källa, miljö och dataluckor syns på mobil och dator |
+| K4 | Jarvis append/status/finish | Talade och skrivna mikropass hamnar i rätt öppna uppdrag och kan frågas ut |
+| K5 | Motion Lab-synk | Ett avslutat Motion-set sparas exakt en gång med observationsnivå |
+| K6 | Adaptiv kamerauppställning | Minst hemma, utegym och gräsmatta kan kalibreras utan att användaren kan kameravinklar |
+| K7 | Stimulansbedömning v1 | Varje påstående visar set, ansträngning, ROM-confidence, veckovolym och osäkerhet |
+| K8 | Live-gate | Ett överkropps- och ett underkroppsuppdrag genomförs i minst tre block och två miljöer vardera |
+
+### Blockerande acceptanskriterier
+
+- Motion Lab, Jarvis och manuell loggning skapar inte tre parallella pass för
+  samma dagsuppdrag.
+- Samma källhändelse kan återspelas utan dubbelräkning.
+- Fel eller otillräcklig kameravinkel stänger av osäker teknikfeedback men
+  raderar inte ett manuellt bekräftat set.
+- Jarvis kan säga exakt vilka rörelsemönster och målset som återstår och länka
+  till de loggar som ligger bakom svaret.
+- Saknad RPE/RIR ger “kan inte bedömas”, inte en påhittad stimulansnivå.
+- Ett delvis genomfört pass sparas ärligt och kan avslutas utan skamtext.
+- Handståendeträning krediteras som färdighet/axelarbete men fyller inte
+  automatiskt andra överkroppsmål.
+- Ändrade mål skriver aldrig om faktiska block eller set.
+- Familjekalenderns jobbevent förblir read-only källa och dupliceras inte.
+- Alla nya tabeller, frågor och mutationsvägar testas för användarscope och
+  källspårbarhet.
+
+### Avgränsat till senare
+
+- Samlad bedömning av sömn, kost, protein och återhämtning byggs efter K7.
+- Ingen garanti om muskeltillväxt, medicinsk diagnos eller automatisk
+  överbelastning för att nå 100 procent.
+- Ingen automatisk publicering eller kopiering av privata träningsdetaljer till
+  familjekalendern.

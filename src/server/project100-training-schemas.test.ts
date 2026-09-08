@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  project100DailyMissionStartSchema,
   project100SessionCreateSchema,
   project100TemplateCreateSchema,
+  project100TrainingBlockAppendSchema,
   project100TrainingIdSchema,
 } from "@/server/project100-training-schemas";
 
@@ -126,5 +128,84 @@ describe("Projekt 100 training contracts", () => {
     for (const hostile of ["../templates", "a/b", "", "-leading-dash", "a b"]) {
       expect(() => project100TrainingIdSchema.parse(hostile), hostile).toThrow();
     }
+  });
+
+  it("accepts only explicit upper or lower daily missions", () => {
+    expect(
+      project100DailyMissionStartSchema.parse({
+        missionType: "upper",
+        sessionDate: "2026-08-26",
+      }),
+    ).toEqual({ missionType: "upper", sessionDate: "2026-08-26" });
+    expect(() =>
+      project100DailyMissionStartSchema.parse({
+        missionType: "full_body",
+        sessionDate: "2026-08-26",
+      }),
+    ).toThrow();
+  });
+
+  it("requires replay protection for Motion and Jarvis blocks", () => {
+    const block = {
+      startedAt: "2026-08-26T08:00:00.000Z",
+      endedAt: "2026-08-26T08:05:00.000Z",
+      environment: "grass",
+      source: "motion",
+      exercises: [
+        {
+          name: "Armhävningar",
+          movementPattern: "horizontal_push",
+          purpose: "strength_hypertrophy",
+          sets: [
+            {
+              reps: 20,
+              performedAt: "2026-08-26T08:04:00.000Z",
+              sourceEventId: "motion-set-1",
+              observationLevel: "rep_counting",
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(() => project100TrainingBlockAppendSchema.parse(block)).toThrow(/källhändelse-id/);
+    expect(() =>
+      project100TrainingBlockAppendSchema.parse({ ...block, sourceEventId: "motion-evt-1" }),
+    ).not.toThrow();
+    expect(() =>
+      project100TrainingBlockAppendSchema.parse({ ...block, source: "manual" }),
+    ).not.toThrow();
+    expect(() => project100TrainingBlockAppendSchema.parse({
+      ...block,
+      sourceEventId: "motion-evt-1",
+      exercises: [{
+        ...block.exercises[0],
+        sets: [{ ...block.exercises[0].sets[0], romConfidence: 1.1 }],
+      }],
+    })).toThrow();
+  });
+
+  it("rejects reversed block times and empty performed sets", () => {
+    const block = {
+      startedAt: "2026-08-26T08:05:00.000Z",
+      endedAt: "2026-08-26T08:00:00.000Z",
+      environment: "home",
+      source: "manual",
+      exercises: [
+        {
+          name: "Knäböj",
+          movementPattern: "knee_dominant",
+          purpose: "strength_hypertrophy",
+          sets: [
+            {
+              performedAt: "2026-08-26T08:04:00.000Z",
+              observationLevel: "manual",
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(() => project100TrainingBlockAppendSchema.parse(block)).toThrow();
   });
 });

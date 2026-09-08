@@ -553,6 +553,110 @@ describe("motion-game", () => {
     expect(result.secondaryTarget).not.toBeNull();
     expect(result.hits).toBe(0);
   });
+
+  describe("Full RPG Bossfight Prototype (Steg 88)", () => {
+    it("initializes a 5-minute boss fight session with boss HP and phase 1", () => {
+      const bossGame = startMotionGame(pose(1), 1_000, 16 / 9, {
+        bossFight: true,
+        durationMs: 300_000,
+        bossMaxHp: 1000,
+      })!;
+
+      expect(bossGame.mode).toBe("boss-fight");
+      expect(bossGame.bossHp).toBe(1000);
+      expect(bossGame.bossMaxHp).toBe(1000);
+      expect(bossGame.bossPhase).toBe(1);
+      // 5-minute duration (300_000 ms)
+      expect(bossGame.endsAt).toBe(bossGame.startedAt + 300_000);
+    });
+
+    it("inflicts boss damage upon connecting hits and transitions phases", () => {
+      const bossGame = startMotionGame(pose(1), 0, 16 / 9, {
+        bossFight: true,
+        bossMaxHp: 100,
+      })!;
+
+      const running = advanceMotionGame(bossGame, pose(2), MOTION_GAME_COUNTDOWN_MS);
+
+      const targetHitState = {
+        ...running,
+        bossHp: 100,
+        target: {
+          id: 50,
+          x: 0.25,
+          y: 0.4,
+          radius: 0.08,
+          spawnedAt: 1_000,
+          expiresAt: 15_000,
+          kind: "wide" as const,
+        },
+        previousLeftHand: { x: 0.1, y: 0.4 },
+      };
+
+      // Hit the target with left hand (punch damage ~25)
+      const hitPose = pose(3, { 15: { x: 0.25, y: 0.4, visibility: 0.95 } });
+      const afterHit = advanceMotionGame(targetHitState, hitPose, MOTION_GAME_COUNTDOWN_MS + 200);
+
+      expect(afterHit.bossHp).toBeLessThan(100);
+      expect(afterHit.hits).toBe(1);
+    });
+
+    it("triggers boss-defeated finish reason when boss HP reaches 0", () => {
+      const bossGame = startMotionGame(pose(1), 0, 16 / 9, {
+        bossFight: true,
+        bossMaxHp: 20,
+      })!;
+
+      const running = advanceMotionGame(bossGame, pose(2), MOTION_GAME_COUNTDOWN_MS);
+
+      // Boss with only 10 HP left
+      const lowHpState = {
+        ...running,
+        bossHp: 10,
+        target: {
+          id: 50,
+          x: 0.25,
+          y: 0.4,
+          radius: 0.08,
+          spawnedAt: 1_000,
+          expiresAt: 15_000,
+          kind: "wide" as const,
+        },
+        previousLeftHand: { x: 0.1, y: 0.4 },
+      };
+
+      const hitPose = pose(3, { 15: { x: 0.25, y: 0.4, visibility: 0.95 } });
+      const defeatedState = advanceMotionGame(lowHpState, hitPose, MOTION_GAME_COUNTDOWN_MS + 200);
+
+      expect(defeatedState.bossHp).toBe(0);
+      expect(defeatedState.status).toBe("finished");
+      expect(defeatedState.finishReason).toBe("boss-defeated");
+    });
+
+    it("spawns 3D projectiles in boss fight and allows sweet-spot interception", () => {
+      const bossGame = startMotionGame(pose(1), 0, 16 / 9, {
+        bossFight: true,
+        bossMaxHp: 1000,
+      })!;
+
+      // Advance into running state past projectile spawn delay
+      const running = advanceMotionGame(bossGame, pose(2), MOTION_GAME_COUNTDOWN_MS + 4000);
+      expect(running.projectiles).toBeDefined();
+      expect(running.projectiles!.length).toBeGreaterThan(0);
+
+      const proj = running.projectiles![0];
+      expect(proj.state).toBe("flying");
+
+      // Advance directly to sweet spot of this projectile
+      const sweetPose = pose(3, {
+        15: { x: proj.targetX, y: proj.targetY, visibility: 0.95 },
+      });
+      const parriedState = advanceMotionGame(running, sweetPose, proj.sweetSpotAt);
+      expect(parriedState.hits).toBeGreaterThan(running.hits);
+      expect(parriedState.score).toBeGreaterThan(running.score);
+      expect(parriedState.bossHp).toBeLessThan(running.bossHp!);
+    });
+  });
 });
 
 

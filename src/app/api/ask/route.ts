@@ -32,6 +32,7 @@ export async function POST(request: Request) {
     const agentResult = await processJarvisAgentMessage(actor, input.question, {
       channel: "web",
       personName,
+      sourceEventId: request.headers.get("x-request-id") || `ask:${crypto.randomUUID()}`,
     });
 
     const response: AssistantAnswer = {

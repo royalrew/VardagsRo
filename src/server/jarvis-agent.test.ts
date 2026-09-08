@@ -154,6 +154,9 @@ const dependencies = vi.hoisted(() => {
     memoryId: "mem-101",
   })),
   openAIConfig: vi.fn(() => null), // Fallback mode in unit tests
+  loadProject100DailyTrainingMission: vi.fn(async (): Promise<unknown> => null),
+  appendProject100TrainingBlock: vi.fn(),
+  finishProject100DailyTrainingMission: vi.fn(),
 }; });
 
 vi.mock("@/server/database", () => ({
@@ -191,6 +194,11 @@ vi.mock("@/server/project100-training", () => ({
   loadProject100TrainingSessions: dependencies.loadProject100TrainingSessions,
   loadProject100TrainingTemplates: dependencies.loadProject100TrainingTemplates,
   updateProject100TrainingSession: dependencies.updateProject100TrainingSession,
+}));
+vi.mock("@/server/project100-training-missions", () => ({
+  loadProject100DailyTrainingMission: dependencies.loadProject100DailyTrainingMission,
+  appendProject100TrainingBlock: dependencies.appendProject100TrainingBlock,
+  finishProject100DailyTrainingMission: dependencies.finishProject100DailyTrainingMission,
 }));
 vi.mock("@/server/project100-content", () => ({
   createProject100ContentProject: dependencies.createProject100ContentProject,
@@ -266,12 +274,12 @@ describe("jarvis-agent", () => {
   it("logs unhandled queries to capability gaps backlog", async () => {
     const res = await processJarvisAgentMessage(
       TEST_ACTOR,
-      "När ska bilen besiktigas?",
+      "Vad kostar elen idag?",
       { channel: "telegram", personName: "Jimmy" },
     );
     expect(dependencies.logJarvisCapabilityGap).toHaveBeenCalledWith(
       TEST_ACTOR,
-      "När ska bilen besiktigas?",
+      "Vad kostar elen idag?",
       "telegram",
       expect.objectContaining({ detectedIntent: "unhandled_query" }),
     );
@@ -807,5 +815,75 @@ describe("jarvis-agent", () => {
     expect(dependencies.removeTask).toHaveBeenCalled();
     expect(res.executedActions).toContain("delete_item");
     expect(res.text).toContain("Tog bort uppgiften");
+  });
+
+  describe("Jarvis Wishes: Kylskåpstömning & Matförslag", () => {
+    it("handles recipe suggestions from ingredients ('Vad kan vi laga på köttfärs och pasta?')", async () => {
+      const res = await processJarvisAgentMessage(
+        TEST_ACTOR,
+        "Vad kan vi laga på köttfärs och pasta?",
+        { personName: "Jimmy" },
+      );
+
+      expect(res.executedActions).toContain("suggest_fridge_meals");
+      expect(res.text).toMatch(/Köttfärssås/i);
+      expect(res.text).toMatch(/protein/i);
+      expect(res.text).toMatch(/inköpslistan/i);
+    });
+
+    it("handles fridge clearing prompts ('Kylskåpstömning: jag har ägg och potatis i kylen')", async () => {
+      const res = await processJarvisAgentMessage(
+        TEST_ACTOR,
+        "Kylskåpstömning: jag har ägg och potatis i kylen",
+        { personName: "Jimmy" },
+      );
+
+      expect(res.executedActions).toContain("suggest_fridge_meals");
+      expect(res.text).toMatch(/protein/i);
+      expect(res.text).toMatch(/ägg|potatis|omelett|pyttipanna/i);
+    });
+  });
+
+  describe("Jarvis Wishes: Bilen & Fordon", () => {
+    it("answers winter tyre regulations and deadlines ('När måste jag byta till vinterdäck?')", async () => {
+      const res = await processJarvisAgentMessage(
+        TEST_ACTOR,
+        "När måste jag byta till vinterdäck?",
+        { personName: "Jimmy" },
+      );
+
+      expect(res.executedActions).toContain("check_car_tyres");
+      expect(res.text).toMatch(/vinterdäck/i);
+      expect(res.text).toMatch(/1 december/i);
+    });
+
+    it("answers vehicle inspection rules ('När ska bilen besiktigas?')", async () => {
+      const res = await processJarvisAgentMessage(
+        TEST_ACTOR,
+        "När ska bilen besiktigas?",
+        { personName: "Jimmy" },
+      );
+
+      expect(res.executedActions).toContain("check_car_inspection");
+      expect(res.text).toMatch(/besikt/i);
+      expect(res.text).toMatch(/14.*månad/i);
+    });
+
+    it("logs car odometer reading ('Bilen har gått 14 500 mil')", async () => {
+      const res = await processJarvisAgentMessage(
+        TEST_ACTOR,
+        "Bilen har gått 14 500 mil",
+        { personName: "Jimmy" },
+      );
+
+      expect(res.executedActions).toContain("log_car_odometer");
+      expect(dependencies.handleMemoryTextIntent).toHaveBeenCalledWith(
+        TEST_ACTOR,
+        "bil - Mätarställning: 14500 mil",
+        "web",
+      );
+      expect(res.text).toMatch(/14\s?500\s*mil/i);
+      expect(res.text).toMatch(/minnesbanken/i);
+    });
   });
 });

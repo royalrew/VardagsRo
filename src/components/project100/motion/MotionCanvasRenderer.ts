@@ -7,6 +7,10 @@ import type {
   MotionGameState,
   MotionGameTarget,
 } from "@/lib/motion-game";
+import {
+  calculateProjectileDepth,
+  interpolateProjectilePosition,
+} from "@/lib/motion-projectiles";
 
 /**
  * Draws the stabilized neon skeleton landmarks and connecting bones onto the 2D canvas overlay.
@@ -197,6 +201,141 @@ export function drawMotionGame(
 
   if (game.target) renderSingleTarget(game.target, false);
   if (game.secondaryTarget) renderSingleTarget(game.secondaryTarget, true);
+
+  if (game.projectiles && game.projectiles.length > 0) {
+    for (const proj of game.projectiles) {
+      if (proj.state !== "flying") continue;
+      const depth = calculateProjectileDepth(proj, nowMs);
+      const pos = interpolateProjectilePosition(proj, depth.progressZ);
+
+      const x = pos.x * canvas.width;
+      const y = pos.y * canvas.height;
+      const radius = depth.radius * canvas.height;
+      const pulse = 1 + Math.sin((nowMs - proj.spawnedAt) / 60) * 0.09;
+
+      context.save();
+
+      // Svanspartiklar / Rörelsevektor från startpunkt mot mål
+      const sx = proj.startX * canvas.width;
+      const sy = proj.startY * canvas.height;
+      context.beginPath();
+      context.moveTo(sx, sy);
+      context.lineTo(x, y);
+      context.strokeStyle =
+        proj.kind === "hazard-bomb"
+          ? "rgba(230, 40, 90, 0.28)"
+          : proj.kind === "kick-projectile"
+          ? "rgba(255, 200, 40, 0.28)"
+          : proj.kind === "energy-orb"
+          ? "rgba(60, 220, 255, 0.28)"
+          : "rgba(255, 100, 30, 0.28)";
+      context.lineWidth = Math.max(2, radius * 0.2);
+      context.setLineDash([6, 6]);
+      context.stroke();
+
+      // Olika styling per projektiltyp
+      if (proj.kind === "hazard-bomb") {
+        // Taggig hazard-bomb
+        context.shadowBlur = depth.inSweetSpot ? 36 : 20;
+        context.shadowColor = "rgba(255, 30, 90, 0.95)";
+        context.fillStyle = "rgba(100, 10, 30, 0.85)";
+        context.strokeStyle = "#ff2a55";
+        context.lineWidth = Math.max(3, canvas.height / 170);
+
+        context.beginPath();
+        context.arc(x, y, radius * pulse, 0, Math.PI * 2);
+        context.fill();
+        context.stroke();
+
+        // Kryss / varningssymbol
+        context.strokeStyle = "#ffffff";
+        context.lineWidth = Math.max(2, radius * 0.25);
+        context.beginPath();
+        const cr = radius * 0.45;
+        context.moveTo(x - cr, y - cr);
+        context.lineTo(x + cr, y + cr);
+        context.moveTo(x + cr, y - cr);
+        context.lineTo(x - cr, y + cr);
+        context.stroke();
+      } else if (proj.kind === "kick-projectile") {
+        // Låg spark-projektil
+        context.shadowBlur = depth.inSweetSpot ? 36 : 22;
+        context.shadowColor = "rgba(255, 210, 40, 0.95)";
+        context.fillStyle = "rgba(120, 80, 10, 0.82)";
+        context.strokeStyle = "#ffd040";
+        context.lineWidth = Math.max(3, canvas.height / 170);
+
+        context.beginPath();
+        context.arc(x, y, radius * pulse, 0, Math.PI * 2);
+        context.fill();
+        context.stroke();
+
+        // Kärna
+        context.fillStyle = "#fff8db";
+        context.beginPath();
+        context.arc(x, y, radius * 0.35, 0, Math.PI * 2);
+        context.fill();
+      } else {
+        // Eldklot / Energiklot
+        const isEnergy = proj.kind === "energy-orb";
+        context.shadowBlur = depth.inSweetSpot ? 36 : 22;
+        context.shadowColor = isEnergy ? "rgba(60, 220, 255, 0.95)" : "rgba(255, 110, 30, 0.95)";
+        context.fillStyle = isEnergy ? "rgba(10, 70, 110, 0.82)" : "rgba(120, 35, 10, 0.82)";
+        context.strokeStyle = isEnergy ? "#60d8ff" : "#ff7030";
+        context.lineWidth = Math.max(3, canvas.height / 170);
+
+        context.beginPath();
+        context.arc(x, y, radius * pulse, 0, Math.PI * 2);
+        context.fill();
+        context.stroke();
+
+        // Inre ljus kärna
+        context.fillStyle = isEnergy ? "#dcf7ff" : "#fff1dc";
+        context.beginPath();
+        context.arc(x, y, radius * 0.35, 0, Math.PI * 2);
+        context.fill();
+      }
+
+      // SWEET SPOT RETICLE ("Träffplan")
+      if (depth.inSweetSpot) {
+        context.save();
+        context.strokeStyle = proj.kind === "hazard-bomb" ? "#ff1a40" : "#00ffcc";
+        context.shadowColor = proj.kind === "hazard-bomb" ? "rgba(255, 20, 50, 0.9)" : "rgba(0, 255, 200, 0.9)";
+        context.shadowBlur = 24;
+        context.lineWidth = Math.max(3, canvas.height / 150);
+        context.beginPath();
+        context.arc(x, y, radius * 1.5, 0, Math.PI * 2);
+        context.stroke();
+
+        // Spegelvänd textcue vid sweet spot så den blir rättvänd efter CSS-transform
+        context.font = `bold ${Math.round(canvas.height / 32)}px system-ui, -apple-system, sans-serif`;
+        context.fillStyle = proj.kind === "hazard-bomb" ? "#ff4060" : "#aaffef";
+        context.textAlign = "center";
+        const label =
+          proj.kind === "hazard-bomb"
+            ? arenaLang === "sv"
+              ? "DUCKA / UNDVIK!"
+              : "DODGE!"
+            : proj.kind === "kick-projectile"
+            ? arenaLang === "sv"
+              ? "SPARKA NU!"
+              : "KICK NOW!"
+            : arenaLang === "sv"
+            ? "SLÅ NU!"
+            : "STRIKE NOW!";
+
+        context.save();
+        context.translate(x, 0);
+        context.scale(-1, 1);
+        context.fillText(label, 0, y - radius * 1.6);
+        context.restore();
+
+        context.restore();
+      }
+
+      context.restore();
+    }
+  }
 
   if (game.effect && nowMs - game.effect.at < 480) {
     const age = (nowMs - game.effect.at) / 480;

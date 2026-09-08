@@ -20,6 +20,9 @@ export interface MotionCameraControlsProps {
   lightOkay: boolean;
   luminance: number | null;
   disabled: boolean;
+  inputSource?: "webcam" | "remote-sensor";
+  remotePairingCode?: string;
+  onChangeInputSource?: (source: "webcam" | "remote-sensor") => void;
   onChangeResolution: (resolution: Resolution) => Promise<void> | void;
   onChangeArenaLanguage: (language: MotionArenaLanguage) => void;
   onChangeDifficulty: (difficulty: MotionGameDifficulty) => void;
@@ -42,6 +45,9 @@ export function MotionCameraControls({
   lightOkay,
   luminance,
   disabled,
+  inputSource = "webcam",
+  remotePairingCode,
+  onChangeInputSource,
   onChangeResolution,
   onChangeArenaLanguage,
   onChangeDifficulty,
@@ -52,24 +58,44 @@ export function MotionCameraControls({
         <span>Input</span>
         <strong>Kameraläge</strong>
       </summary>
-      <label className="p100-motion-select">
-        <span>Önskad upplösning</span>
-        <select
-          value={resolution}
-          onChange={(event) => void onChangeResolution(event.target.value as Resolution)}
-          disabled={disabled}
-        >
-          <option value="640x480">640 × 480 · baseline</option>
-          <option value="1280x720">1280 × 720 · kvalitet</option>
-        </select>
-        <small>
-          {changingResolution
-            ? "Byter kameraläge…"
-            : actualResolution
-            ? `Kameran levererar ${actualResolution}`
-            : "Aktiveras när kameran startar"}
-        </small>
-      </label>
+      {onChangeInputSource ? (
+        <label className="p100-motion-select">
+          <span>Kamerakälla</span>
+          <select
+            value={inputSource}
+            onChange={(event) => onChangeInputSource(event.target.value as "webcam" | "remote-sensor")}
+            disabled={disabled}
+          >
+            <option value="webcam">💻 Datorns webbkamera (Lokal)</option>
+            <option value="remote-sensor">📱 iPhone Sensor (Trådlös LAN)</option>
+          </select>
+          {inputSource === "remote-sensor" && remotePairingCode ? (
+            <small>
+              Parning aktiv · Kod: <strong>{remotePairingCode}</strong>
+            </small>
+          ) : null}
+        </label>
+      ) : null}
+      {inputSource === "webcam" ? (
+        <label className="p100-motion-select">
+          <span>Önskad upplösning</span>
+          <select
+            value={resolution}
+            onChange={(event) => void onChangeResolution(event.target.value as Resolution)}
+            disabled={disabled}
+          >
+            <option value="640x480">640 × 480 · baseline</option>
+            <option value="1280x720">1280 × 720 · kvalitet</option>
+          </select>
+          <small>
+            {changingResolution
+              ? "Byter kameraläge…"
+              : actualResolution
+              ? `Kameran levererar ${actualResolution}`
+              : "Aktiveras när kameran startar"}
+          </small>
+        </label>
+      ) : null}
       <label className="p100-motion-select">
         <span>Arena-röst & Announcer</span>
         <select
