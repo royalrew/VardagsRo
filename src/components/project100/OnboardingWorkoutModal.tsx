@@ -289,6 +289,20 @@ function generateProposal(
   };
 }
 
+function formatProposalSetTarget(set?: OnboardingGeneratedWorkout["exercises"][0]["sets"][0]): string {
+  if (!set) return "";
+  if (set.durationSeconds && set.durationSeconds.trim() && set.durationSeconds !== "0") {
+    return `× ${set.durationSeconds} sek`;
+  }
+  if (set.reps && set.reps.trim() && set.reps !== "0") {
+    return `× ${set.reps} reps${set.weightKg ? ` @ ${set.weightKg} kg` : ""}`;
+  }
+  if (set.durationMinutes && set.durationMinutes.trim() && set.durationMinutes !== "0") {
+    return `× ${set.durationMinutes} min`;
+  }
+  return "";
+}
+
 export function OnboardingWorkoutModal({
   onClose,
   onStartWorkout,
@@ -318,23 +332,23 @@ export function OnboardingWorkoutModal({
         aria-labelledby="onboarding-modal-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <header className="p100-composer-head">
-          <div>
-            <span>
-              <Sparkles size={14} /> Introduktion · Lugn start
+        <header className="p100-composer-head p100-onboarding-head">
+          <div className="p100-onboarding-head-info">
+            <span className="p100-onboarding-badge">
+              <Sparkles size={13} /> Introduktion · Lugn start
             </span>
-            <h2 id="onboarding-modal-title">
+            <h2 id="onboarding-modal-title" className="p100-onboarding-title">
               {stepIndex < 4 ? "Hjälp mig komma igång" : "Ditt rekommenderade pass"}
             </h2>
-            <p>
+            <p className="p100-onboarding-subtitle">
               {stepIndex === 1 && "Vad vill du få ut av träningen?"}
               {stepIndex === 2 && "Var tränar du idag?"}
               {stepIndex === 3 && "Hur mycket tid har du just nu?"}
               {stepIndex === 4 && "Ett beprövat upplägg anpassat efter dina svar."}
             </p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Stäng">
-            <X />
+          <button type="button" className="p100-modal-close-btn" onClick={onClose} aria-label="Stäng">
+            <X size={18} />
           </button>
         </header>
 
@@ -542,30 +556,32 @@ export function OnboardingWorkoutModal({
                   <div>
                     <span className="p100-proposal-tag">Rekommenderat förslag</span>
                     <h3 className="p100-proposal-title">{proposal.title}</h3>
-                    <p className="p100-proposal-meta">
-                      Ca {proposal.durationMinutes} minuter · {proposal.location}
-                    </p>
+                    <div className="p100-proposal-meta-pills">
+                      <span className="p100-proposal-pill">
+                        <Hourglass size={13} /> Ca {proposal.durationMinutes} minuter
+                      </span>
+                      <span className="p100-proposal-pill">
+                        <Home size={13} /> {proposal.location}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <p className="p100-proposal-explanation">{proposal.explanation}</p>
+                <div className="p100-proposal-explanation-box">
+                  <p className="p100-proposal-explanation">{proposal.explanation}</p>
+                </div>
 
                 <div className="p100-proposal-exercises">
-                  <h4>Övningar i passet</h4>
-                  <ul>
+                  <h4 className="p100-proposal-exercises-heading">Övningar i passet</h4>
+                  <ul className="p100-proposal-exercises-list">
                     {proposal.exercises.map((ex, idx) => (
-                      <li key={ex.id || idx}>
+                      <li key={ex.id || idx} className="p100-proposal-exercise-item">
                         <div className="p100-proposal-ex-info">
-                          <b>{ex.name}</b>
-                          <small>{ex.notes}</small>
+                          <strong className="p100-proposal-ex-name">{ex.name}</strong>
+                          {ex.notes ? <p className="p100-proposal-ex-notes">{ex.notes}</p> : null}
                         </div>
                         <span className="p100-proposal-ex-sets">
-                          {ex.sets.length} set{" "}
-                          {ex.sets[0]?.reps
-                            ? `× ${ex.sets[0].reps} reps`
-                            : ex.sets[0]?.durationMinutes
-                            ? `× ${parseFloat(ex.sets[0].durationMinutes) * 60} s`
-                            : ""}
+                          {ex.sets.length} set {formatProposalSetTarget(ex.sets[0])}
                         </span>
                       </li>
                     ))}
@@ -576,28 +592,28 @@ export function OnboardingWorkoutModal({
           )}
         </div>
 
-        <footer className="p100-composer-actions">
+        <footer className="p100-composer-actions p100-onboarding-actions">
           {stepIndex > 1 ? (
             <button
               type="button"
-              className="p100-button-secondary"
+              className="p100-button-secondary p100-btn-back"
               onClick={() => setStepIndex((prev) => (prev - 1) as 1 | 2 | 3)}
             >
               <ArrowLeft size={16} /> Tillbaka
             </button>
           ) : (
-            <button type="button" onClick={onClose}>
+            <button type="button" className="p100-button-ghost" onClick={onClose}>
               Avbryt
             </button>
           )}
 
           {stepIndex === 4 ? (
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginLeft: "auto" }}>
+            <div className="p100-onboarding-actions-right">
               {proposal.hasCameraOption ? (
                 onStartCameraWorkout ? (
                   <button
                     type="button"
-                    className="p100-button-secondary"
+                    className="p100-btn-camera"
                     onClick={() => onStartCameraWorkout(proposal)}
                   >
                     <Camera size={16} /> Motion Lab (Kamera)
@@ -605,9 +621,8 @@ export function OnboardingWorkoutModal({
                 ) : proposal.cameraHref ? (
                   <Link
                     href={proposal.cameraHref}
-                    className="p100-button-secondary"
+                    className="p100-btn-camera"
                     onClick={onClose}
-                    style={{ textDecoration: "none" }}
                   >
                     <Camera size={16} /> Motion Lab (Kamera)
                   </Link>
@@ -615,7 +630,7 @@ export function OnboardingWorkoutModal({
               ) : null}
               <button
                 type="button"
-                className="p100-button"
+                className="p100-button p100-btn-start-primary"
                 onClick={() => onStartWorkout(proposal)}
               >
                 <Play size={16} /> Starta träningen

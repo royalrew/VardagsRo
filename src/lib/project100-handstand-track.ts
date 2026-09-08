@@ -264,7 +264,7 @@ export function buildHandstandWorkout(currentStep = 1): {
       isHoldDuration: true,
       sets: Array.from({ length: 2 }).map(() => ({
         id: crypto.randomUUID(),
-        reps: "60",
+        reps: "",
         weightKg: "",
         durationMinutes: "",
         durationSeconds: "60",
@@ -283,7 +283,7 @@ export function buildHandstandWorkout(currentStep = 1): {
     isHoldDuration: isSeconds,
     sets: Array.from({ length: primaryStep.defaultSets }).map(() => ({
       id: crypto.randomUUID(),
-      reps: primaryStep.defaultRepsOrSeconds,
+      reps: isSeconds ? "" : primaryStep.defaultRepsOrSeconds,
       weightKg: "",
       durationMinutes: "",
       durationSeconds: isSeconds ? primaryStep.defaultRepsOrSeconds : "",
@@ -302,7 +302,7 @@ export function buildHandstandWorkout(currentStep = 1): {
       isHoldDuration: true,
       sets: Array.from({ length: 2 }).map(() => ({
         id: crypto.randomUUID(),
-        reps: "45",
+        reps: "",
         weightKg: "",
         durationMinutes: "",
         durationSeconds: "45",
