@@ -1,9 +1,23 @@
 # Projekt 100 — styrande produktplan
 
 Status: Beslutad riktning  
-Senast uppdaterad: 2026-08-30
+Senast uppdaterad: 2026-09-08
 Ägare: användaren  
 Gäller: ersättaren till "Mitt spår"
+
+## Aktuell prioritet — begriplig träningsupplevelse
+
+[PLAN_TRANINGSUPPLEVELSE.md](PLAN_TRANINGSUPPLEVELSE.md) styr nästa förbättring
+av träningsdelen: en guidad väg genom första passet, enkel och avancerad
+presentation, träning i flera block, valbar RPG och fysisk verifiering framför TV.
+Dess byggordning U0–U7 gäller före äldre generella förslag på nästa leverans
+för just detta arbete. Första leveransen är U0 + U1, följt av TV-provning i U2.
+
+Stripe, betalningar, ny tenantmodell och enterprise ingår inte nu. Befintliga
+personliga data och integritetsgränser behålls. Beskrivningar nedan av en omfattande
+arbetsyta innebär inte att alla funktioner ska visas vid första besöket.
+Kodstatus, fysisk verifiering och begriplighet för nya användare redovisas
+separat i den nya planen; inga nya testresultat intygas av detta planbeslut.
 
 ## Genomförandestatus
 

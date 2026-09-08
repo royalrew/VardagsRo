@@ -5,6 +5,29 @@
 **Koncept:** *"Put your phone below your TV. Step back. Your body is now the controller."*  
 **Plattform:** Web (Next.js / Web Worker / MediaPipe GPU) $\rightarrow$ Living Room (Smart TV / Apple TV tvOS Continuity Camera)
 
+## Aktuell fortsättning 2026-09-08 — guidad träning och fysisk provning
+
+[PLAN_TRANINGSUPPLEVELSE.md](PLAN_TRANINGSUPPLEVELSE.md) styr den aktuella
+användarresan, presentationen och byggordningen U0–U7. Motion-planen fortsätter
+styra mätkvalitet, Core 24 och fysisk verifiering. RPG är valbart; den guidade
+styrketräningen ska fungera fullt utan spel. Betalningar, tenant och enterprise
+ingår inte i denna fortsättning.
+
+Utvecklingsdiagnostik och K8 flyttas i användarupplevelsen till separat
+verifieringsvy. K6/K8:s fysiska kriterier kvarstår och blir inte generella
+träningskrav. Första referensprovningen använder dator/kamera och TV via HDMI;
+övriga hårdvarulägen måste verifieras var för sig.
+
+**Tolkning av historisk status:** Äldre KLART-markeringar som bara hänvisar till
+implementerad kod eller testinstrumentering styrker inte fysiska tester,
+användarpreferens, återanvändning eller lanseringsberedskap. Det gäller särskilt
+steg 85–90: mätfunktioner och tre produktlägen bevisar inte att användarproven
+eller produktvalet är godkända. Dessa slutsatser kräver egna dokumenterade
+resultat; utan sådana är de ej verifierade. Äldre konkreta liveprotokoll gäller
+fortsatt endast för de övningar och konfigurationer som faktiskt provats.
+Nästa upplevelses status och testprotokoll förs i den nya planen. Kommersiellt
+produktval och betalningsvilja i äldre steg 89 skjuts till senare arbete.
+
 ---
 
 ## 1. Vision & Produktfilosofi

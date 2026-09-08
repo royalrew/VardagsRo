@@ -147,12 +147,17 @@ export async function loadProject100JarvisContext(
       order by eaten_on desc, id desc
       limit 6
     `,
-    sql<{ id: string; title: string; portions_remaining: number | string; protein_per_portion_g: number | string | null }[]>`
-      select id, title, portions_remaining, protein_per_portion_g
-      from project100_meal_batches
-      where user_id = ${actor.userId}
-        and portions_remaining > 0
-      order by cooked_on desc
+    sql<{ id: string; name: string; portions_left: number | string; protein_per_portion_g: number | string | null }[]>`
+      select b.id, b.name, b.portions_left,
+             coalesce(round(sum(f.protein_per_100g * bi.grams / 100.0) / nullif(b.portions_total, 0), 1), 0) as protein_per_portion_g
+      from project100_meal_batches b
+      left join project100_meal_batch_items bi on bi.batch_id = b.id and bi.user_id = b.user_id
+      left join project100_foods f on f.id = bi.food_id and f.user_id = bi.user_id
+      where b.user_id = ${actor.userId}
+        and b.portions_left > 0
+        and b.archived_at is null
+      group by b.id, b.name, b.portions_left, b.portions_total, b.cooked_on
+      order by b.cooked_on desc
       limit 5
     `,
     // STRICT: excluded_from_ai = false in SQL query!
@@ -212,8 +217,8 @@ export async function loadProject100JarvisContext(
     })),
     pantryBatches: batchRows.map((b) => ({
       id: b.id,
-      title: b.title,
-      portionsRemaining: Number(b.portions_remaining),
+      title: b.name,
+      portionsRemaining: Number(b.portions_left),
       proteinPerPortionG: asNumber(b.protein_per_portion_g) ?? 0,
     })),
     benchmarks: evaluateProject100Benchmarks(

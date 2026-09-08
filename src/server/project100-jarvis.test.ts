@@ -159,7 +159,7 @@ const database = vi.hoisted(() => {
     }
 
     if (text.includes("from project100_meal_batches")) {
-      return [{ id: "batch-1", title: "Chili con carne", portions_remaining: 3, protein_per_portion_g: 45 }];
+      return [{ id: "batch-1", name: "Chili con carne", portions_left: 3, protein_per_portion_g: 45 }];
     }
 
     if (text.includes("from project100_journal_entries")) {
