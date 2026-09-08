@@ -1,16 +1,41 @@
 import type { Project100ActivityType } from "./project100-training";
 
 export const WORKOUT_MEMORY_STORAGE_KEY = "p100:training:active_workout_snapshot:v1";
-export const DEFAULT_WORKOUT_MEMORY_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+export const DEFAULT_WORKOUT_MEMORY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (preserves honest pauses across days)
 
 export interface WorkoutMemorySet {
   id: string;
   reps: string;
   weightKg: string;
   durationMinutes: string;
+  durationSeconds?: string;
   distanceKm: string;
   rpe: string;
   done: boolean;
+  actualReps?: string;
+  actualDurationSeconds?: string;
+  actualWeightKg?: string;
+  actualRpe?: string;
+}
+
+/**
+ * Formats the target or achieved metric of a workout set cleanly for display:
+ * Handles hold times (e.g. "20 sek") vs reps (e.g. "10 reps") vs duration (e.g. "5 min").
+ */
+export function formatWorkoutSetTarget(set: WorkoutMemorySet): string {
+  if (set.durationSeconds && set.durationSeconds.trim() && set.durationSeconds !== "0") {
+    return `${set.durationSeconds} sek`;
+  }
+  if (set.reps && set.reps.trim() && set.reps !== "0") {
+    return `${set.reps} reps`;
+  }
+  if (set.durationMinutes && set.durationMinutes.trim() && set.durationMinutes !== "0") {
+    return `${set.durationMinutes} min`;
+  }
+  if (set.distanceKm && set.distanceKm.trim()) {
+    return `${set.distanceKm} km`;
+  }
+  return "1 set";
 }
 
 export interface WorkoutMemoryExercise {

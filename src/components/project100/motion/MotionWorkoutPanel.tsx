@@ -54,6 +54,7 @@ export interface MotionWorkoutPanelProps {
   nowMs: number;
   activeExercise?: WorkoutPanelSelection;
   savedProgramSnapshot?: ProgramSessionState | null;
+  programSession?: ProgramSessionState | null;
   onResumeProgram?: (saved: ProgramSessionState) => void;
   onDiscardProgram?: () => void;
   onChangeExercise?: (exercise: WorkoutPanelSelection) => void;
@@ -88,6 +89,7 @@ export function MotionWorkoutPanel({
   nowMs,
   activeExercise = "squat",
   savedProgramSnapshot,
+  programSession,
   onResumeProgram,
   onDiscardProgram,
   onChangeExercise,
@@ -844,7 +846,8 @@ export function MotionWorkoutPanel({
             disabled={
               isSavingToLog ||
               isSavedToLog ||
-              workoutSession.completedSets.length === 0
+              (workoutSession.completedSets.length === 0 &&
+                (!programSession || programSession.completedSets.length === 0))
             }
             style={{
               gridColumn: "1 / -1",

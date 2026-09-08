@@ -11,7 +11,7 @@ import {
   VideoOff,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import {
   calculateEndToEndLatency,
@@ -178,7 +178,13 @@ import {
   convertProgramSessionToApiPayload,
   convertSquatSessionToApiPayload,
 } from "@/lib/project100-motion-bridge";
-import { clearWorkoutMemorySnapshot } from "@/lib/project100-workout-memory";
+import {
+  clearWorkoutMemorySnapshot,
+  loadWorkoutMemorySnapshot,
+  saveWorkoutMemorySnapshot,
+  type WorkoutMemorySet,
+  type WorkoutMemorySnapshot,
+} from "@/lib/project100-workout-memory";
 
 const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const MODEL_ASSET =
@@ -273,14 +279,31 @@ function parseStoredColdStarts(): MotionColdStartStats {
   return { attempts: 0, successes: 0 };
 }
 
+function matchExerciseNameToTracker(name: string): TrackableExerciseId | null {
+  const lower = name.toLowerCase();
+  if (lower.includes("knäböj") || lower.includes("squat")) return "squat";
+  if (lower.includes("armhävning") || lower.includes("push-up") || lower.includes("pushup")) return "pushup";
+  if (lower.includes("planka") || lower.includes("plank")) return "plank";
+  if (lower.includes("utfall") || lower.includes("lunge")) return "lunge";
+  if (lower.includes("handstående") || lower.includes("handstand")) return "handstand-hold";
+  if (lower.includes("upphopp") || lower.includes("jumping")) return "jumping-jacks";
+  if (lower.includes("rodd") || lower.includes("row")) return "bent-over-row";
+  if (lower.includes("dips")) return "bench-dips";
+  if (lower.includes("curl")) return "bicep-curl";
+  if (lower.includes("press")) return "overhead-press";
+  return null;
+}
+
 export function MotionLab({
   initialMissionLaunch = null,
   initialProgram,
   initialExercise,
+  initialSource,
 }: {
   initialMissionLaunch?: MotionMissionLaunch | null;
   initialProgram?: string;
   initialExercise?: string;
+  initialSource?: string;
 }) {
   const createConfiguredWorkoutSession = () => createWorkoutSession(
     initialMissionLaunch?.exerciseId === "squat"
@@ -422,20 +445,62 @@ export function MotionLab({
   const [workoutReportCopied, setWorkoutReportCopied] = useState(false);
   type RestPreset = "30" | "45" | "60" | "dynamic";
   const [restPreset, setRestPreset] = useState<RestPreset>("45");
+  const [activeWorkoutSnapshot, setActiveWorkoutSnapshot] = useState<WorkoutMemorySnapshot | null>(() => {
+    if (typeof window !== "undefined") {
+      const isSourceActive =
+        initialSource === "active" ||
+        new URLSearchParams(window.location.search).get("source") === "active";
+      if (isSourceActive) {
+        return loadWorkoutMemorySnapshot();
+      }
+    }
+    return null;
+  });
+
+  const nextPendingExercise = useMemo(() => {
+    if (!activeWorkoutSnapshot) return null;
+    return (
+      activeWorkoutSnapshot.exercises.find((ex) => ex.sets.some((s: WorkoutMemorySet) => !s.done)) ??
+      activeWorkoutSnapshot.exercises[0] ??
+      null
+    );
+  }, [activeWorkoutSnapshot]);
+
+  const nextPendingSet = useMemo(() => {
+    if (!nextPendingExercise) return null;
+    return nextPendingExercise.sets.find((s: WorkoutMemorySet) => !s.done) ?? null;
+  }, [nextPendingExercise]);
+
+  const matchedCameraExercise = useMemo(() => {
+    if (!nextPendingExercise) return null;
+    return matchExerciseNameToTracker(nextPendingExercise.name);
+  }, [nextPendingExercise]);
+
   const [activeWorkoutExercise, setActiveWorkoutExercise] = useState<WorkoutPanelSelection>(() => {
+    if (typeof window !== "undefined" && (initialSource === "active" || new URLSearchParams(window.location.search).get("source") === "active")) {
+      const snap = loadWorkoutMemorySnapshot();
+      if (snap && snap.exercises.length > 0) {
+        const firstUndone = snap.exercises.find((ex) => ex.sets.some((s: WorkoutMemorySet) => !s.done)) ?? snap.exercises[0];
+        const matched = matchExerciseNameToTracker(firstUndone.name);
+        if (matched) return matched;
+      }
+    }
     if (initialMissionLaunch?.exerciseId) return initialMissionLaunch.exerciseId;
     if (initialProgram && initialProgram in WORKOUT_PROGRAMS) return initialProgram as ProgramId;
     if (initialExercise && initialExercise in EXERCISE_LIBRARY) return initialExercise as TrackableExerciseId;
     return "squat";
   });
+
   const [unifiedTracker, setUnifiedTracker] = useState<UnifiedExerciseState>(() => {
     const targetEx =
-      initialMissionLaunch?.exerciseId ??
-      (initialProgram && initialProgram in WORKOUT_PROGRAMS
-        ? WORKOUT_PROGRAMS[initialProgram as ProgramId].exercises[0].exerciseId
-        : initialExercise && initialExercise in EXERCISE_LIBRARY
-        ? (initialExercise as TrackableExerciseId)
-        : "squat");
+      (activeWorkoutExercise in EXERCISE_LIBRARY || activeWorkoutExercise === "squat")
+        ? (activeWorkoutExercise as TrackableExerciseId)
+        : initialMissionLaunch?.exerciseId ??
+          (initialProgram && initialProgram in WORKOUT_PROGRAMS
+            ? WORKOUT_PROGRAMS[initialProgram as ProgramId].exercises[0].exerciseId
+            : initialExercise && initialExercise in EXERCISE_LIBRARY
+            ? (initialExercise as TrackableExerciseId)
+            : "squat");
     return createUnifiedExerciseTracker(targetEx);
   });
   const unifiedTrackerRef = useRef<UnifiedExerciseState>(unifiedTracker);
@@ -447,12 +512,104 @@ export function MotionLab({
   const [isSavedToLog, setIsSavedToLog] = useState(false);
   const [saveLogError, setSaveLogError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (activeWorkoutSnapshot && nextPendingExercise && matchedCameraExercise) {
+      setActiveWorkoutExercise(matchedCameraExercise);
+      const tracker = createUnifiedExerciseTracker(matchedCameraExercise);
+      unifiedTrackerRef.current = tracker;
+      setUnifiedTracker(tracker);
+      setSquatTrackingEnabled(true);
+      squatTrackingEnabledRef.current = true;
+    }
+  }, [activeWorkoutSnapshot, nextPendingExercise, matchedCameraExercise]);
+
+  function syncCompletedSetToActiveSnapshot(exerciseName: string, repsAchieved: number, holdSec?: number) {
+    setActiveWorkoutSnapshot((currentSnapshot) => {
+      if (!currentSnapshot) return null;
+      const updatedExercises = currentSnapshot.exercises.map((ex) => {
+        const matches =
+          ex.name.toLowerCase().includes(exerciseName.toLowerCase()) ||
+          exerciseName.toLowerCase().includes(ex.name.toLowerCase());
+        if (matches) {
+          const firstUndoneIdx = ex.sets.findIndex((s) => !s.done);
+          if (firstUndoneIdx !== -1) {
+            return {
+              ...ex,
+              sets: ex.sets.map((s, idx) =>
+                idx === firstUndoneIdx
+                  ? {
+                      ...s,
+                      done: true,
+                      actualReps: String(repsAchieved),
+                      actualDurationSeconds: holdSec ? String(holdSec) : s.durationSeconds,
+                    }
+                  : s,
+              ),
+            };
+          }
+        }
+        return ex;
+      });
+
+      const nextSnap: WorkoutMemorySnapshot = {
+        ...currentSnapshot,
+        updatedAtMs: Date.now(),
+        exercises: updatedExercises,
+      };
+      saveWorkoutMemorySnapshot(nextSnap);
+      return nextSnap;
+    });
+  }
+
   async function handleSaveSessionToLog() {
     setIsSavingToLog(true);
     setSaveLogError(null);
     try {
-      let payload: ReturnType<typeof convertProgramSessionToApiPayload> | ReturnType<typeof convertSquatSessionToApiPayload> | null = null;
-      if (programSessionRef.current && programSessionRef.current.completedSets.length > 0) {
+      let payload: any = null;
+      if (activeWorkoutSnapshot && activeWorkoutSnapshot.exercises.some((e) => e.sets.some((s) => s.done))) {
+        const completedExercises = activeWorkoutSnapshot.exercises
+          .map((ex) => {
+            const doneSets = ex.sets.filter((s) => s.done);
+            if (doneSets.length === 0) return null;
+            return {
+              name: ex.name.trim(),
+              notes: ex.notes?.trim() || null,
+              sets: doneSets.map((s) => ({
+                reps: s.actualReps ? Number(s.actualReps) : s.reps ? Number(s.reps) : null,
+                weightKg: s.actualWeightKg ? Number(s.actualWeightKg) : s.weightKg ? Number(s.weightKg) : null,
+                durationSeconds: s.actualDurationSeconds
+                  ? Number(s.actualDurationSeconds)
+                  : s.durationSeconds
+                  ? Number(s.durationSeconds)
+                  : null,
+                distanceMeters: null,
+                rpe: s.actualRpe ? Number(s.actualRpe) : s.rpe ? Number(s.rpe) : null,
+              })),
+            };
+          })
+          .filter((e): e is NonNullable<typeof e> => e !== null);
+
+        const elapsedSec = Math.max(
+          60,
+          Math.round((Date.now() - activeWorkoutSnapshot.startedAtMs) / 1000),
+        );
+        payload = {
+          title: activeWorkoutSnapshot.title,
+          activityType: activeWorkoutSnapshot.activityType,
+          status: "completed" as const,
+          sessionDate: activeWorkoutSnapshot.sessionDate,
+          templateId: activeWorkoutSnapshot.templateId ?? null,
+          plannedStartAt: null,
+          plannedEndAt: null,
+          durationSeconds: elapsedSec,
+          location: activeWorkoutSnapshot.location.trim() || null,
+          effort: activeWorkoutSnapshot.effort ? parseInt(activeWorkoutSnapshot.effort, 10) : null,
+          bodyBefore: null,
+          bodyAfter: null,
+          notes: activeWorkoutSnapshot.notes.trim() || null,
+          exercises: completedExercises,
+        };
+      } else if (programSessionRef.current && programSessionRef.current.completedSets.length > 0) {
         payload = convertProgramSessionToApiPayload(programSessionRef.current);
       } else if (workoutSessionRef.current && workoutSessionRef.current.completedSets.length > 0) {
         payload = convertSquatSessionToApiPayload(workoutSessionRef.current);
@@ -478,6 +635,7 @@ export function MotionLab({
       setIsSavedToLog(true);
       clearProgramSessionSnapshot();
       clearWorkoutMemorySnapshot();
+      setActiveWorkoutSnapshot(null);
       setSavedProgramSnapshot(null);
     } catch (err) {
       setSaveLogError(err instanceof Error ? err.message : "Något gick fel vid sparandet.");
@@ -1622,6 +1780,8 @@ export function MotionLab({
           programSessionRef.current = updatedProg;
           setProgramSession(updatedProg);
           syncProgramToWorkoutMemory(updatedProg);
+          const activeExName = EXERCISE_LIBRARY[currentProg.activeExercise.exerciseId]?.name ?? currentProg.activeExercise.exerciseId;
+          syncCompletedSetToActiveSnapshot(activeExName, nextTracker.reps);
           playSquatSound("milestone");
 
           if (updatedProg.phase === "completed") {
@@ -1643,6 +1803,18 @@ export function MotionLab({
             );
           }
         }
+      } else if (!currentProg && activeWorkoutSnapshot && nextPendingExercise) {
+        const nextUndoneSet = nextPendingExercise.sets.find((s: WorkoutMemorySet) => !s.done);
+        const targetReps = nextUndoneSet?.reps ? Number(nextUndoneSet.reps) : 0;
+        if (targetReps > 0 && nextTracker.reps >= targetReps) {
+          syncCompletedSetToActiveSnapshot(nextPendingExercise.name, nextTracker.reps);
+          playSquatSound("milestone");
+          speakSquatInstruction(`Set klart! ${nextTracker.reps} repetitioner avklarade. Bra jobbat!`, true);
+          lastUnifiedRepRef.current = 0;
+          const tracker = createUnifiedExerciseTracker(matchedCameraExercise ?? "squat");
+          unifiedTrackerRef.current = tracker;
+          setUnifiedTracker(tracker);
+        }
       }
     } else if (isHold && Math.floor(nextTracker.holdSeconds) > lastUnifiedHoldRef.current) {
       lastUnifiedHoldRef.current = Math.floor(nextTracker.holdSeconds);
@@ -1658,6 +1830,8 @@ export function MotionLab({
           programSessionRef.current = updatedProg;
           setProgramSession(updatedProg);
           syncProgramToWorkoutMemory(updatedProg);
+          const activeExName = EXERCISE_LIBRARY[currentProg.activeExercise.exerciseId]?.name ?? currentProg.activeExercise.exerciseId;
+          syncCompletedSetToActiveSnapshot(activeExName, 1, Math.round(nextTracker.holdSeconds));
           playSquatSound("milestone");
 
           if (updatedProg.phase === "completed") {
@@ -1678,6 +1852,19 @@ export function MotionLab({
               true,
             );
           }
+        }
+      } else if (!currentProg && activeWorkoutSnapshot && nextPendingExercise) {
+        const nextUndoneSet = nextPendingExercise.sets.find((s: WorkoutMemorySet) => !s.done);
+        const targetHold = nextUndoneSet?.durationSeconds ? Number(nextUndoneSet.durationSeconds) : 0;
+        if (targetHold > 0 && nextTracker.holdSeconds >= targetHold) {
+          const holdSec = Math.round(nextTracker.holdSeconds);
+          syncCompletedSetToActiveSnapshot(nextPendingExercise.name, 1, holdSec);
+          playSquatSound("milestone");
+          speakSquatInstruction(`Hålltid klar! ${holdSec} sekunder avklarade. Bra jobbat!`, true);
+          lastUnifiedHoldRef.current = 0;
+          const tracker = createUnifiedExerciseTracker(matchedCameraExercise ?? "handstand-hold");
+          unifiedTrackerRef.current = tracker;
+          setUnifiedTracker(tracker);
         }
       }
     }
@@ -1728,6 +1915,7 @@ export function MotionLab({
           playSquatSound("milestone");
           const lastSet = workoutResult.session.completedSets[workoutResult.session.completedSets.length - 1];
           if (lastSet) {
+            syncCompletedSetToActiveSnapshot("Knäböj", lastSet.completedReps);
             cueText = formatCoachSetCompleteCue(
               lastSet.setNumber,
               lastSet.completedReps,
@@ -2780,6 +2968,71 @@ export function MotionLab({
             }
           }}
         />
+      ) : null}
+
+      {activeWorkoutSnapshot ? (
+        <div className="p100-active-camera-banner" role="region" aria-label="Aktivt träningspass i kameravy">
+          <div className="p100-active-camera-header">
+            <div>
+              <span className="p100-active-camera-badge">Aktivt pass</span>
+              <h2 className="p100-active-camera-title">{activeWorkoutSnapshot.title}</h2>
+            </div>
+            <div className="p100-active-camera-actions">
+              <button
+                type="button"
+                className="p100-btn p100-btn-ghost"
+                onClick={() => {
+                  window.location.href = "/projekt-100/traning";
+                }}
+              >
+                Tillbaka till lugn vy
+              </button>
+              <button
+                type="button"
+                className="p100-btn p100-btn-primary"
+                disabled={isSavingToLog || !activeWorkoutSnapshot.exercises.some((e) => e.sets.some((s) => s.done))}
+                onClick={() => void handleSaveSessionToLog()}
+              >
+                {isSavingToLog ? "Sparar..." : isSavedToLog ? "Sparat i loggen!" : "Spara genomförda set"}
+              </button>
+            </div>
+          </div>
+
+          <div className="p100-active-camera-body">
+            {nextPendingExercise ? (
+              <div className="p100-active-camera-current">
+                <div className="p100-active-camera-current-info">
+                  <span className="p100-active-camera-label">Aktuell övning:</span>
+                  <strong>{nextPendingExercise.name}</strong>
+                  <span className="p100-active-camera-target">
+                    Set {nextPendingExercise.sets.findIndex((s: WorkoutMemorySet) => !s.done) + 1} av {nextPendingExercise.sets.length}
+                    {nextPendingSet?.reps ? ` · Mål: ${nextPendingSet.reps} reps` : ""}
+                    {nextPendingSet?.durationSeconds ? ` · Mål: ${nextPendingSet.durationSeconds} sek` : ""}
+                  </span>
+                  <span className="p100-active-camera-tracking-status">
+                    {matchedCameraExercise ? `Kamera aktiv (${matchedCameraExercise})` : "Fri form / manuell registrering"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="p100-btn p100-btn-secondary"
+                  onClick={() => {
+                    const targetReps = nextPendingSet?.reps ? Number(nextPendingSet.reps) : 1;
+                    const targetHold = nextPendingSet?.durationSeconds ? Number(nextPendingSet.durationSeconds) : undefined;
+                    syncCompletedSetToActiveSnapshot(nextPendingExercise.name, targetReps, targetHold);
+                  }}
+                >
+                  Markera set klart
+                </button>
+              </div>
+            ) : (
+              <div className="p100-active-camera-all-done">
+                <p>Alla set i passet är markerade som klara!</p>
+              </div>
+            )}
+          </div>
+          {saveLogError ? <p className="p100-active-camera-error">{saveLogError}</p> : null}
+        </div>
       ) : null}
 
       <section className="p100-motion-grid">

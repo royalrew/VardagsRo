@@ -226,11 +226,13 @@ export interface HandstandWorkoutExerciseDraft {
   id: string;
   name: string;
   notes: string;
+  isHoldDuration?: boolean;
   sets: {
     id: string;
     reps: string;
     weightKg: string;
     durationMinutes: string;
+    durationSeconds?: string;
     distanceKm: string;
     rpe: string;
   }[];
@@ -259,11 +261,13 @@ export function buildHandstandWorkout(currentStep = 1): {
       id: crypto.randomUUID(),
       name: prepStep.exerciseName,
       notes: `${prepStep.cues[0]}. ${prepStep.cues[1]}.`,
+      isHoldDuration: true,
       sets: Array.from({ length: 2 }).map(() => ({
         id: crypto.randomUUID(),
-        reps: "",
+        reps: "60",
         weightKg: "",
-        durationMinutes: "1",
+        durationMinutes: "",
+        durationSeconds: "60",
         distanceKm: "",
         rpe: "5",
       })),
@@ -276,13 +280,13 @@ export function buildHandstandWorkout(currentStep = 1): {
     id: crypto.randomUUID(),
     name: primaryStep.exerciseName,
     notes: `${primaryStep.summary} Mål: ${primaryStep.goal}`,
+    isHoldDuration: isSeconds,
     sets: Array.from({ length: primaryStep.defaultSets }).map(() => ({
       id: crypto.randomUUID(),
-      reps: isSeconds ? "" : primaryStep.defaultRepsOrSeconds,
+      reps: primaryStep.defaultRepsOrSeconds,
       weightKg: "",
-      durationMinutes: isSeconds
-        ? (parseInt(primaryStep.defaultRepsOrSeconds, 10) / 60).toFixed(1).replace(".0", "")
-        : "",
+      durationMinutes: "",
+      durationSeconds: isSeconds ? primaryStep.defaultRepsOrSeconds : "",
       distanceKm: "",
       rpe: "7",
     })),
@@ -295,11 +299,13 @@ export function buildHandstandWorkout(currentStep = 1): {
       id: crypto.randomUUID(),
       name: coreStep.exerciseName,
       notes: "Bibehåll stark bålspänning och neutral rygg.",
+      isHoldDuration: true,
       sets: Array.from({ length: 2 }).map(() => ({
         id: crypto.randomUUID(),
-        reps: "",
+        reps: "45",
         weightKg: "",
-        durationMinutes: "0.75",
+        durationMinutes: "",
+        durationSeconds: "45",
         distanceKm: "",
         rpe: "7",
       })),

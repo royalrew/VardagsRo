@@ -62,9 +62,10 @@ export function convertProgramSessionToMemorySnapshot(
       if (completedRecord) {
         return {
           id: draftId(),
-          reps: String(completedRecord.repsAchieved),
+          reps: progEx.isHoldDuration ? "" : String(completedRecord.repsAchieved),
           weightKg: "0",
-          durationMinutes: progEx.isHoldDuration ? String(Math.round(completedRecord.repsAchieved / 60)) : "",
+          durationSeconds: progEx.isHoldDuration ? String(completedRecord.repsAchieved) : undefined,
+          durationMinutes: "",
           distanceKm: "",
           rpe: completedRecord.rpe ? String(completedRecord.rpe) : "",
           done: true,
@@ -72,9 +73,10 @@ export function convertProgramSessionToMemorySnapshot(
       }
       return {
         id: draftId(),
-        reps: String(progEx.reps),
+        reps: progEx.isHoldDuration ? "" : String(progEx.reps),
         weightKg: "0",
-        durationMinutes: progEx.isHoldDuration ? String(Math.round(progEx.reps / 60)) : "",
+        durationSeconds: progEx.isHoldDuration ? String(progEx.reps) : undefined,
+        durationMinutes: "",
         distanceKm: "",
         rpe: "",
         done: false,
@@ -89,16 +91,21 @@ export function convertProgramSessionToMemorySnapshot(
     };
   });
 
+  const completedCount = session.completedSets.length;
+  const estimatedMin = completedCount > 0
+    ? Math.max(1, Math.round((completedCount * 90) / 60))
+    : (program?.estimatedMinutes ?? 20);
+
   return {
     type: "session",
     title: program?.title ?? "Styrketräning med kamera",
     activityType,
     sessionDate,
-    startedAtMs: Date.now() - (program?.estimatedMinutes ?? 20) * 60 * 1000,
+    startedAtMs: Date.now() - estimatedMin * 60 * 1000,
     updatedAtMs: Date.now(),
-    durationMinutes: String(program?.estimatedMinutes ?? 20),
+    durationMinutes: String(estimatedMin),
     location: "Hemma / TV",
-    effort: "7",
+    effort: "",
     bodyBefore: "",
     bodyAfter: "",
     notes: `Genomfört med rörelsemätning i Motion Lab (${program?.title ?? session.programId}).`,
@@ -202,7 +209,20 @@ export function convertProgramSessionToApiPayload(
     })
     .filter((e): e is NonNullable<typeof e> => e !== null);
 
-  const durationSeconds = (program?.estimatedMinutes ?? 20) * 60;
+  const completedCount = session.completedSets.length;
+  const timestamps = session.completedSets
+    .map((c) => (c.completedAt ? Date.parse(c.completedAt) : null))
+    .filter((t): t is number => t !== null);
+  const durationSeconds =
+    timestamps.length >= 2
+      ? Math.max(60, Math.round((Math.max(...timestamps) - Math.min(...timestamps)) / 1000))
+      : completedCount > 0
+      ? completedCount * 90
+      : (program?.estimatedMinutes ?? 20) * 60;
+
+  // Extract average RPE if recorded in sets, otherwise leave effort null (do not hardcode 7)
+  const rpeValues = session.completedSets.map((c) => c.rpe).filter((r): r is number => typeof r === "number");
+  const avgRpe = rpeValues.length > 0 ? Math.round(rpeValues.reduce((a, b) => a + b, 0) / rpeValues.length) : null;
 
   return {
     title: program?.title ?? "Styrketräning med kamera",
@@ -214,7 +234,7 @@ export function convertProgramSessionToApiPayload(
     plannedEndAt: null,
     durationSeconds,
     location: "Hemma / TV",
-    effort: 7,
+    effort: avgRpe,
     bodyBefore: null,
     bodyAfter: null,
     notes: `Genomfört med rörelsemätning i Motion Lab (${program?.title ?? session.programId}).`,
@@ -245,7 +265,11 @@ export function convertSquatSessionToApiPayload(
       ? elapsedFromTimestamps
       : setDurationsSum > 0
       ? setDurationsSum
-      : completedSets.length * 5 * 60;
+      : completedSets.length * 60;
+
+  const lastRpe = completedSets.length > 0 ? completedSets[completedSets.length - 1].rpe : null;
+  const effort =
+    lastRpe === "hard" ? 9 : lastRpe === "moderate" ? 7 : lastRpe === "easy" ? 5 : null;
 
   return {
     title: "Knäböj i Motion Lab",
@@ -257,7 +281,7 @@ export function convertSquatSessionToApiPayload(
     plannedEndAt: squatSession.completedAt ?? null,
     durationSeconds: totalDurationSeconds,
     location: "Hemma / TV",
-    effort: 7,
+    effort,
     bodyBefore: null,
     bodyAfter: null,
     notes: "Knäböjspass 3×10 verifierat med datorseende och rörelsemätning i Motion Lab.",

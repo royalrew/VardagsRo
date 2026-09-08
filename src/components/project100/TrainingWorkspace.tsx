@@ -46,6 +46,7 @@ import { RunningQuickLogModal } from "./RunningQuickLogModal";
 import { WorkoutQuickModal } from "./WorkoutQuickModal";
 import { DailyTrainingMission, type DailyMissionView } from "./DailyTrainingMission";
 import { OnboardingWorkoutModal, type OnboardingGeneratedWorkout } from "./OnboardingWorkoutModal";
+import { ActiveWorkoutRunner } from "./ActiveWorkoutRunner";
 import {
   buildRunningAnalytics,
   evaluateProject100Benchmarks,
@@ -868,6 +869,7 @@ export function TrainingWorkspace({
   } | null>(null);
   const [savedWorkoutSnapshot, setSavedWorkoutSnapshot] = useState<WorkoutMemorySnapshot | null>(null);
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+  const [activeWorkoutRunner, setActiveWorkoutRunner] = useState<WorkoutMemorySnapshot | null>(null);
 
   const hasCompletedSessions = useMemo(
     () => sessions.some((s) => s.status === "completed"),
@@ -1050,16 +1052,19 @@ export function TrainingWorkspace({
     setSavedWorkoutSnapshot(loadWorkoutMemorySnapshot());
   }
 
-  function handleStartOnboardingWorkout(proposal: OnboardingGeneratedWorkout) {
-    const nextDraft: SessionDraft = {
+  function buildSnapshotFromProposal(proposal: OnboardingGeneratedWorkout): WorkoutMemorySnapshot {
+    return {
+      type: "session",
+      sessionId: null,
+      templateId: null,
       title: proposal.title,
       activityType: proposal.activityType,
-      status: "completed",
       sessionDate: initialView.today,
-      templateId: null,
+      startedAtMs: Date.now(),
+      updatedAtMs: Date.now(),
       durationMinutes: proposal.durationMinutes,
       location: proposal.location,
-      effort: "7",
+      effort: "",
       bodyBefore: "",
       bodyAfter: "",
       notes: proposal.explanation,
@@ -1069,17 +1074,32 @@ export function TrainingWorkspace({
         notes: ex.notes,
         sets: ex.sets.map((s) => ({
           id: s.id || draftId(),
-          reps: s.reps,
-          weightKg: s.weightKg,
-          durationMinutes: s.durationMinutes,
-          distanceKm: s.distanceKm,
-          rpe: s.rpe,
+          reps: s.reps ?? "",
+          weightKg: s.weightKg ?? "",
+          durationMinutes: s.durationMinutes ?? "",
+          durationSeconds: s.durationSeconds ?? "",
+          distanceKm: s.distanceKm ?? "",
+          rpe: s.rpe ?? "",
+          done: false,
         })),
       })),
     };
-    handleUpdateSessionDraft(nextDraft);
+  }
+
+  function handleStartOnboardingWorkout(proposal: OnboardingGeneratedWorkout) {
+    const snapshot = buildSnapshotFromProposal(proposal);
+    saveWorkoutMemorySnapshot(snapshot);
+    setSavedWorkoutSnapshot(snapshot);
+    setActiveWorkoutRunner(snapshot);
     setShowOnboardingModal(false);
-    setComposer("session");
+  }
+
+  function handleStartCameraWorkout(proposal: OnboardingGeneratedWorkout) {
+    const snapshot = buildSnapshotFromProposal(proposal);
+    saveWorkoutMemorySnapshot(snapshot);
+    setSavedWorkoutSnapshot(snapshot);
+    setShowOnboardingModal(false);
+    router.push("/projekt-100/traning/motion?source=active");
   }
 
   function handleResumeSavedWorkout() {
@@ -1092,33 +1112,79 @@ export function TrainingWorkspace({
       }
     }
 
-    setSession({
-      title: savedWorkoutSnapshot.title,
-      activityType: savedWorkoutSnapshot.activityType,
-      status: "completed",
-      sessionDate: savedWorkoutSnapshot.sessionDate,
-      templateId: savedWorkoutSnapshot.templateId ?? null,
-      durationMinutes: savedWorkoutSnapshot.durationMinutes,
-      location: savedWorkoutSnapshot.location,
-      effort: savedWorkoutSnapshot.effort,
-      bodyBefore: savedWorkoutSnapshot.bodyBefore,
-      bodyAfter: savedWorkoutSnapshot.bodyAfter,
-      notes: savedWorkoutSnapshot.notes,
-      exercises: savedWorkoutSnapshot.exercises.map((ex) => ({
-        id: ex.id || draftId(),
-        name: ex.name,
-        notes: ex.notes ?? "",
-        sets: ex.sets.map((s) => ({
-          id: s.id || draftId(),
-          reps: s.reps,
-          weightKg: s.weightKg,
-          durationMinutes: s.durationMinutes,
-          distanceKm: s.distanceKm,
-          rpe: s.rpe,
-        })),
-      })),
+    setActiveWorkoutRunner(savedWorkoutSnapshot);
+  }
+
+  async function handleFinishActiveWorkout(finishedSnapshot: WorkoutMemorySnapshot) {
+    const completedExercises = finishedSnapshot.exercises
+      .map((ex) => {
+        const doneSets = ex.sets.filter((s) => s.done);
+        if (doneSets.length === 0) return null;
+        return {
+          name: ex.name.trim(),
+          notes: ex.notes?.trim() || null,
+          sets: doneSets.map((s) => {
+            const repsNum = s.actualReps ? Number(s.actualReps) : s.reps ? Number(s.reps) : null;
+            const weightNum = s.actualWeightKg ? Number(s.actualWeightKg) : s.weightKg ? Number(s.weightKg) : null;
+            const durationSec = s.actualDurationSeconds
+              ? Number(s.actualDurationSeconds)
+              : s.durationSeconds
+              ? Number(s.durationSeconds)
+              : s.durationMinutes
+              ? Math.round(Number(s.durationMinutes) * 60)
+              : null;
+            const rpeNum = s.actualRpe ? Number(s.actualRpe) : s.rpe ? Number(s.rpe) : null;
+            return {
+              reps: Number.isFinite(repsNum) ? repsNum : null,
+              weightKg: Number.isFinite(weightNum) ? weightNum : null,
+              durationSeconds: Number.isFinite(durationSec) ? durationSec : null,
+              distanceMeters: null,
+              rpe: Number.isFinite(rpeNum) ? rpeNum : null,
+            };
+          }),
+        };
+      })
+      .filter((e): e is NonNullable<typeof e> => e !== null);
+
+    const elapsedSeconds = Math.max(
+      60,
+      Math.round((Date.now() - finishedSnapshot.startedAtMs) / 1000),
+    );
+    const effortNum = finishedSnapshot.effort ? parseInt(finishedSnapshot.effort, 10) : null;
+
+    const payload = {
+      title: finishedSnapshot.title,
+      activityType: finishedSnapshot.activityType,
+      status: "completed" as const,
+      sessionDate: finishedSnapshot.sessionDate,
+      templateId: finishedSnapshot.templateId ?? null,
+      plannedStartAt: null,
+      plannedEndAt: null,
+      durationSeconds: elapsedSeconds,
+      location: finishedSnapshot.location.trim() || null,
+      effort: Number.isFinite(effortNum) ? effortNum : null,
+      bodyBefore: finishedSnapshot.bodyBefore.trim() || null,
+      bodyAfter: finishedSnapshot.bodyAfter.trim() || null,
+      notes: finishedSnapshot.notes.trim() || null,
+      exercises: completedExercises,
+    };
+
+    const response = await fetch("/api/project100/training/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
     });
-    setComposer("session");
+
+    if (!response.ok) {
+      throw await failureFrom(response, "Passet kunde inte sparas till träningsloggen.");
+    }
+
+    const body = (await response.json()) as { session: Project100TrainingSession };
+    setSessions((current) => [body.session, ...current.filter((item) => item.id !== body.session.id)]);
+    clearWorkoutMemorySnapshot();
+    setSavedWorkoutSnapshot(null);
+    setActiveWorkoutRunner(null);
+    router.refresh();
   }
 
   function handleDiscardSavedWorkout() {
@@ -1687,10 +1753,31 @@ export function TrainingWorkspace({
         </Link>
       </footer>
 
+      {activeWorkoutRunner ? (
+        <ActiveWorkoutRunner
+          snapshot={activeWorkoutRunner}
+          onUpdateSnapshot={(updated) => {
+            setActiveWorkoutRunner(updated);
+            setSavedWorkoutSnapshot(updated);
+          }}
+          onPause={() => {
+            setActiveWorkoutRunner(null);
+            setSavedWorkoutSnapshot(loadWorkoutMemorySnapshot());
+          }}
+          onSwitchToCamera={() => {
+            setActiveWorkoutRunner(null);
+            router.push("/projekt-100/traning/motion?source=active");
+          }}
+          onFinish={handleFinishActiveWorkout}
+          onClose={() => setActiveWorkoutRunner(null)}
+        />
+      ) : null}
+
       {showOnboardingModal ? (
         <OnboardingWorkoutModal
           onClose={() => setShowOnboardingModal(false)}
           onStartWorkout={handleStartOnboardingWorkout}
+          onStartCameraWorkout={handleStartCameraWorkout}
         />
       ) : null}
     </div>

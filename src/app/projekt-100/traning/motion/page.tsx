@@ -17,11 +17,13 @@ export default async function Project100MotionLabPage({
   const launch = parseMotionMissionLaunch(resolvedParams);
   const initialProgram = typeof resolvedParams.program === "string" ? resolvedParams.program : undefined;
   const initialExercise = typeof resolvedParams.exercise === "string" ? resolvedParams.exercise : undefined;
+  const initialSource = typeof resolvedParams.source === "string" ? resolvedParams.source : undefined;
   return (
     <MotionLab
       initialMissionLaunch={launch}
       initialProgram={initialProgram}
       initialExercise={initialExercise}
+      initialSource={initialSource}
     />
   );
 }

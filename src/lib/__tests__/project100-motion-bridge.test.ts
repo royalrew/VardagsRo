@@ -170,7 +170,8 @@ describe("project100-motion-bridge: Motion Lab to Workout Memory & API Payload",
     const handstandEx = snapshot.exercises.find((e) => e.name.toLowerCase().includes("handstående"));
     expect(handstandEx).toBeDefined();
     expect(handstandEx?.sets[0].done).toBe(true);
-    expect(handstandEx?.sets[0].reps).toBe("20");
+    expect(handstandEx?.sets[0].durationSeconds).toBe("20");
+    expect(handstandEx?.sets[0].durationMinutes).toBe("");
     expect(handstandEx?.sets[1].done).toBe(false);
     expect(handstandEx?.sets[2].done).toBe(false);
 
@@ -203,6 +204,9 @@ describe("project100-motion-bridge: Motion Lab to Workout Memory & API Payload",
     expect(payload.exercises.length).toBeGreaterThanOrEqual(2); // at least the exercises with completed sets
     expect(payload.exercises[0].sets.length).toBe(3);
     expect(payload.exercises[0].sets[0].reps).toBe(8);
+    // Active duration based on timestamps (10:05 to 10:12 = 420s)
+    expect(payload.durationSeconds).toBe(420);
+    expect(payload.effort).toBe(8);
   });
 
   it("converts squat session into a valid API session payload", () => {

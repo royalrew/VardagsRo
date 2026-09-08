@@ -41,6 +41,7 @@ export interface OnboardingGeneratedWorkout {
   activityType: Project100ActivityType;
   durationMinutes: string;
   location: string;
+  goal?: OnboardingGoal;
   exercises: {
     id: string;
     name: string;
@@ -50,8 +51,10 @@ export interface OnboardingGeneratedWorkout {
       reps: string;
       weightKg: string;
       durationMinutes: string;
+      durationSeconds?: string;
       distanceKm: string;
       rpe: string;
+      done: boolean;
     }[];
   }[];
   hasCameraOption?: boolean;
@@ -81,27 +84,35 @@ function generateProposal(
       activityType,
       durationMinutes: duration,
       location: locationLabel,
+      goal: "handstand",
       exercises: handstand.exercises.map((ex) => ({
         id: crypto.randomUUID(),
         name: ex.name,
         notes: ex.notes,
         sets: ex.sets.map((s) => ({
-          ...s,
           id: crypto.randomUUID(),
+          reps: s.reps ?? "",
+          weightKg: s.weightKg ?? "",
+          durationMinutes: s.durationMinutes ?? "",
+          durationSeconds: s.durationSeconds ?? "",
+          distanceKm: s.distanceKm ?? "",
+          rpe: s.rpe ?? "7",
+          done: false,
         })),
       })),
       hasCameraOption: true,
-      cameraHref: "/projekt-100/traning/motion?program=calisthenics-control",
+      cameraHref: "/projekt-100/traning/motion?source=active",
     };
   }
 
   if (goal === "get_started") {
     return {
       title: "Mjukstart · Helkropp & Rörlighet",
-      explanation: `Ett skonsamt introduktionspass på ${duration} minuter som väcker kroppen, ökar cirkulationen och ger energi utan träningsvärk.`,
+      explanation: `Ett skonsamt introduktionspass på ${duration} minuter som väcker kroppen och ökar cirkulationen med enkla basrörelser.`,
       activityType,
       durationMinutes: duration,
       location: locationLabel,
+      goal: "get_started",
       exercises: [
         {
           id: crypto.randomUUID(),
@@ -112,8 +123,10 @@ function generateProposal(
             reps: "10",
             weightKg: "",
             durationMinutes: "",
+            durationSeconds: "",
             distanceKm: "",
             rpe: "5",
+            done: false,
           })),
         },
         {
@@ -125,8 +138,10 @@ function generateProposal(
             reps: "8",
             weightKg: "",
             durationMinutes: "",
+            durationSeconds: "",
             distanceKm: "",
             rpe: "5",
+            done: false,
           })),
         },
         {
@@ -138,13 +153,15 @@ function generateProposal(
             reps: "12",
             weightKg: "",
             durationMinutes: "",
+            durationSeconds: "",
             distanceKm: "",
             rpe: "5",
+            done: false,
           })),
         },
       ],
       hasCameraOption: true,
-      cameraHref: "/projekt-100/traning/motion?exercise=squat",
+      cameraHref: "/projekt-100/traning/motion?source=active",
     };
   }
 
@@ -155,6 +172,7 @@ function generateProposal(
       activityType,
       durationMinutes: duration,
       location: locationLabel,
+      goal: "strength",
       exercises: [
         {
           id: crypto.randomUUID(),
@@ -165,8 +183,10 @@ function generateProposal(
             reps: "8",
             weightKg: location === "home_dumbbells" ? "12" : "",
             durationMinutes: "",
+            durationSeconds: "",
             distanceKm: "",
             rpe: "7",
+            done: false,
           })),
         },
         {
@@ -178,8 +198,10 @@ function generateProposal(
             reps: "8",
             weightKg: "",
             durationMinutes: "",
+            durationSeconds: "",
             distanceKm: "",
             rpe: "7",
+            done: false,
           })),
         },
         {
@@ -190,14 +212,16 @@ function generateProposal(
             id: crypto.randomUUID(),
             reps: "",
             weightKg: "",
-            durationMinutes: "0.5",
+            durationMinutes: "",
+            durationSeconds: "30",
             distanceKm: "",
             rpe: "7",
+            done: false,
           })),
         },
       ],
       hasCameraOption: true,
-      cameraHref: "/projekt-100/traning/motion?program=push-pull-core",
+      cameraHref: "/projekt-100/traning/motion?source=active",
     };
   }
 
@@ -208,6 +232,7 @@ function generateProposal(
     activityType,
     durationMinutes: duration,
     location: locationLabel,
+    goal: "hypertrophy",
     exercises: [
       {
         id: crypto.randomUUID(),
@@ -218,8 +243,10 @@ function generateProposal(
           reps: "10",
           weightKg: location === "home_dumbbells" ? "10" : "",
           durationMinutes: "",
+          durationSeconds: "",
           distanceKm: "",
           rpe: "8",
+          done: false,
         })),
       },
       {
@@ -231,21 +258,31 @@ function generateProposal(
           reps: "10",
           weightKg: "",
           durationMinutes: "",
+          durationSeconds: "",
           distanceKm: "",
           rpe: "8",
+          done: false,
         })),
       },
       {
         id: crypto.randomUUID(),
-        name: "Dips mot stol / bänk",
-        notes: "Full extension i toppen, armbågar bakåt.",
+        name:
+          location === "home_dumbbells"
+            ? "Hantelrodd (Dumbbell Row)"
+            : "Smal armhävning på knä (Triceps)",
+        notes:
+          location === "home_dumbbells"
+            ? "Dra armbågen bakåt mot höften, nyp ihop skulderbladet."
+            : "Armbågar tätt intill kroppen, kontrollerad rörelse.",
         sets: Array.from({ length: 3 }).map(() => ({
           id: crypto.randomUUID(),
-          reps: "12",
-          weightKg: "",
+          reps: "10",
+          weightKg: location === "home_dumbbells" ? "10" : "",
           durationMinutes: "",
+          durationSeconds: "",
           distanceKm: "",
           rpe: "8",
+          done: false,
         })),
       },
     ],
@@ -255,9 +292,11 @@ function generateProposal(
 export function OnboardingWorkoutModal({
   onClose,
   onStartWorkout,
+  onStartCameraWorkout,
 }: {
   onClose: () => void;
   onStartWorkout: (workout: OnboardingGeneratedWorkout) => void;
+  onStartCameraWorkout?: (workout: OnboardingGeneratedWorkout) => void;
 }) {
   const [stepIndex, setStepIndex] = useState<1 | 2 | 3 | 4>(1);
   const [goal, setGoal] = useState<OnboardingGoal>("get_started");
@@ -554,15 +593,25 @@ export function OnboardingWorkoutModal({
 
           {stepIndex === 4 ? (
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginLeft: "auto" }}>
-              {proposal.hasCameraOption && proposal.cameraHref ? (
-                <Link
-                  href={proposal.cameraHref}
-                  className="p100-button-secondary"
-                  onClick={onClose}
-                  style={{ textDecoration: "none" }}
-                >
-                  <Camera size={16} /> Motion Lab (Kamera)
-                </Link>
+              {proposal.hasCameraOption ? (
+                onStartCameraWorkout ? (
+                  <button
+                    type="button"
+                    className="p100-button-secondary"
+                    onClick={() => onStartCameraWorkout(proposal)}
+                  >
+                    <Camera size={16} /> Motion Lab (Kamera)
+                  </button>
+                ) : proposal.cameraHref ? (
+                  <Link
+                    href={proposal.cameraHref}
+                    className="p100-button-secondary"
+                    onClick={onClose}
+                    style={{ textDecoration: "none" }}
+                  >
+                    <Camera size={16} /> Motion Lab (Kamera)
+                  </Link>
+                ) : null
               ) : null}
               <button
                 type="button"

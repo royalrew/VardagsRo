@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   clearWorkoutMemorySnapshot,
+  formatWorkoutSetTarget,
   formatWorkoutSnapshotRelativeTime,
   getWorkoutSnapshotProgress,
   loadWorkoutMemorySnapshot,
@@ -101,11 +102,24 @@ describe("project100-workout-memory: Snapshot Storage & Progress Tracking", () =
     expect(loadWorkoutMemorySnapshot()).toBeNull();
   });
 
-  it("returns null and purges storage if snapshot has expired (>24 hours)", () => {
+  it("preserves snapshot older than 24 hours to prevent losing work across days, and purges after maxAgeMs (7 days)", () => {
     const twentyFiveHoursAgo = Date.now() - 25 * 60 * 60 * 1000;
-    const expiredSnapshot: WorkoutMemorySnapshot = {
+    const dayOldSnapshot: WorkoutMemorySnapshot = {
       ...sampleSnapshot,
       updatedAtMs: twentyFiveHoursAgo,
+    };
+    mockStorage[WORKOUT_MEMORY_STORAGE_KEY] = JSON.stringify(dayOldSnapshot);
+
+    // Should NOT be purged after 25 hours
+    const retained = loadWorkoutMemorySnapshot();
+    expect(retained).not.toBeNull();
+    expect(retained?.title).toBe("Helkropp hemma");
+
+    // Eight days old (> 7 days) should be purged
+    const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
+    const expiredSnapshot: WorkoutMemorySnapshot = {
+      ...sampleSnapshot,
+      updatedAtMs: eightDaysAgo,
     };
     mockStorage[WORKOUT_MEMORY_STORAGE_KEY] = JSON.stringify(expiredSnapshot);
 
@@ -162,5 +176,52 @@ describe("project100-workout-memory: Snapshot Storage & Progress Tracking", () =
     expect(formatWorkoutSnapshotRelativeTime(now - 5 * 60 * 1000, now)).toBe("5 min sedan");
     expect(formatWorkoutSnapshotRelativeTime(now - 75 * 60 * 1000, now)).toBe("1 timme sedan");
     expect(formatWorkoutSnapshotRelativeTime(now - 140 * 60 * 1000, now)).toBe("2 timmar sedan");
+  });
+
+  it("formats workout set targets correctly without producing 0 min for hold seconds", () => {
+    // 1. Isometric hold (e.g. 20s handstand hold or 45s plank)
+    expect(formatWorkoutSetTarget({
+      id: "1",
+      reps: "20",
+      weightKg: "0",
+      durationMinutes: "",
+      durationSeconds: "20",
+      distanceKm: "",
+      rpe: "",
+      done: false,
+    })).toBe("20 sek");
+
+    // 2. Regular reps
+    expect(formatWorkoutSetTarget({
+      id: "2",
+      reps: "10",
+      weightKg: "0",
+      durationMinutes: "",
+      distanceKm: "",
+      rpe: "",
+      done: false,
+    })).toBe("10 reps");
+
+    // 3. Regular duration in minutes
+    expect(formatWorkoutSetTarget({
+      id: "3",
+      reps: "",
+      weightKg: "0",
+      durationMinutes: "15",
+      distanceKm: "",
+      rpe: "",
+      done: false,
+    })).toBe("15 min");
+
+    // 4. Distance
+    expect(formatWorkoutSetTarget({
+      id: "4",
+      reps: "",
+      weightKg: "0",
+      durationMinutes: "",
+      distanceKm: "5",
+      rpe: "",
+      done: false,
+    })).toBe("5 km");
   });
 });

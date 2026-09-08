@@ -7266,6 +7266,649 @@ button.event-row:hover {
   .p100-plan-skip { width: 100%; margin: 0 0 4px; justify-content: center; }
 }
 
+/* ==========================================================================
+   Projekt 100 · Active Workout Runner (Guidad träningsvy)
+   ========================================================================== */
+.p100-active-runner-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(4, 7, 6, 0.88);
+  backdrop-filter: blur(12px);
+}
+
+.p100-active-runner-shell {
+  display: flex;
+  flex-direction: column;
+  width: min(840px, 100%);
+  max-height: 94vh;
+  overflow-y: auto;
+  border: 1px solid rgba(200, 244, 93, 0.2);
+  border-radius: 20px;
+  background: linear-gradient(180deg, #131a16 0%, #0c120f 100%);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.7);
+}
+
+.p100-active-runner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--p100-line);
+}
+
+.p100-active-runner-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.p100-active-runner-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--p100-accent);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.p100-active-runner-title {
+  margin: 0;
+  color: var(--p100-text);
+  font-size: 1.05rem;
+  font-weight: 750;
+}
+
+.p100-active-runner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.p100-active-runner-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.p100-active-runner-progress-fill {
+  height: 100%;
+  background: var(--p100-accent);
+  transition: width 0.3s ease;
+}
+
+.p100-active-runner-progress-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 24px;
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--p100-muted);
+  font-size: 0.68rem;
+  border-bottom: 1px solid var(--p100-line);
+}
+
+.p100-active-runner-progress-info small {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.p100-active-runner-main {
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  gap: 20px;
+}
+
+.p100-active-runner-exercise-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.p100-active-runner-step-tag {
+  color: var(--p100-accent);
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.p100-active-runner-exercise-name {
+  margin: 0;
+  color: #fff;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.p100-active-runner-exercise-cue {
+  margin: 2px 0 0;
+  color: #a6b5ac;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.p100-active-runner-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 22px;
+  border: 1px solid var(--p100-line);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.p100-active-runner-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.p100-active-runner-set-badge {
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.p100-active-runner-target-pill {
+  display: inline-flex;
+  padding: 4px 12px;
+  border: 1px solid rgba(200, 244, 93, 0.25);
+  border-radius: 20px;
+  background: rgba(200, 244, 93, 0.08);
+  color: var(--p100-accent);
+  font-size: 0.74rem;
+  font-weight: 750;
+}
+
+.p100-active-runner-hold-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 0;
+}
+
+.p100-active-runner-hold-digits {
+  font-family: var(--font-mono, monospace);
+  font-size: 3.4rem;
+  font-weight: 800;
+  color: var(--p100-accent);
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.p100-active-runner-hold-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.p100-runner-hold-btn {
+  min-height: 42px;
+  padding: 0 20px;
+  font-size: 0.85rem;
+}
+
+.p100-active-runner-manual-override {
+  margin-top: 10px;
+}
+
+.p100-active-runner-manual-override label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--p100-muted);
+  font-size: 0.72rem;
+}
+
+.p100-active-runner-manual-override input {
+  width: 70px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.p100-active-runner-rep-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  justify-content: center;
+  padding: 14px 0;
+}
+
+.p100-active-runner-metric-stepper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.p100-stepper-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.p100-stepper-row button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.p100-stepper-row button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.p100-stepper-row input {
+  width: 80px;
+  height: 42px;
+  font-size: 1.25rem;
+  font-weight: 800;
+  text-align: center;
+  border: 1px solid var(--p100-line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+}
+
+.p100-active-runner-confirm-area {
+  display: flex;
+  justify-content: center;
+  padding-top: 10px;
+}
+
+.p100-active-runner-done-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  width: 100%;
+  max-width: 340px;
+  font-size: 1rem;
+  font-weight: 800;
+  justify-content: center;
+  background: var(--p100-accent);
+  color: #10150f;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(200, 244, 93, 0.25);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.p100-active-runner-done-btn:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.p100-runner-kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.18);
+  color: #10150f;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: inherit;
+  margin-left: 6px;
+}
+
+.p100-active-runner-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.p100-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--p100-muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.p100-link-btn:hover {
+  color: var(--p100-text);
+}
+
+/* REST PHASE CARD */
+.p100-runner-rest-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 36px 20px;
+  border: 1px solid rgba(200, 244, 93, 0.2);
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.35);
+  gap: 16px;
+}
+
+.p100-runner-rest-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: rgba(200, 244, 93, 0.1);
+  color: var(--p100-accent);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.p100-runner-rest-heading {
+  margin: 0;
+  color: #fff;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.p100-runner-rest-subtitle {
+  margin: 0;
+  color: var(--p100-muted);
+  font-size: 0.84rem;
+}
+
+.p100-runner-rest-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 12px 0;
+}
+
+.p100-runner-rest-timer-val {
+  font-family: var(--font-mono, monospace);
+  font-size: 3.8rem;
+  font-weight: 800;
+  color: var(--p100-accent);
+  line-height: 1;
+}
+
+.p100-runner-rest-timer-unit {
+  margin-top: 4px;
+  color: var(--p100-muted);
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.p100-runner-rest-time-adjusters {
+  display: flex;
+  gap: 10px;
+}
+
+.p100-runner-rest-action-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  width: 100%;
+}
+
+.p100-runner-rest-proceed-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  width: 100%;
+  max-width: 340px;
+  font-size: 1rem;
+  font-weight: 800;
+  justify-content: center;
+  background: var(--p100-accent);
+  color: #10150f;
+  border-radius: 12px;
+}
+
+.p100-runner-rest-note {
+  margin: 0;
+  color: #68736c;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+/* SUMMARY CARD */
+.p100-runner-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid var(--p100-line);
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.p100-runner-summary-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--p100-accent);
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.p100-runner-summary-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 6px 0;
+}
+
+.p100-runner-summary-metrics article {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--p100-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.p100-runner-summary-metrics article span {
+  color: var(--p100-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.p100-runner-summary-metrics article strong {
+  color: #fff;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.p100-runner-summary-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.p100-runner-summary-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border: 1px solid var(--p100-line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.p100-runner-summary-list li small {
+  display: block;
+  color: var(--p100-muted);
+  font-size: 0.68rem;
+}
+
+.p100-tag-done {
+  padding: 3px 9px;
+  border-radius: 12px;
+  background: rgba(200, 244, 93, 0.12);
+  color: var(--p100-accent);
+  font-size: 0.65rem;
+  font-weight: 750;
+}
+
+.p100-tag-skipped {
+  padding: 3px 9px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #68736c;
+  font-size: 0.65rem;
+}
+
+.p100-runner-effort-picker label,
+.p100-runner-notes-input label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--p100-text);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.p100-runner-summary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--p100-line);
+}
+
+.p100-runner-save-btn {
+  min-height: 44px;
+  padding: 0 24px;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+/* ACTIVE CAMERA WORKOUT BANNER */
+.p100-active-camera-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  background: rgba(20, 26, 22, 0.85);
+  border: 1px solid rgba(200, 244, 93, 0.25);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+}
+
+.p100-active-camera-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.p100-active-camera-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(200, 244, 93, 0.12);
+  color: var(--p100-accent);
+  font-size: 0.65rem;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.p100-active-camera-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.p100-active-camera-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.p100-active-camera-body {
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.p100-active-camera-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.p100-active-camera-current-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.p100-active-camera-label {
+  color: var(--p100-muted);
+  font-size: 0.75rem;
+}
+
+.p100-active-camera-target {
+  color: #9dd9af;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.p100-active-camera-tracking-status {
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #c4ccc6;
+  font-size: 0.7rem;
+}
+
+.p100-active-camera-all-done {
+  padding: 8px 0;
+  color: var(--p100-accent);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.p100-active-camera-error {
+  margin: 0;
+  color: #ff8585;
+  font-size: 0.75rem;
+}
+
 /* Projekt 100 · kroppsresan. The workspace accent is far too light to be a data
    mark — it glares on this surface and sits outside the readable lightness band
    — so the chart uses a darker step of the same hue, validated for contrast and
