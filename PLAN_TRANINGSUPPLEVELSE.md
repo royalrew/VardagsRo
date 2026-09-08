@@ -266,11 +266,20 @@ från generell muskel- och volymträning. Därför hålls färdighetsspåret avg
   inverterad kroppsställning ($y_{\text{ankel}} < y_{\text{höft}} < y_{\text{axel}} < y_{\text{näsa}}$),
   håller koll på lodrät linje, ackumulerar isometrisk hålltid i sekunder och ger direkta
   röst- och ljudcues vid milstolpar ("10 sekunder", "Bra balans!").
-- **Pedagogisk progression i fyra steg:**
-  1. *Pikstyrka & axelstabilitet:* Pik-armhävningar eller fötter på bänk (`pike-pushup`).
-  2. *Väggklättring (Wall-walk):* Klättra upp med fötterna mot vägg för att vänja sig vid lutningen.
-  3. *Handstående mot vägg (Wall Handstand Hold):* Mäta och öka isometrisk hålltid mot 20–30 s.
-  4. *Fritt handstående (Freestanding Balance):* Kick-up, balansering och mikrojusteringar.
+- **Strukturerad 10-stegs progression:**
+  *Fas 1: Grundstyrka, leder och båltryck (På golvet)*
+  1. *Handledspreparering & Rörlighet (Wrist Conditioning):* Vänja lederna vid 90° extension med kroppsviktbelastning. *Mål:* 60 s i fyrfota med 70 % kroppsvikt utan smärta. *Kamerastöd:* Guidat rörlighetsprotokoll.
+  2. *Planka & Hollow Body (Core & Bäckenkontroll):* Motverka "bananrygg" genom posterior bäckenkippning och skulderelevation. *Mål:* 45 s Hollow Body Hold + 60 s strikt planka. *Kamerastöd:* Linjemätning och båltryck via befintlig `plank`-tracker.
+  3. *Pik-ställning med upphöjda fötter (Box / Bench Pike Hold):* 90° vinkel mellan överkropp och ben med fötterna på bänk/stol. *Mål:* 3 set × 30 s med fullt sträckta armbågar. *Kamerastöd:* Vinkelanalys mellan bål och lår.
+  4. *Pik-armhävningar (Pike Push-Ups):* Bygga vertikal press- och skulderstyrka. *Mål:* 3 set × 8 kontrollerade reps. *Kamerastöd:* Repräkning och bottenvinkel via `pike-pushup`-trackern.
+  *Fas 2: Väggen – Raka linjer och rädslans upplösning*
+  5. *Väggklättring (Wall Walk):* Fötterna klättrar uppåt längs väggen till 45° lutning. *Mål:* 3 kontrollerade klättringar upp och ner utan tappad bålspänning. *Kamerastöd:* Lutningsvinkel och stegvis höjdindikator.
+  6. *Buken mot vägg (Chest-to-Wall Handstand):* Guldstandarden för rak linje. Näsa och tår touchar väggen lätt, axlar pressas mot öronen. *Mål:* 3 set × 30 s rak, obruten hålltid. *Kamerastöd:* Inverterad kroppsanalys och röstcues vid 10, 20 och 30 s.
+  7. *Säker nergång – Piruetten (The Bail-Out):* Flytta en hand i sidled och vrida kroppen till mjuk landning på fötterna. Tar bort rädslan för att falla över. *Mål:* 5 godkända piruett-avstigningar åt båda håll utan tvekan.
+  *Fas 3: Balans, fingertoppskänsla och fritt svävande*
+  8. *Tå-släpp mot vägg (Wall Float / Toe Taps):* Lätta fingertopparna för att släppa tårna från väggen några centimeter och känna balanspunkten. *Mål:* Hålla 5–10 s fritt svävande balans. *Kamerastöd:* Automatisk tidtagning av den fria svävtiden.
+  9. *Kontrollerad uppspark mot vägg (Kick-Up Control):* Mjuk uppspark med ett ben i taget så att hälarna fjäderlätt möter väggen utan krasch. *Mål:* 8 av 10 uppsparkar i lodlinjen på första försöket. *Kamerastöd:* Hastighets- och accelerationsbedömning vid väggkontakt.
+  10. *Fritt handstående & Fingertoppsbroms (Freestanding Handstand):* Fritt stående med aktiva fingrar ("finger camber") som mikrojusterar balansen. *Mål:* 10–15 s fritt handstående med rak linje, kontrollerad andning och mjuk landning. *Kamerastöd:* Live balanstimer, lodrät balansmätare och milstolpesignal.
 - **Bara 1 sak till en början:** Inga andra akrobatiska färdigheter (som hjulning, planche
   eller muscle-up) läggs till innan detta enda handståendespår är verifierat, begripligt och
   provat framför kameran.
