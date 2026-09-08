@@ -13,6 +13,15 @@ export default async function Project100MotionLabPage({
 }) {
   const actor = await requireProject100Actor();
   assertProject100Adult(actor);
-  const launch = parseMotionMissionLaunch(await searchParams);
-  return <MotionLab initialMissionLaunch={launch} />;
+  const resolvedParams = await searchParams;
+  const launch = parseMotionMissionLaunch(resolvedParams);
+  const initialProgram = typeof resolvedParams.program === "string" ? resolvedParams.program : undefined;
+  const initialExercise = typeof resolvedParams.exercise === "string" ? resolvedParams.exercise : undefined;
+  return (
+    <MotionLab
+      initialMissionLaunch={launch}
+      initialProgram={initialProgram}
+      initialExercise={initialExercise}
+    />
+  );
 }

@@ -268,8 +268,12 @@ function parseStoredColdStarts(): MotionColdStartStats {
 
 export function MotionLab({
   initialMissionLaunch = null,
+  initialProgram,
+  initialExercise,
 }: {
   initialMissionLaunch?: MotionMissionLaunch | null;
+  initialProgram?: string;
+  initialExercise?: string;
 }) {
   const createConfiguredWorkoutSession = () => createWorkoutSession(
     initialMissionLaunch?.exerciseId === "squat"
@@ -411,12 +415,22 @@ export function MotionLab({
   const [workoutReportCopied, setWorkoutReportCopied] = useState(false);
   type RestPreset = "30" | "45" | "60" | "dynamic";
   const [restPreset, setRestPreset] = useState<RestPreset>("45");
-  const [activeWorkoutExercise, setActiveWorkoutExercise] = useState<WorkoutPanelSelection>(
-    initialMissionLaunch?.exerciseId ?? "squat",
-  );
-  const [unifiedTracker, setUnifiedTracker] = useState<UnifiedExerciseState>(() =>
-    createUnifiedExerciseTracker(initialMissionLaunch?.exerciseId ?? "squat"),
-  );
+  const [activeWorkoutExercise, setActiveWorkoutExercise] = useState<WorkoutPanelSelection>(() => {
+    if (initialMissionLaunch?.exerciseId) return initialMissionLaunch.exerciseId;
+    if (initialProgram && initialProgram in WORKOUT_PROGRAMS) return initialProgram as ProgramId;
+    if (initialExercise && initialExercise in EXERCISE_LIBRARY) return initialExercise as TrackableExerciseId;
+    return "squat";
+  });
+  const [unifiedTracker, setUnifiedTracker] = useState<UnifiedExerciseState>(() => {
+    const targetEx =
+      initialMissionLaunch?.exerciseId ??
+      (initialProgram && initialProgram in WORKOUT_PROGRAMS
+        ? WORKOUT_PROGRAMS[initialProgram as ProgramId].exercises[0].exerciseId
+        : initialExercise && initialExercise in EXERCISE_LIBRARY
+        ? (initialExercise as TrackableExerciseId)
+        : "squat");
+    return createUnifiedExerciseTracker(targetEx);
+  });
   const unifiedTrackerRef = useRef<UnifiedExerciseState>(unifiedTracker);
   const [programSession, setProgramSession] = useState<ProgramSessionState | null>(null);
   const programSessionRef = useRef<ProgramSessionState | null>(null);
@@ -424,8 +438,21 @@ export function MotionLab({
   const [savedProgramSnapshot, setSavedProgramSnapshot] = useState<ProgramSessionState | null>(null);
 
   useEffect(() => {
-    setSavedProgramSnapshot(loadProgramSessionSnapshot());
-  }, []);
+    const saved = loadProgramSessionSnapshot();
+    setSavedProgramSnapshot(saved);
+    if (!saved && initialProgram && initialProgram in WORKOUT_PROGRAMS) {
+      const prog = WORKOUT_PROGRAMS[initialProgram as ProgramId];
+      if (prog) {
+        const sess = createProgramSession(prog);
+        programSessionRef.current = sess;
+        setProgramSession(sess);
+        const firstExId = sess.activeExercise.exerciseId;
+        const initialTracker = createUnifiedExerciseTracker(firstExId);
+        unifiedTrackerRef.current = initialTracker;
+        setUnifiedTracker(initialTracker);
+      }
+    }
+  }, [initialProgram]);
 
   function handleResumeProgramSession(saved: ProgramSessionState) {
     programSessionRef.current = saved;
@@ -2826,7 +2853,32 @@ export function MotionLab({
               </span>
             </div>
           ) : null}
-          {error ? <div className="p100-motion-error" role="alert"><VideoOff /><span><strong>Något stoppade motorn</strong>{error}</span></div> : null}
+          {error ? (
+            <div className="p100-motion-error" role="alert">
+              <VideoOff />
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <span>
+                  <strong>Något stoppade motorn</strong>
+                  {error}
+                </span>
+                <Link
+                  href="/projekt-100/traning"
+                  className="p100-button p100-motion-fallback-btn"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    width: "fit-content",
+                    fontSize: "0.85rem",
+                    padding: "8px 14px",
+                    textDecoration: "none",
+                  }}
+                >
+                  Fortsätt passet manuellt
+                </Link>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <aside className="p100-motion-sidebar">

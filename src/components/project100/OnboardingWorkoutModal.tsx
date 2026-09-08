@@ -91,7 +91,7 @@ function generateProposal(
         })),
       })),
       hasCameraOption: true,
-      cameraHref: "/projekt-100/traning/motion",
+      cameraHref: "/projekt-100/traning/motion?program=calisthenics-control",
     };
   }
 
@@ -144,7 +144,7 @@ function generateProposal(
         },
       ],
       hasCameraOption: true,
-      cameraHref: "/projekt-100/traning/motion",
+      cameraHref: "/projekt-100/traning/motion?exercise=squat",
     };
   }
 
@@ -197,7 +197,7 @@ function generateProposal(
         },
       ],
       hasCameraOption: true,
-      cameraHref: "/projekt-100/traning/motion",
+      cameraHref: "/projekt-100/traning/motion?program=push-pull-core",
     };
   }
 
