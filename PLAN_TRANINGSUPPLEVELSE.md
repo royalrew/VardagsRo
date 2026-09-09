@@ -13,6 +13,12 @@ Uppvärmningen har en lokal timer och frivillig kamera; den räknas inte som
 styrkeset och timern skriver ingen träningslogg. Befintlig sessions- och
 setlagring används fortsatt för styrkan.
 
+Kameran är huvudvägen för spinning inomhus och försöker starta direkt när
+cykelvyn öppnas. Träning utan kamera finns kvar som reserv. Ett pågående eller
+avslutat dagsval kan tas bort efter tydlig bekräftelse så att användaren kan
+börja om eller välja den andra kroppsdelen; bekräftelsen visar när sparade set
+också kommer att raderas.
+
 Analys, utrustning, historik och övriga träningsval öppnas vid behov.
 Boss fight nås under ett stängt spelval nedanför kameran. Kameraytan följer
 bildens proportioner och inställningarna ligger under den. Träningssidan

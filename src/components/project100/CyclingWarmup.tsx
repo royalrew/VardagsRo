@@ -33,20 +33,20 @@ export function CyclingWarmup({ missionId, onComplete }: {
       </div>
       <div className="p100-next-training-actions">
         {startedAt === null ? (
-          <button className="p100-warmup-primary" type="button" onClick={() => setStartedAt(Date.now())}><Bike /> Börja cykla</button>
-        ) : null}
-        <button className={startedAt !== null ? "p100-warmup-primary" : undefined} type="button" onClick={onComplete}>
-          {startedAt === null ? "Jag är redan uppvärmd" : "Klar · fortsätt till styrkan"}
-        </button>
+          <>
+            <Link className="p100-warmup-primary" href={`/projekt-100/traning/motion?exercise=cycling&camera=auto&warmupMission=${encodeURIComponent(missionId)}`}>
+              <Camera /> Starta spinning med kamera
+            </Link>
+            <button type="button" onClick={() => setStartedAt(Date.now())}><Bike /> Cykla utan kamera</button>
+            <button type="button" onClick={onComplete}>Jag är redan uppvärmd</button>
+          </>
+        ) : (
+          <button className="p100-warmup-primary" type="button" onClick={onComplete}>
+            Klar · fortsätt till styrkan
+          </button>
+        )}
       </div>
-      <details className="p100-block-details">
-        <summary>Använd kamera för cyklingen</summary>
-        <p>Placera cykeln i profil. Kameran uppskattar pedalvarv och kadens.</p>
-        <Link className="p100-button-secondary" href={`/projekt-100/traning/motion?exercise=cycling&warmupMission=${encodeURIComponent(missionId)}`}>
-          <Camera /> Öppna cykelkameran
-        </Link>
-      </details>
-      <small>Timern visar förfluten tid. Uppvärmningen räknas inte som ett styrkeset och sparas inte i träningsloggen.</small>
+      <small>Kameran startar på nästa sida och följer pedalvarv, kadens och tid. Uppvärmningen räknas inte som ett styrkeset.</small>
     </section>
   );
 }

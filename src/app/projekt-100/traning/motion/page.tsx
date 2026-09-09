@@ -19,6 +19,7 @@ export default async function Project100MotionLabPage({
   const initialProgram = typeof resolvedParams.program === "string" ? resolvedParams.program : undefined;
   const initialExercise = typeof resolvedParams.exercise === "string" ? resolvedParams.exercise : undefined;
   const initialSource = typeof resolvedParams.source === "string" ? resolvedParams.source : undefined;
+  const initialAutoStartCamera = resolvedParams.camera === "auto";
   const initialWarmupMissionId = typeof resolvedParams.warmupMission === "string"
     && resolvedParams.warmupMission.length <= 200
     ? resolvedParams.warmupMission
@@ -30,6 +31,7 @@ export default async function Project100MotionLabPage({
       initialProgram={initialProgram}
       initialExercise={initialExercise}
       initialSource={initialSource}
+      initialAutoStartCamera={initialAutoStartCamera}
       initialWarmupMissionId={initialWarmupMissionId}
       initialPairingCode={initialPairingCode}
     />

@@ -19,6 +19,16 @@ export function markCyclingWarmupComplete(missionId: string): void {
   window.dispatchEvent(new Event("project100:warmup"));
 }
 
+export function clearCyclingWarmup(missionId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(`${CYCLING_WARMUP_KEY_PREFIX}${missionId}`);
+  } catch {
+    // A fresh pass still works when browser storage is blocked.
+  }
+  window.dispatchEvent(new Event("project100:warmup"));
+}
+
 export function subscribeToWarmupMemory(onChange: () => void): () => void {
   window.addEventListener("project100:warmup", onChange);
   window.addEventListener("storage", onChange);

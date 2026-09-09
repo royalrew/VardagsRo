@@ -1,11 +1,12 @@
 "use client";
 
-import { Check, Clock3, MapPin, Play, Square } from "lucide-react";
+import { Check, Clock3, MapPin, Play, RotateCcw, Square } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { TrainingBlockPlanner } from "./TrainingBlockPlanner";
 import { TrainingStimulusPanel } from "./TrainingStimulusPanel";
+import { clearCyclingWarmup } from "@/lib/project100-warmup-memory";
 
 import type {
   Project100ExercisePurpose,
@@ -106,6 +107,7 @@ export function DailyTrainingMission({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmFinish, setConfirmFinish] = useState(false);
+  const [confirmRestart, setConfirmRestart] = useState(false);
 
   async function start(missionType: Project100MissionType) {
     setBusy(true);
@@ -159,6 +161,33 @@ export function DailyTrainingMission({
     setMission(body.mission);
     router.refresh();
   }
+
+  async function restart() {
+    if (!mission) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/project100/training/sessions/${encodeURIComponent(mission.id)}`,
+        { method: "DELETE" },
+      );
+      const body = (await response.json()) as { deleted?: boolean; error?: unknown };
+      if (!response.ok || !body.deleted) {
+        throw new Error(errorMessage(body, "Passet kunde inte tas bort."));
+      }
+      clearCyclingWarmup(mission.id);
+      setMission(null);
+      setConfirmFinish(false);
+      setConfirmRestart(false);
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Passet kunde inte tas bort.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const savedSetCount = mission?.blocks.reduce((sum, block) => sum + block.sets.length, 0) ?? 0;
 
   return (
     <section className="p100-daily-mission" aria-labelledby="daily-mission-title">
@@ -255,7 +284,17 @@ export function DailyTrainingMission({
                 : `${mission.coverage.completedTargetSets} av ${mission.coverage.targetSets} målset gjorda.`}
               {mission.dataGaps.includes("rpe_missing") ? " Ansträngning saknas för vissa set." : ""}
             </span>
-            {mission.status === "in_progress" ? (
+            {confirmRestart ? (
+              <div className="p100-mission-finish-confirm" role="group" aria-label="Bekräfta att passet ska tas bort och börja om">
+                <strong>
+                  {savedSetCount > 0
+                    ? `${savedSetCount} sparade set raderas om du börjar om.`
+                    : "Det här passvalet tas bort så att du kan välja på nytt."}
+                </strong>
+                <button type="button" disabled={busy} onClick={() => setConfirmRestart(false)}>Behåll passet</button>
+                <button type="button" disabled={busy} onClick={() => void restart()}><RotateCcw /> Ja, börja om</button>
+              </div>
+            ) : mission.status === "in_progress" ? (
               confirmFinish ? (
                 <div className="p100-mission-finish-confirm" role="group" aria-label="Bekräfta att dagens uppdrag ska avslutas">
                   <strong>{mission.coverage.targetSets - mission.coverage.completedTargetSets} målset återstår.</strong>
@@ -263,21 +302,30 @@ export function DailyTrainingMission({
                   <button type="button" disabled={busy} onClick={() => void finish()}><Square /> Avsluta ändå</button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    if (mission.coverage.completedTargetSets < mission.coverage.targetSets) {
-                      setConfirmFinish(true);
-                    } else {
-                      void finish();
-                    }
-                  }}
-                >
-                  <Square /> Avsluta passet
-                </button>
+                <div className="p100-mission-footer-actions">
+                  <button type="button" disabled={busy} onClick={() => setConfirmRestart(true)}>
+                    <RotateCcw /> Avbryt eller börja om
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      if (mission.coverage.completedTargetSets < mission.coverage.targetSets) {
+                        setConfirmFinish(true);
+                      } else {
+                        void finish();
+                      }
+                    }}
+                  >
+                    <Square /> Avsluta passet
+                  </button>
+                </div>
               )
-            ) : null}
+            ) : (
+              <button type="button" disabled={busy} onClick={() => setConfirmRestart(true)}>
+                <RotateCcw /> Börja om eller välj nytt pass
+              </button>
+            )}
           </footer>
         </>
       )}

@@ -20,8 +20,10 @@ describe("TrainingBlockPlanner", () => {
 
     expect(html).toContain("Lugn spinning");
     expect(html).toContain("exercise=cycling");
+    expect(html).toContain("camera=auto");
     expect(html).toContain("warmupMission=mission-upper");
-    expect(html).toContain("Börja cykla");
+    expect(html).toContain("Starta spinning med kamera");
+    expect(html).toContain("Cykla utan kamera");
     expect(html).toContain("Jag är redan uppvärmd");
     expect(html).not.toContain('id="p100-next-training-step-title"');
   });
@@ -42,7 +44,7 @@ describe("TrainingBlockPlanner", () => {
     expect(html).toContain("Nästa steg");
     expect(html).toContain("Steg 2 · Styrka");
     expect(html).toContain("Set 2 av 3");
-    expect(html).not.toContain("Börja cykla");
+    expect(html).not.toContain("Starta spinning med kamera");
     expect(html).toContain("Starta med kamera");
     expect(html).toContain("Visa hela planen och andra alternativ");
     expect(html).toContain("Knäböj");

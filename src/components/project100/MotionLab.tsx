@@ -300,6 +300,7 @@ export function MotionLab({
   initialProgram,
   initialExercise,
   initialSource,
+  initialAutoStartCamera = false,
   initialWarmupMissionId,
   initialPairingCode,
 }: {
@@ -307,6 +308,7 @@ export function MotionLab({
   initialProgram?: string;
   initialExercise?: string;
   initialSource?: string;
+  initialAutoStartCamera?: boolean;
   initialWarmupMissionId?: string;
   initialPairingCode: string;
 }) {
@@ -375,6 +377,7 @@ export function MotionLab({
   const lastArenaSpeechAtRef = useRef(-Infinity);
   const poseVisibleRef = useRef(false);
   const cyclingAutoStartedRef = useRef(false);
+  const cameraAutoStartAttemptedRef = useRef(false);
   const fullBodyVisibleRef = useRef(false);
   const performanceProfileRef = useRef<RunningPerformanceProfile | null>(null);
   const spokenPerformancePhaseRef = useRef<string | null>(null);
@@ -2855,6 +2858,18 @@ export function MotionLab({
     setViewportFullscreen(true);
     setFullscreen(true);
   }
+
+  useEffect(() => {
+    if (!initialAutoStartCamera || cameraAutoStartAttemptedRef.current) return;
+    const timeout = window.setTimeout(() => {
+      if (cameraAutoStartAttemptedRef.current) return;
+      cameraAutoStartAttemptedRef.current = true;
+      void startCamera();
+    }, 0);
+    return () => window.clearTimeout(timeout);
+    // The initial route flag intentionally triggers one camera attempt per mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialAutoStartCamera]);
 
   const isStarting = status === "requesting" || status === "loading";
   const isRecovering = status === "recovering";

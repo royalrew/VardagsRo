@@ -6806,6 +6806,8 @@ button.event-row:hover {
 .p100-mission-finish-confirm { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .p100-mission-finish-confirm > strong { color: #ffd68a; font-size: .65rem; }
 .p100-mission-finish-confirm > button:first-of-type { background: transparent; color: var(--p100-text); border: 1px solid var(--p100-line); }
+.p100-mission-footer-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.p100-mission-footer-actions > button:first-child { background: transparent; color: var(--p100-text); border: 1px solid var(--p100-line); }
 .p100-daily-mission > .p100-form-error { margin: 0 20px 15px; }
 
 .p100-live-gate { overflow: hidden; border: 1px solid rgba(132,156,255,.22); border-radius: 15px; background: linear-gradient(135deg, rgba(103,126,255,.065), rgba(18,24,21,.96) 48%); }
@@ -8955,6 +8957,8 @@ button.event-row:hover {
 .p100-memory-form { padding: 10px 12px; border-radius: 8px; background: rgba(0,0,0,.35); border: 1px solid var(--p100-line); display: flex; flex-direction: column; gap: 8px; }
 .p100-memory-form header { display: flex; justify-content: space-between; align-items: center; font-size: .68rem; color: #cbd3cd; }
 .p100-memory-form-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
+.p100-jarvis-workspace .p100-field select { background-color: #000; color: #fff; color-scheme: dark; }
+.p100-jarvis-workspace .p100-field select option { background-color: #000; color: #fff; }
 
 .p100-memory-search-bar { display: flex; flex-direction: column; gap: 6px; }
 .p100-mem-search-input-wrap { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 6px; background: rgba(0,0,0,.3); border: 1px solid var(--p100-line); }
