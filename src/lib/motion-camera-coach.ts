@@ -210,7 +210,7 @@ export function evaluateExerciseFraming(
   }
 
   // 4. Stance angle check
-  const requiresProfileOrDiagonal = exerciseId === "kettlebell-swing" || exerciseId === "bent-over-row" || exerciseId === "pushup" || exerciseId === "plank" || exerciseId === "bench-dips" || exerciseId === "pike-pushup" || exerciseId === "bulgarian-split-squat" || exerciseId === "dumbbell-rdl";
+  const requiresProfileOrDiagonal = exerciseId === "kettlebell-swing" || exerciseId === "bent-over-row" || exerciseId === "pushup" || exerciseId === "plank" || exerciseId === "bench-dips" || exerciseId === "pike-pushup" || exerciseId === "bulgarian-split-squat" || exerciseId === "dumbbell-rdl" || exerciseId === "cycling";
   if (requiresProfileOrDiagonal && orientation.stance === "front") {
     issues.push("suboptimal-angle");
   }

@@ -2,7 +2,7 @@
 
 import { Backpack, Camera, Check, MapPin, Save, ShieldCheck, Sparkles, X } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import {
   recommendProject100MissionExercises,
@@ -23,6 +23,8 @@ import {
   type MotionMissionLaunch,
 } from "@/lib/motion-mission-launch";
 import type { Core24Variation } from "@/lib/motion-core24";
+import { cyclingWarmupIsComplete, markCyclingWarmupComplete, subscribeToWarmupMemory } from "@/lib/project100-warmup-memory";
+import { CyclingWarmup } from "./CyclingWarmup";
 
 interface PlannerRequirement {
   movementPattern: Project100MovementPattern;
@@ -70,6 +72,12 @@ const qualityLabels = {
   manual: "Manuell",
 } as const;
 
+
+
+function plannerStorageKey(missionId: string): string {
+  return `project100:training-setup:${missionId}`;
+}
+
 function parseSwedishNumber(value: string): number | undefined {
   const normalized = value.trim().replace(",", ".");
   if (!normalized) return undefined;
@@ -100,10 +108,51 @@ export function TrainingBlockPlanner({
     seamsAndStrapsIntact: false,
     canReleaseSafely: false,
   });
+  const [warmupDismissed, setWarmupDismissed] = useState(false);
   const [manualDraft, setManualDraft] = useState<ManualSetDraft | null>(null);
   const [savingManual, setSavingManual] = useState(false);
   const [manualError, setManualError] = useState<string | null>(null);
   const manualEventIdRef = useRef<string | null>(null);
+  const warmupCompleted = useSyncExternalStore(
+    subscribeToWarmupMemory,
+    () => cyclingWarmupIsComplete(missionId),
+    () => false,
+  );
+
+  useEffect(() => {
+    const hydrationFrame = requestAnimationFrame(() => {
+      try {
+        const stored = JSON.parse(sessionStorage.getItem(plannerStorageKey(missionId)) ?? "null") as {
+          environment?: Project100TrainingEnvironment;
+          equipment?: TrainingEquipment[];
+        } | null;
+        if (stored?.environment && environments.some((item) => item.id === stored.environment)) {
+          setEnvironment(stored.environment);
+        }
+        if (Array.isArray(stored?.equipment)) {
+          const allowed = new Set(equipmentChoices.map((item) => item.id));
+          setEquipment(stored.equipment.filter((item) => item === "bodyweight" || allowed.has(item as Exclude<TrainingEquipment, "bodyweight">)));
+        }
+      } catch {
+        // En trasig sessionsinställning ersätts när användaren gör nästa val.
+      }
+    });
+    return () => cancelAnimationFrame(hydrationFrame);
+  }, [missionId]);
+
+  function savePlannerSetup(
+    nextEnvironment: Project100TrainingEnvironment,
+    nextEquipment: TrainingEquipment[],
+  ) {
+    try {
+      sessionStorage.setItem(plannerStorageKey(missionId), JSON.stringify({
+        environment: nextEnvironment,
+        equipment: nextEquipment,
+      }));
+    } catch {
+      // Valen fungerar fortfarande för den öppna sidan om lagring inte är tillgänglig.
+    }
+  }
 
   const backpackSelected = equipment.includes("loaded_backpack");
   const backpackEstimate = useMemo(() => estimateLoadedBackpackWeight({
@@ -133,9 +182,13 @@ export function TrainingBlockPlanner({
   }), [backpackReady, carryPosition, effectiveEquipment, environment, missionType]);
 
   function toggleEquipment(item: TrainingEquipment) {
-    setEquipment((current) => current.includes(item)
-      ? current.filter((candidate) => candidate !== item)
-      : [...current, item]);
+    setEquipment((current) => {
+      const next = current.includes(item)
+        ? current.filter((candidate) => candidate !== item)
+        : [...current, item];
+      savePlannerSetup(environment, next);
+      return next;
+    });
   }
 
   function toggleSafety(item: keyof LoadedBackpackSafetyCheck) {
@@ -243,22 +296,57 @@ export function TrainingBlockPlanner({
   const remainingPatterns = new Map(requirements.map((item) => [item.movementPattern, item]));
   const remainingRecommendations = recommendations.filter((item) =>
     (remainingPatterns.get(item.movementPattern)?.remainingSets ?? 0) > 0);
+  const nextGroup = remainingRecommendations.find((item) => item.recommendations.length > 0);
+  const nextRecommendation = nextGroup?.recommendations[0];
+  const nextVariation = nextRecommendation?.availableVariations
+    .filter((variation) => variation.difficulty <= 3)
+    .find((variation) => getCore24MissionTrackingId(nextRecommendation.familyId, variation.id) !== null)
+    ?? nextRecommendation?.availableVariations.find((variation) => variation.difficulty <= 3);
+  const nextRequirement = nextGroup ? remainingPatterns.get(nextGroup.movementPattern) : undefined;
+  const nextTrackingId = nextRecommendation && nextVariation
+    ? getCore24MissionTrackingId(nextRecommendation.familyId, nextVariation.id)
+    : null;
+  const nextLaunchHref = nextGroup && nextRecommendation && nextVariation && nextTrackingId
+    ? buildMotionMissionLaunchHref({
+        missionId,
+        familyId: nextRecommendation.familyId as MotionMissionLaunch["familyId"],
+        variationId: nextVariation.id,
+        exerciseId: nextTrackingId,
+        exerciseName: nextVariation.name,
+        movementPattern: nextGroup.movementPattern,
+        environment,
+        targetReps: nextRequirement?.targetReps ?? 10,
+        targetDurationSeconds: nextTrackingId === "plank" ? nextRequirement?.targetReps ?? 30 : null,
+        weightKg: null,
+        backpackCarryPosition: null,
+      })
+    : null;
+  const canWarmUpOnBike = !warmupDismissed
+    && !warmupCompleted
+    && requirements.length > 0
+    && requirements.every((item) => item.remainingSets === item.targetSets);
 
   return (
     <section className="p100-block-planner" aria-labelledby="p100-block-planner-title">
       <header>
         <div>
-          <span><Sparkles /> Core 24</span>
-          <h3 id="p100-block-planner-title">Planera nästa träningsblock</h3>
-          <p>Välj var du är och vad som faktiskt finns. Förslagen fyller bara det som återstår idag.</p>
+          <span><Sparkles /> Ditt pass</span>
+          <h3 id="p100-block-planner-title">Nästa steg</h3>
+          <p>En övning i taget. Du kan använda kameran eller bekräfta dina set själv.</p>
         </div>
         <em><MapPin /> {environments.find((item) => item.id === environment)?.label}</em>
       </header>
 
+      <details className="p100-block-details">
+        <summary>Ändra plats och utrustning</summary>
       <div className="p100-block-planner-controls">
         <label>
           <span>Miljö</span>
-          <select value={environment} onChange={(event) => setEnvironment(event.target.value as Project100TrainingEnvironment)}>
+          <select value={environment} onChange={(event) => {
+            const nextEnvironment = event.target.value as Project100TrainingEnvironment;
+            setEnvironment(nextEnvironment);
+            savePlannerSetup(nextEnvironment, equipment);
+          }}>
             {environments.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
           </select>
         </label>
@@ -329,7 +417,47 @@ export function TrainingBlockPlanner({
         </div>
       ) : null}
 
-      <div className="p100-block-recommendations">
+      </details>
+      {canWarmUpOnBike ? (
+        <CyclingWarmup missionId={missionId} onComplete={() => {
+          markCyclingWarmupComplete(missionId);
+          setWarmupDismissed(true);
+        }} />
+      ) : null}
+
+      {!canWarmUpOnBike && nextGroup && nextRecommendation && nextVariation ? (
+        <section className="p100-next-training-step" aria-labelledby="p100-next-training-step-title">
+          <div>
+            <span>Steg 2 · Styrka</span>
+            <h4 id="p100-next-training-step-title">{nextVariation.name}</h4>
+            <p>
+              Set {(nextRequirement?.targetSets ?? 3) - (nextRequirement?.remainingSets ?? 3) + 1} av {nextRequirement?.targetSets ?? 3} · mål {nextRequirement?.targetReps ?? 10} {nextTrackingId === "plank" ? "sek" : "reps"}.
+              {nextLaunchHref
+                ? " Kameran hjälper dig att räkna och setet sparas när du bekräftar det."
+                : " Genomför setet och bekräfta sedan reps och ansträngning."}
+            </p>
+          </div>
+          <div className="p100-next-training-actions">
+            {nextLaunchHref ? (
+              <Link href={nextLaunchHref}><Camera /> Starta med kamera</Link>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => openManualSet(
+                nextRecommendation.familyId,
+                nextGroup.movementPattern,
+                nextVariation,
+                nextRequirement?.targetReps ?? 10,
+              )}
+            ><Save /> {nextLaunchHref ? "Gör utan kamera" : "Starta set"}</button>
+          </div>
+          <small>Motion Lab öppnas i samma flik. Efter sparat set går du tillbaka till dagens uppdrag.</small>
+        </section>
+      ) : null}
+
+      <details className="p100-block-details">
+        <summary>Visa hela planen och andra alternativ</summary>
+        <div className="p100-block-recommendations">
         {remainingRecommendations.length === 0 ? (
           <p className="p100-block-planner-done">Alla rörelsemönster i dagens uppdrag är redan täckta.</p>
         ) : remainingRecommendations.map((group) => {
@@ -404,7 +532,8 @@ export function TrainingBlockPlanner({
             </article>
           );
         })}
-      </div>
+        </div>
+      </details>
 
       {manualDraft ? (
         <div className="p100-manual-set" role="dialog" aria-modal="true" aria-labelledby="p100-manual-set-title">

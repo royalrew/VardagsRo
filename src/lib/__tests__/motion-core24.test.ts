@@ -44,6 +44,14 @@ describe("Core 24 exercise catalog", () => {
     });
     expect(homeWithDumbbell.some((item) => item.family.id === "one-arm-row")).toBe(true);
     expect(homeWithDumbbell.every((item) => item.score >= 0 && item.score <= 100)).toBe(true);
+
+    const homeWithKettlebellAndChair = recommendCore24Families({
+      goal: "hypertrophy",
+      environment: "home",
+      availableEquipment: ["kettlebell", "bench_or_chair"],
+    });
+    const row = homeWithKettlebellAndChair.find((item) => item.family.id === "one-arm-row");
+    expect(row?.availableVariations.map((item) => item.id)).toContain("supported-one-arm-kettlebell-row");
   });
 });
 

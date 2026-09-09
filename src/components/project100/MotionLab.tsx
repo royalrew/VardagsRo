@@ -11,12 +11,12 @@ import {
   VideoOff,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PoseLandmarker } from "@mediapipe/tasks-vision";
 import {
   calculateEndToEndLatency,
   evaluateRemoteSensorNotice,
-  generatePairingCode,
   MotionLatencyTracker,
   type MotionSensorFrame,
   type RemoteSensorNotice,
@@ -170,6 +170,7 @@ import {
 } from "@/lib/motion-camera-coach";
 import type { MotionMissionLaunch } from "@/lib/motion-mission-launch";
 import { MotionMissionSyncPanel } from "./motion/MotionMissionSyncPanel";
+import { markCyclingWarmupComplete } from "@/lib/project100-warmup-memory";
 import { AdaptiveCameraSetupPanel } from "./motion/AdaptiveCameraSetupPanel";
 import type { SavedCameraSetupProfile } from "@/lib/motion-adaptive-camera";
 import {
@@ -299,12 +300,17 @@ export function MotionLab({
   initialProgram,
   initialExercise,
   initialSource,
+  initialWarmupMissionId,
+  initialPairingCode,
 }: {
   initialMissionLaunch?: MotionMissionLaunch | null;
   initialProgram?: string;
   initialExercise?: string;
   initialSource?: string;
+  initialWarmupMissionId?: string;
+  initialPairingCode: string;
 }) {
+  const router = useRouter();
   const createConfiguredWorkoutSession = () => createWorkoutSession(
     initialMissionLaunch?.exerciseId === "squat"
       ? { targetSets: 1, targetRepsPerSet: initialMissionLaunch.targetReps }
@@ -368,6 +374,7 @@ export function MotionLab({
   const spokenNextPhaseRef = useRef<string | null>(null);
   const lastArenaSpeechAtRef = useRef(-Infinity);
   const poseVisibleRef = useRef(false);
+  const cyclingAutoStartedRef = useRef(false);
   const fullBodyVisibleRef = useRef(false);
   const performanceProfileRef = useRef<RunningPerformanceProfile | null>(null);
   const spokenPerformancePhaseRef = useRef<string | null>(null);
@@ -421,6 +428,7 @@ export function MotionLab({
   const [replaying, setReplaying] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [viewportFullscreen, setViewportFullscreen] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [gameView, setGameView] = useState<MotionGameState | null>(null);
   const [coldStarts, setColdStarts] = useState<MotionColdStartStats>({ attempts: 0, successes: 0 });
   const [baselineRunning, setBaselineRunning] = useState(false);
@@ -709,15 +717,7 @@ export function MotionLab({
   const [squatView, setSquatView] = useState<SquatTrackerState>(() => createSquatTrackerState());
   const [squatCoachCue, setSquatCoachCue] = useState<string>(configuredSquatCue);
   const [squatReportCopied, setSquatReportCopied] = useState(false);
-  const [coachSettings, setCoachSettings] = useState<CoachSettings>(() => {
-    try {
-      const stored = localStorage.getItem("p100_motion_coach_settings");
-      if (stored) return { ...DEFAULT_COACH_SETTINGS, ...JSON.parse(stored) };
-    } catch {
-      // fallback
-    }
-    return DEFAULT_COACH_SETTINGS;
-  });
+  const [coachSettings, setCoachSettings] = useState<CoachSettings>(DEFAULT_COACH_SETTINGS);
   const coachSettingsRef = useRef<CoachSettings>(coachSettings);
 
   function changeCoachSettings(next: CoachSettings) {
@@ -730,33 +730,13 @@ export function MotionLab({
     }
   }
 
-  const [coachMemory, setCoachMemory] = useState<MotionCoachMemory>(() => {
-    try {
-      const stored = localStorage.getItem("p100_motion_coach_memory");
-      if (stored) return { ...createDefaultCoachMemory(), ...JSON.parse(stored) };
-    } catch {
-      // fallback
-    }
-    return createDefaultCoachMemory();
-  });
+  const [coachMemory, setCoachMemory] = useState<MotionCoachMemory>(() => createDefaultCoachMemory());
   const coachMemoryRef = useRef<MotionCoachMemory>(coachMemory);
   const [newPrNotice, setNewPrNotice] = useState<string | null>(null);
 
   // Fas F: iPhone Wireless Sensor State & Diagnostics
-  const [inputSource, setInputSource] = useState<"webcam" | "remote-sensor">(() => {
-    try {
-      const stored = localStorage.getItem("p100_motion_input_source");
-      if (stored === "webcam" || stored === "remote-sensor") return stored;
-    } catch {}
-    return "webcam";
-  });
-  const [remotePairingCode, setRemotePairingCode] = useState<string>(() => {
-    try {
-      const stored = localStorage.getItem("p100_motion_pairing_code");
-      if (stored && /^[A-HJ-NP-Z2-9]{6}$/.test(stored)) return stored;
-    } catch {}
-    return generatePairingCode();
-  });
+  const [inputSource, setInputSource] = useState<"webcam" | "remote-sensor">("webcam");
+  const remotePairingCode = initialPairingCode;
   const [remoteConnected, setRemoteConnected] = useState<boolean>(false);
   const [remoteFps, setRemoteFps] = useState<number>(0);
   const [remoteBattery, setRemoteBattery] = useState<number | null>(null);
@@ -775,12 +755,6 @@ export function MotionLab({
       localStorage.setItem("p100_motion_input_source", source);
     } catch {}
   }
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("p100_motion_pairing_code", remotePairingCode);
-    } catch {}
-  }, [remotePairingCode]);
 
   useEffect(() => {
     if (inputSource !== "remote-sensor") {
@@ -1046,6 +1020,28 @@ export function MotionLab({
       coldStartRef.current = stored;
       setColdStarts(stored);
       try {
+        const storedCoachSettings = localStorage.getItem("p100_motion_coach_settings");
+        if (storedCoachSettings) {
+          const nextCoachSettings = {
+            ...DEFAULT_COACH_SETTINGS,
+            ...JSON.parse(storedCoachSettings),
+          } as CoachSettings;
+          coachSettingsRef.current = nextCoachSettings;
+          setCoachSettings(nextCoachSettings);
+        }
+        const storedCoachMemory = localStorage.getItem("p100_motion_coach_memory");
+        if (storedCoachMemory) {
+          const nextCoachMemory = {
+            ...createDefaultCoachMemory(),
+            ...JSON.parse(storedCoachMemory),
+          } as MotionCoachMemory;
+          coachMemoryRef.current = nextCoachMemory;
+          setCoachMemory(nextCoachMemory);
+        }
+        const storedInputSource = localStorage.getItem("p100_motion_input_source");
+        if (storedInputSource === "webcam" || storedInputSource === "remote-sensor") {
+          setInputSource(storedInputSource);
+        }
         const storedLang = localStorage.getItem("motion-arena-lang-v1");
         if (storedLang === "sv" || storedLang === "en") {
           arenaLanguageRef.current = storedLang;
@@ -1766,7 +1762,7 @@ export function MotionLab({
     unifiedTrackerRef.current = nextTracker;
     setUnifiedTracker(nextTracker);
 
-    const isHold = currentExId === "handstand-hold" || currentExId === "plank";
+    const isHold = currentExId === "handstand-hold" || currentExId === "plank" || currentExId === "cycling";
 
     if (!isHold && nextTracker.reps > lastUnifiedRepRef.current) {
       lastUnifiedRepRef.current = nextTracker.reps;
@@ -2011,12 +2007,28 @@ export function MotionLab({
 
     const receivedAtMs = performance.now();
     snapshotRef.current = snapshot;
+    const visible = snapshot.landmarks.length === 33;
+    if (
+      visible
+      && activeWorkoutExercise === "cycling"
+      && !squatTrackingEnabledRef.current
+      && !cyclingAutoStartedRef.current
+    ) {
+      cyclingAutoStartedRef.current = true;
+      const tracker = createUnifiedExerciseTracker("cycling");
+      unifiedTrackerRef.current = tracker;
+      setUnifiedTracker(tracker);
+      lastUnifiedRepRef.current = 0;
+      lastUnifiedHoldRef.current = 0;
+      squatTrackingEnabledRef.current = true;
+      setSquatTrackingEnabled(true);
+      speakSquatInstruction("Kroppen hittad. Spinninguppvärmningen har startat.", true);
+    }
     acceptSquatSnapshot(snapshot);
     acceptUnifiedExerciseSnapshot(snapshot);
     if (canStartMotionGame(snapshot)) {
       recentGamePoseRef.current = { snapshot, receivedAtMs };
     }
-    const visible = snapshot.landmarks.length === 33;
     if (visible !== poseVisibleRef.current) {
       poseVisibleRef.current = visible;
       setPoseVisible(visible);
@@ -2894,34 +2906,54 @@ export function MotionLab({
     <div className="p100-motion-lab">
       <header className="p100-page-head p100-motion-head">
         <div>
-          <span>Motion Engine · Fas C · Steg 21–23</span>
+          <span>Träna med kamera</span>
           <h1>Motion Lab</h1>
-          <p>Ställ dig framför kameran. Kroppen blir indata och allt bildmaterial stannar i webbläsaren.</p>
+          <p>Räkna rörelser och följ ditt pass. Kamerabilden stannar i webbläsaren.</p>
         </div>
         <div className="p100-head-actions">
           <Link className="p100-button-secondary" href="/projekt-100/traning">Till träningen</Link>
-          <button
-            className="p100-button p100-button-bossfight"
-            type="button"
-            onClick={() => startGame("boss-fight")}
-            disabled={replaying || gameActive || baselineRunning || performanceProfileRunning || squatTrackingEnabled}
-            title={!isLive ? "Tryck för att se vad som saknas" : !poseVisible ? "Tryck för hjälp med kroppspositionen" : baselineRunning ? "Baslinjemätningen pågår" : performanceProfileRunning ? "Prestandamätningen pågår" : gameActive ? "Bossfighten pågår" : "Starta bossfight"}
-          >
-            <Swords /> {gameActive ? "Bossfight pågår" : "Starta bossfight"}
-          </button>
           {isLive || isStarting || status === "error" ? (
             <button className="p100-button-secondary" type="button" onClick={() => disposeEngine()}>
               <VideoOff /> Stäng kamera
             </button>
           ) : null}
-          <button className="p100-button" type="button" onClick={() => void startCamera()} disabled={isStarting || isRecovering}>
+          {status === "error" ? <button className="p100-button" type="button" onClick={() => void startCamera()} disabled={isStarting || isRecovering}>
             {isStarting || isRecovering ? <RefreshCw className="p100-spin" /> : <Camera />}
-            {status === "requesting" ? "Väntar på tillstånd…" : status === "loading" ? "Laddar posemotor…" : isRecovering ? "Återansluter…" : "Starta kamera"}
-          </button>
+            Försök starta kameran igen
+          </button> : null}
         </div>
       </header>
 
-      {activeTrackableExerciseId ? (
+      {activeWorkoutExercise === "cycling" ? (
+        <section className="p100-cycling-warmup-guide">
+          <div>
+            <span>Steg 1 · Uppvärmning</span>
+            <h2>Spinning framför kameran</h2>
+            <p>Ställ cykeln i profil. Kameran uppskattar pedalvarv, kadens och aktiv tid utan att bedöma din teknik.</p>
+          </div>
+          <div>
+            {!isLive ? (
+              <button type="button" onClick={() => void startCamera()} disabled={isStarting}>Starta kamera och uppvärmning</button>
+            ) : !squatTrackingEnabled ? (
+              <button type="button" onClick={toggleSquatTracking} disabled={!poseVisible}>
+                {poseVisible ? "Starta mätning" : "Sätt dig på cykeln · startar automatiskt"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  if (initialWarmupMissionId) {
+                    markCyclingWarmupComplete(initialWarmupMissionId);
+                  }
+                  router.push("/projekt-100/traning");
+                }}
+              >Avsluta uppvärmningen · {Math.round(unifiedTracker.holdSeconds)} sek</button>
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {activeTrackableExerciseId && activeTrackableExerciseId !== "cycling" ? (
         <AdaptiveCameraSetupPanel
           key={`${activeTrackableExerciseId}-${initialMissionLaunch?.environment ?? "free"}`}
           exerciseId={activeTrackableExerciseId}
@@ -3036,17 +3068,17 @@ export function MotionLab({
       ) : null}
 
       <section className="p100-motion-grid">
-        <div ref={stageRef} className={`p100-motion-stage ${replaying ? "replaying" : ""} ${gameActive ? "game-active" : ""} ${viewportFullscreen ? "viewport-fullscreen" : ""}`} style={{ aspectRatio: cameraAspectRatio ?? `${requestedWidth} / ${requestedHeight}` }}>
+        <div ref={stageRef} className={`p100-motion-stage ${replaying ? "replaying" : ""} ${gameActive ? "game-active" : ""} ${viewportFullscreen ? "viewport-fullscreen" : ""}`} style={{ aspectRatio: cameraAspectRatio ?? `${requestedWidth} / ${requestedHeight}`, maxWidth: fullscreen ? undefined : `calc(72svh * ${cameraAspectRatio ?? Number(requestedWidth) / Number(requestedHeight)})` }}>
           <video ref={videoRef} muted playsInline aria-label="Spegelvänd kamerabild" />
           <canvas ref={canvasRef} aria-label="Pose-overlay med kroppens landmärken" />
           <MotionStageTopBar
             isLive={isLive}
             isRecovering={isRecovering}
-            delegate={delegate}
+            delegate={showDiagnostics ? delegate : null}
             poseExecutionMode={poseExecutionMode}
             replaying={replaying}
             gameActive={gameActive}
-            squatTrackingEnabled={squatTrackingEnabled}
+            squatTrackingEnabled={false}
             squatReps={squatView.reps}
             baselineRunning={baselineRunning}
             baselineElapsedMs={baselineElapsedMs}
@@ -3066,8 +3098,8 @@ export function MotionLab({
             <div className="p100-motion-stage-empty">
               <span><Video /></span>
               <strong>Redo för första rörelsen</strong>
-              <p>Välj bildläge, tillåt kameran och se till att hela kroppen ryms i bild.</p>
-              <button type="button" onClick={() => void startCamera()}><Play /> Starta Motion Lab</button>
+              <p>Tillåt kameran och placera dig så att rörelsen syns i bild.</p>
+              <button type="button" onClick={() => void startCamera()}><Play /> Starta kamera</button>
             </div>
           ) : null}
           {inputSource === "remote-sensor" && !remoteConnected ? (
@@ -3090,7 +3122,7 @@ export function MotionLab({
               <p>Första modellstarten kan ta några sekunder. Inga videor laddas upp.</p>
             </div>
           ) : null}
-          {isLive && !isRecovering && (!poseVisible || !fullBodyVisible) && !replaying && !gameActive && !performanceProfileRunning ? (
+          {isLive && activeWorkoutExercise !== "cycling" && !isRecovering && (!poseVisible || !fullBodyVisible) && !replaying && !gameActive && !performanceProfileRunning ? (
             <div className="p100-motion-guide">
               <strong>{poseVisible ? "Hela kroppen behöver synas" : "Ingen kropp hittad ännu"}</strong>
               <span>Backa, centrera dig och se till att huvud, höfter, knän, anklar och båda fötterna ryms i bild.</span>
@@ -3118,7 +3150,7 @@ export function MotionLab({
               saveLogError={saveLogError}
             />
           ) : null}
-          <MotionArenaOverlay
+          {gameView ? <MotionArenaOverlay
             gameView={gameView}
             gameActive={gameActive}
             arenaLanguage={arenaLanguage}
@@ -3134,7 +3166,7 @@ export function MotionLab({
             onStartGame={startGame}
             onStopGame={stopGame}
             onToggleFullscreen={toggleFullscreen}
-          />
+          /> : null}
           <MotionDiagnosticsOverlay
             baselineRunning={baselineRunning}
             baselineElapsedMs={baselineElapsedMs}
@@ -3192,6 +3224,14 @@ export function MotionLab({
         </div>
 
         <aside className="p100-motion-sidebar">
+          {activeWorkoutExercise !== "cycling" ? (
+            <div className="p100-motion-session-control">
+              <strong>{activeExerciseTitle}</strong>
+              <button className="p100-button" type="button" onClick={toggleSquatTracking} disabled={!isLive || isRecovering || (!poseVisible && !squatTrackingEnabled) || gameActive || replaying || baselineRunning || performanceProfileRunning}>
+                {squatTrackingEnabled ? "Pausa mätning" : "Starta mätning"}
+              </button>
+            </div>
+          ) : null}
           <MotionCameraControls
             resolution={resolution}
             actualResolution={actualResolution}
@@ -3213,6 +3253,8 @@ export function MotionLab({
             onChangeDifficulty={changeDifficulty}
           />
 
+          <details className="p100-block-details">
+            <summary>Övningar och träningsinställningar</summary>
           <MotionWorkoutPanel
             workoutSession={workoutSession}
             squatView={squatView}
@@ -3263,7 +3305,20 @@ export function MotionLab({
             saveLogError={saveLogError}
           />
 
-          <MotionDiagnosticsPanel
+          </details>
+
+          <details className="p100-block-details">
+            <summary>Spela · valfritt</summary>
+            <p>En fristående rörelselek när du vill.</p>
+            <button className="p100-button-secondary" type="button" onClick={() => startGame("boss-fight")} disabled={!isLive || isRecovering || !poseVisible || replaying || gameActive || baselineRunning || performanceProfileRunning || squatTrackingEnabled}>
+              <Swords /> Starta Boss fight
+            </button>
+            {!isLive ? <p>Starta kameran först.</p> : null}
+          </details>
+
+          <details className="p100-block-details" onToggle={(event) => setShowDiagnostics(event.currentTarget.open)}>
+            <summary>Felsökning</summary>
+          {showDiagnostics ? <MotionDiagnosticsPanel
             metrics={metrics}
             performanceProfileRunning={performanceProfileRunning}
             performanceProfileMode={performanceProfileMode}
@@ -3320,11 +3375,12 @@ export function MotionLab({
               notice: remoteNotice,
               onSelectInputSource: changeInputSource,
             }}
-          />
+          /> : null}
+          </details>
         </aside>
       </section>
 
-      <footer className="p100-motion-footnote"><Gauge /> MediaPipe Pose Landmarker Lite körs i en separat Web Worker. Runtime och modell hämtas versionslåst vid första start; kamerabilder skickas inte till Zickaris-servern.</footer>
+      <footer className="p100-motion-footnote"><Gauge /> Kamerabilden behandlas lokalt på din enhet.</footer>
     </div>
   );
 }

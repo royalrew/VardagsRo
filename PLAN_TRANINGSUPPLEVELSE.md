@@ -5,6 +5,20 @@ Status: Plan framtagen på användarens uppdrag. Genomförande och verifiering �
 Ägare: användaren  
 Omfattning: Produktupplevelsen i Projekt 100, inklusive träning framför TV:n.
 
+## Aktuell förenkling 2026-09-09
+
+Användarens aktuella huvudflöde är att välja överkropp eller underkropp,
+värma upp på spinningcykeln och sedan fortsätta med nästa styrkeset.
+Uppvärmningen har en lokal timer och frivillig kamera; den räknas inte som
+styrkeset och timern skriver ingen träningslogg. Befintlig sessions- och
+setlagring används fortsatt för styrkan.
+
+Analys, utrustning, historik och övriga träningsval öppnas vid behov.
+Boss fight nås under ett stängt spelval nedanför kameran. Kameraytan följer
+bildens proportioner och inställningarna ligger under den. Träningssidan
+hämtar inte längre oanvända live-gate-data; verifieringssidan behåller ansvaret.
+Kodkontroller ersätter inte fysisk kontroll av kamerabild och läsbarhet på TV.
+
 ## 1. Uppdrag och avgränsning
 
 Gör träningsdelen lätt att förstå, lätt att börja använda och värd att återvända

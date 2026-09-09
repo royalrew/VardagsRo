@@ -66,6 +66,7 @@ const PROFILE_OR_DIAGONAL = new Set<TrackableExerciseId>([
   "bent-over-row",
   "dumbbell-rdl",
   "kettlebell-swing",
+  "cycling",
 ]);
 
 const UPPER_BODY_ONLY = new Set<TrackableExerciseId>([

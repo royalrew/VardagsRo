@@ -83,6 +83,7 @@ describe("motion-library: Exercise Catalog & Taxonomy", () => {
       "pike-pushup",
       "bench-dips",
       "calf-raise",
+      "cycling",
     ];
 
     for (const id of expectedIds) {
@@ -120,7 +121,7 @@ describe("motion-library: Exercise Catalog & Taxonomy", () => {
   });
 
   it("keeps planned exercises out of the verified tracker set", () => {
-    expect(TRACKABLE_EXERCISE_IDS).toHaveLength(17);
+    expect(TRACKABLE_EXERCISE_IDS).toHaveLength(18);
     expect(PLANNED_EXERCISE_IDS).toHaveLength(5);
     expect(isTrackableExerciseId("bench-dips")).toBe(true);
     expect(isTrackableExerciseId("parallel-bar-dips")).toBe(false);

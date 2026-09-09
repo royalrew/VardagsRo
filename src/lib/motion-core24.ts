@@ -83,9 +83,11 @@ export const CORE_24_FAMILIES: readonly Core24Family[] = [
     { id: "floor-press", name: "Hantelpress på golv", difficulty: 3, equipment: ["dumbbell"] },
     { id: "pause-floor-press", name: "Pausad golvpress", difficulty: 4, equipment: ["dumbbell"] },
   ] }),
-  family({ id: "one-arm-row", name: "Enarms hantelrodd", section: "upper", patterns: ["horizontal_pull"], goals: ["hypertrophy", "strength_skill"], environments: gymAndHome, qualityTier: "silver", qualityNote: "Roddtracker finns; enarmsvariant behöver livevalideras.", utility: [5, 5, 4, 3, 5, 5, 4], variations: [
+  family({ id: "one-arm-row", name: "Enarmsrodd", section: "upper", patterns: ["horizontal_pull"], goals: ["hypertrophy", "strength_skill"], environments: gymAndHome, qualityTier: "silver", qualityNote: "Roddtracker finns; enarmsvariant behöver livevalideras.", utility: [5, 5, 4, 3, 5, 5, 4], variations: [
     { id: "supported-one-arm-row", name: "Stödd enarmsrodd", difficulty: 2, equipment: ["dumbbell", "bench_or_chair"] },
+    { id: "supported-one-arm-kettlebell-row", name: "Stödd enarmsrodd med kettlebell", difficulty: 2, equipment: ["kettlebell", "bench_or_chair"] },
     { id: "one-arm-row", name: "Enarms hantelrodd", difficulty: 3, equipment: ["dumbbell"] },
+    { id: "one-arm-kettlebell-row", name: "Enarms kettlebellrodd", difficulty: 3, equipment: ["kettlebell"] },
     { id: "bent-over-row", name: "Framåtlutad hantelrodd", difficulty: 3, equipment: ["dumbbell"], trackableExerciseId: "bent-over-row" },
   ] }),
   family({ id: "body-row", name: "Kroppsrodd", section: "upper", patterns: ["horizontal_pull"], goals: ["hypertrophy", "strength_skill"], environments: ["outdoor_gym", "gym", "other"], qualityTier: "manual", qualityNote: "Manuell tills säker rigg och tracker validerats.", utility: [5, 5, 4, 2, 4, 5, 3], variations: [

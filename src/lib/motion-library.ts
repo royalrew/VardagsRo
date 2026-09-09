@@ -20,6 +20,11 @@ import {
   measureSquatAngles,
   type SquatTrackerState,
 } from "./motion-squat";
+import {
+  advanceCyclingTracker,
+  createCyclingTracker,
+  type CyclingTrackerState,
+} from "./motion-cycling";
 
 export const TRACKABLE_EXERCISE_IDS = [
   "squat",
@@ -39,6 +44,7 @@ export const TRACKABLE_EXERCISE_IDS = [
   "dumbbell-rdl",
   "kettlebell-swing",
   "goblet-squat",
+  "cycling",
 ] as const;
 
 export type TrackableExerciseId = (typeof TRACKABLE_EXERCISE_IDS)[number];
@@ -64,7 +70,7 @@ function unsupportedExercise(exerciseId: never): never {
   throw new Error(`Övningen ${exerciseId} saknar en verifierad tracker.`);
 }
 
-export type ExerciseEquipment = "bodyweight" | "dumbbell" | "kettlebell" | "bench-or-chair" | "parallel-bars";
+export type ExerciseEquipment = "bodyweight" | "dumbbell" | "kettlebell" | "bench-or-chair" | "parallel-bars" | "bicycle";
 export type MuscleGroup = "chest" | "back" | "shoulders" | "biceps" | "triceps" | "legs" | "core" | "full-body";
 export type ExerciseTrackingMode = "reps" | "hold";
 
@@ -106,6 +112,24 @@ export const EXERCISE_LIBRARY: Record<LibraryExerciseId, ExerciseLibraryItem> = 
       praise: "Perfekt djup och stark bål!",
     },
     description: "Klassisk knäböj för maximal ben- och sätesstyrka.",
+  },
+  cycling: {
+    id: "cycling",
+    name: "Spinninguppvärmning",
+    category: "cardio-core",
+    equipment: "bicycle",
+    primaryMuscle: "legs",
+    secondaryMuscles: ["core"],
+    trackingMode: "hold",
+    recommendedCameraAngle: "side",
+    targetRepsDefault: 300,
+    cues: {
+      start: "Placera cykeln i profil så att höft, knä och fotled syns.",
+      action: "Trampa lugnt och jämnt medan kameran följer pedalcykeln.",
+      formWarning: "Kameran uppskattar bara pedalcykler, kadens och tid i den här första versionen.",
+      praise: "Jämn trampning registrerad.",
+    },
+    description: "Kamerabaserad kontroll av lugn spinning som uppvärmning.",
   },
   lunge: {
     id: "lunge",
@@ -1466,7 +1490,8 @@ type UnifiedTrackerState =
   | BenchDipsTrackerState
   | CalfRaiseTrackerState
   | BulgarianSplitSquatTrackerState
-  | DumbbellRdlTrackerState;
+  | DumbbellRdlTrackerState
+  | CyclingTrackerState;
 
 export function createUnifiedExerciseTracker(exerciseId: TrackableExerciseId): UnifiedExerciseState {
   let trackerState: UnifiedTrackerState;
@@ -1522,6 +1547,9 @@ export function createUnifiedExerciseTracker(exerciseId: TrackableExerciseId): U
     case "dumbbell-rdl":
       trackerState = createDumbbellRdlTracker();
       break;
+    case "cycling":
+      trackerState = createCyclingTracker();
+      break;
     default:
       return unsupportedExercise(exerciseId);
   }
@@ -1549,6 +1577,27 @@ export function advanceUnifiedExerciseTracker(
 
   const exerciseId = state.exerciseId;
   switch (exerciseId) {
+    case "cycling": {
+      const next = advanceCyclingTracker(
+        landmarks,
+        state.trackerState as CyclingTrackerState,
+        deltaSeconds,
+        aspectRatio,
+        timestampMs,
+      );
+      return {
+        ...state,
+        reps: next.revolutions,
+        holdSeconds: Math.round(next.activeSeconds),
+        phase: next.phase,
+        formWarning: null,
+        formScore: next.phase === "seeking" ? 0 : 100,
+        metricLabel: next.cadenceRpm === null
+          ? `${next.revolutions} pedalvarv · kadens kalibreras`
+          : `Cirka ${next.cadenceRpm} varv/min · ${next.revolutions} pedalvarv`,
+        trackerState: next,
+      };
+    }
     case "bicep-curl": {
       const next = advanceBicepCurlTracker(landmarks, state.trackerState as BicepCurlTrackerState, aspectRatio);
       return {
@@ -1776,6 +1825,12 @@ export function getLibraryCameraGuidance(id: TrackableExerciseId): {
   warningNotice?: string;
 } {
   switch (id) {
+    case "cycling":
+      return {
+        angle: "side",
+        instruction: "Placera spinningcykeln i profil så att höft, knä och fotled på minst ett ben syns genom hela pedalvarvet.",
+        warningNotice: "Första versionen uppskattar pedalvarv, kadens och aktiv tid. Den bedömer inte cykelinställning eller teknik.",
+      };
     case "bicep-curl":
       return {
         angle: "front",

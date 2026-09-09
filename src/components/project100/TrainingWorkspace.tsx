@@ -61,7 +61,6 @@ import {
   type Project100TrainingTemplate,
   type Project100TrainingView,
 } from "@/lib/project100-training";
-import type { Project100TrainingLiveGateAssessment } from "@/lib/project100-training-live-gate";
 
 type Composer = "session" | "template" | null;
 type SessionFilter = "all" | "completed" | "planned";
@@ -839,13 +838,11 @@ export function TrainingWorkspace({
   initialView,
   nextWorkLabel,
   initialMission,
-  initialLiveGate,
   initialComposer = null,
 }: {
   initialView: Project100TrainingView;
   nextWorkLabel: string | null;
   initialMission: DailyMissionView | null;
-  initialLiveGate: Project100TrainingLiveGateAssessment;
   initialComposer?: Composer;
 }) {
   const router = useRouter();
@@ -1392,7 +1389,9 @@ export function TrainingWorkspace({
   return (
     <div className="p100-training-workspace">
       <header className="p100-page-head p100-training-head">
-        <div><span>Bygg · mät · förstå</span><h1>Träning</h1><p>Planera runt verkligheten, logga vad som faktiskt hände och bygg ett minne som går att lära av.</p></div>
+        <div><span>Din träning</span><h1>Träning</h1><p>Spinning först, sedan dagens styrkepass.</p></div>
+        <details className="p100-block-details p100-training-more">
+          <summary>Fler träningsval</summary>
         <div className="p100-head-actions">
           <button
             type="button"
@@ -1433,6 +1432,7 @@ export function TrainingWorkspace({
             <Plus size={16} /> Nytt pass
           </button>
         </div>
+        </details>
       </header>
 
       {savedWorkoutSnapshot ? (
@@ -1476,6 +1476,10 @@ export function TrainingWorkspace({
         </section>
       ) : null}
 
+      <DailyTrainingMission today={initialView.today} initialMission={initialMission} />
+
+      <details className="p100-block-details p100-training-archive">
+        <summary>Min träning · historik, mallar och planering</summary>
       {!hasCompletedSessions && !savedWorkoutSnapshot ? (
         <section className="p100-studio-welcome" aria-label="Din första träning">
           <div className="p100-studio-welcome-badge">
@@ -1504,7 +1508,6 @@ export function TrainingWorkspace({
         </section>
       ) : null}
 
-      <DailyTrainingMission today={initialView.today} initialMission={initialMission} />
 
       {/* Program installer banner in unobtrusive details summary */}
       <details className="p100-program-collapsible">
@@ -1693,6 +1696,8 @@ export function TrainingWorkspace({
           </div>
         )}
       </section>
+
+      </details>
 
       {composer === "session" ? (
         <SessionComposer

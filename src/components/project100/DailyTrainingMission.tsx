@@ -105,6 +105,7 @@ export function DailyTrainingMission({
   const [mission, setMission] = useState(initialMission);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmFinish, setConfirmFinish] = useState(false);
 
   async function start(missionType: Project100MissionType) {
     setBusy(true);
@@ -142,6 +143,7 @@ export function DailyTrainingMission({
       const body = (await response.json()) as { mission?: DailyMissionView; error?: unknown };
       if (!response.ok || !body.mission) throw new Error(errorMessage(body, "Uppdraget kunde inte avslutas."));
       setMission(body.mission);
+      setConfirmFinish(false);
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Uppdraget kunde inte avslutas.");
@@ -162,18 +164,20 @@ export function DailyTrainingMission({
     <section className="p100-daily-mission" aria-labelledby="daily-mission-title">
       <header>
         <div>
-          <span>Dagens träningsuppdrag</span>
-          <h2 id="daily-mission-title">{mission?.title ?? "Välj dagens riktning"}</h2>
+          <span>Dagens pass</span>
+          <h2 id="daily-mission-title">{mission?.title ?? "Vad vill du träna idag?"}</h2>
           <p>
-            {mission
-              ? "Fyll på samma uppdrag hemma, ute eller i Motion Lab under hela dagen."
-              : "Ett uppdrag kan delas upp i flera korta block under dagen."}
+            {mission?.status === "completed"
+              ? "Passet är avslutat. Du hittar dina genomförda set och framsteg nedan."
+              : mission
+              ? "Värm upp och fortsätt med nästa övning. Dina sparade set finns kvar om du tar en paus."
+              : "Börja med spinning och fortsätt sedan med överkropp eller underkropp."}
           </p>
         </div>
         {mission ? (
           <div className="p100-mission-score" aria-label={`${mission.coverage.percentage} procent genomfört`}>
             <strong>{mission.coverage.percentage}%</strong>
-            <small>plantäckning</small>
+            <small>av planen klart</small>
           </div>
         ) : null}
       </header>
@@ -192,6 +196,18 @@ export function DailyTrainingMission({
           <div className="p100-mission-progress" aria-hidden="true">
             <i style={{ width: `${mission.coverage.percentage}%` }} />
           </div>
+          {mission.status === "in_progress" ? (
+            <TrainingBlockPlanner
+              key={mission.id}
+              missionId={mission.id}
+              missionType={mission.missionType}
+              requirements={mission.coverage.requirements}
+              onSaved={reloadMission}
+            />
+          ) : null}
+
+          <details className="p100-block-details">
+            <summary>Visa passets framsteg och träningsanalys</summary>
           <div className="p100-mission-patterns">
             {mission.coverage.requirements.map((requirement) => (
               <article key={requirement.movementPattern} data-complete={requirement.remainingSets === 0}>
@@ -210,15 +226,6 @@ export function DailyTrainingMission({
 
           <TrainingStimulusPanel assessment={mission.stimulus} />
 
-          {mission.status === "in_progress" ? (
-            <TrainingBlockPlanner
-              missionId={mission.id}
-              missionType={mission.missionType}
-              requirements={mission.coverage.requirements}
-              onSaved={reloadMission}
-            />
-          ) : null}
-
           {mission.blocks.length > 0 ? (
             <div className="p100-mission-blocks">
               <h3>Registrerade block</h3>
@@ -236,8 +243,10 @@ export function DailyTrainingMission({
               ))}
             </div>
           ) : (
-            <p className="p100-mission-empty">Inga set registrerade ännu. Nästa steg kopplar Jarvis och Motion Lab hit.</p>
+            <p className="p100-mission-empty">Dina genomförda set visas här när du sparar dem.</p>
           )}
+
+          </details>
 
           <footer>
             <span>
@@ -247,9 +256,27 @@ export function DailyTrainingMission({
               {mission.dataGaps.includes("rpe_missing") ? " Ansträngning saknas för vissa set." : ""}
             </span>
             {mission.status === "in_progress" ? (
-              <button type="button" disabled={busy} onClick={finish}>
-                <Square /> Avsluta för idag
-              </button>
+              confirmFinish ? (
+                <div className="p100-mission-finish-confirm" role="group" aria-label="Bekräfta att dagens uppdrag ska avslutas">
+                  <strong>{mission.coverage.targetSets - mission.coverage.completedTargetSets} målset återstår.</strong>
+                  <button type="button" disabled={busy} onClick={() => setConfirmFinish(false)}>Fortsätt träna</button>
+                  <button type="button" disabled={busy} onClick={() => void finish()}><Square /> Avsluta ändå</button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    if (mission.coverage.completedTargetSets < mission.coverage.targetSets) {
+                      setConfirmFinish(true);
+                    } else {
+                      void finish();
+                    }
+                  }}
+                >
+                  <Square /> Avsluta passet
+                </button>
+              )
             ) : null}
           </footer>
         </>

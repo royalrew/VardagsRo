@@ -108,7 +108,7 @@ export function MotionWorkoutPanel({
   saveLogError,
 }: MotionWorkoutPanelProps): React.JSX.Element {
   const [filterCategory, setFilterCategory] = React.useState<
-    "all" | "bodyweight" | "dumbbell" | "kettlebell" | "programs"
+    "all" | "cardio" | "bodyweight" | "dumbbell" | "kettlebell" | "programs"
   >("all");
 
   const libraryExerciseId = activeExercise as TrackableExerciseId;
@@ -190,6 +190,14 @@ export function MotionWorkoutPanel({
             </button>
             <button
               type="button"
+              className={filterCategory === "cardio" ? "active" : ""}
+              onClick={() => setFilterCategory("cardio")}
+              style={{ padding: "3px 7px", fontSize: "0.48rem" }}
+            >
+              🚲 Uppvärmning
+            </button>
+            <button
+              type="button"
               className={filterCategory === "dumbbell" ? "active" : ""}
               onClick={() => setFilterCategory("dumbbell")}
               style={{ padding: "3px 7px", fontSize: "0.48rem" }}
@@ -223,6 +231,17 @@ export function MotionWorkoutPanel({
           </div>
 
           <div className="p100-motion-exercise-buttons">
+            {(filterCategory === "cardio" || filterCategory === "all") && (
+              <button
+                type="button"
+                className={activeExercise === "cycling" ? "active" : ""}
+                onClick={() => onChangeExercise("cycling")}
+                disabled={squatTrackingEnabled}
+              >
+                🚲 Spinninguppvärmning
+              </button>
+            )}
+
             {/* Programs view */}
             {(filterCategory === "programs" || filterCategory === "all") && (
               <>

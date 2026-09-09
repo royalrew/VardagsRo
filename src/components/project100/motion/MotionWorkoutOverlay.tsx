@@ -346,7 +346,8 @@ export function MotionWorkoutOverlay({
 
   // 3. Aktiv Library Exercise HUD (Hantlar, Kettlebells, Gymnastik/Handstående, Kroppsvikt)
   if (unifiedTracker) {
-    const isHold = unifiedTracker.exerciseId === "handstand-hold" || unifiedTracker.exerciseId === "plank";
+    const isCycling = unifiedTracker.exerciseId === "cycling";
+    const isHold = unifiedTracker.exerciseId === "handstand-hold" || unifiedTracker.exerciseId === "plank" || isCycling;
     const currentVal = isHold ? unifiedTracker.holdSeconds : unifiedTracker.reps;
     const targetVal = programSession ? programSession.activeExercise.reps : undefined;
     const setInfo = programSession
@@ -363,11 +364,15 @@ export function MotionWorkoutOverlay({
             {currentVal}
             {targetVal !== undefined ? <span>/{targetVal}</span> : null}
           </strong>
-          <span>{isHold ? "sek" : "reps"}</span>
+          <span>{isCycling ? "sek cykling" : isHold ? "sek" : "reps"}</span>
         </div>
         <div>
           <strong>{unifiedTracker.metricLabel}</strong>
-          <span>Fas: {unifiedTracker.phase} · Teknik: {unifiedTracker.formScore}%</span>
+          <span>
+            {isCycling
+              ? `Mätläge: ${unifiedTracker.phase === "seeking" ? "söker pedalrörelse" : "pedalrörelse hittad"}`
+              : `Fas: ${unifiedTracker.phase} · Teknik: ${unifiedTracker.formScore}%`}
+          </span>
           {unifiedTracker.formWarning ? (
             <p className="p100-motion-squat-hud-coach" style={{ color: "#f87171" }}>
               ⚠️ {unifiedTracker.formWarning}
