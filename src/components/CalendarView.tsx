@@ -361,7 +361,10 @@ export function CalendarView({
                 const today = day === todayDate;
                 return (
                   <Fragment key={`row-${day}`}>
-                    <div className={`people-grid-day${today ? " is-today" : ""}`}>
+                    <div
+                      className={`people-grid-day${today ? " is-today" : ""}`}
+                      aria-current={today ? "date" : undefined}
+                    >
                       <span>{WEEKDAY_SHORT[dayIndex]}</span>
                       <strong>{calendarDayOfMonth(day)}</strong>
                       {today ? <small>Idag</small> : null}
@@ -420,7 +423,11 @@ export function CalendarView({
             {days.map((day, index) => {
               const today = day === todayDate;
               return (
-                <header className={`calendar-day-header${today ? " is-today" : ""}`} key={`header-${day}`}>
+                <header
+                  className={`calendar-day-header${today ? " is-today" : ""}`}
+                  key={`header-${day}`}
+                  aria-current={today ? "date" : undefined}
+                >
                   <span>{WEEKDAY_SHORT[index]}</span>
                   <strong>{calendarDayOfMonth(day)}</strong>
                   {today ? <small>Idag</small> : null}
@@ -431,10 +438,11 @@ export function CalendarView({
             <div className="calendar-all-day-label">Hela dagen</div>
             {days.map((day, dayIndex) => {
               const dayKey = day;
+              const today = day === todayDate;
               const activeDrop = dropTarget?.kind === "all-day" && dropTarget.dayKey === dayKey;
               return (
                 <div
-                  className={`calendar-all-day-cell${activeDrop ? " is-drop-target" : ""}`}
+                  className={`calendar-all-day-cell${today ? " is-today" : ""}${activeDrop ? " is-drop-target" : ""}`}
                   key={`all-day-${dayKey}`}
                   onDragOver={(dragEvent) => {
                     if (!draggedEvent?.allDay) return;

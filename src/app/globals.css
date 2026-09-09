@@ -1552,12 +1552,18 @@ button.event-row:hover {
 }
 
 .calendar-day-header.is-today {
-  background: #f4f8f5;
+  background: #eaf3ed;
+  box-shadow: inset 0 3px var(--green);
 }
 
 .calendar-day-header.is-today > strong {
   background: var(--green);
   color: white;
+}
+
+.calendar-all-day-cell.is-today {
+  background: #eef6f1;
+  box-shadow: inset 2px 0 rgba(65, 105, 91, 0.18), inset -2px 0 rgba(65, 105, 91, 0.18);
 }
 
 .calendar-all-day-label {
@@ -1718,7 +1724,8 @@ button.event-row:hover {
 }
 
 .calendar-time-column.is-today {
-  background-color: #f8fbf8;
+  background-color: #eef6f1;
+  box-shadow: inset 2px 0 rgba(65, 105, 91, 0.18), inset -2px 0 rgba(65, 105, 91, 0.18);
 }
 
 .calendar-timed-event-wrap {
@@ -2813,12 +2820,25 @@ button.event-row:hover {
   font-size: 17px;
 }
 
-.people-grid-day.is-today strong,
-.people-grid-day.is-today small {
-  color: var(--accent-strong, #2f4f3f);
+.people-grid-day.is-today {
+  background: #e8f2ec;
+  box-shadow: inset 4px 0 var(--green);
+  color: var(--green);
+}
+
+.people-grid-day.is-today strong {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  margin: 2px auto;
+  border-radius: 50%;
+  background: var(--green);
+  color: white;
+  place-items: center;
 }
 
 .people-grid-day.is-today small {
+  color: var(--green);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -2835,7 +2855,8 @@ button.event-row:hover {
 }
 
 .people-grid-cell.is-today {
-  background: #f7faf8;
+  background: #eef6f1;
+  box-shadow: inset 0 1px rgba(65, 105, 91, 0.16), inset 0 -1px rgba(65, 105, 91, 0.16);
 }
 
 .people-chip {
