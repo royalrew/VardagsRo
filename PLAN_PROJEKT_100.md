@@ -63,6 +63,44 @@ separat i den nya planen; inga nya testresultat intygas av detta planbeslut.
 
 ## Vision
 
+### Min trädgård — användarbeslut 2026-09-10
+
+En egen frivillig sida på `/projekt-100/tradgard` med fem dagliga mikrovanor:
+rörelse (fem armhävningar eller två minuter motionscykel), visa kärlek till
+fru och barn, skapa eller lära, mellanrumsborsten och underlätta morgondagen
+(exempelvis förbereda frukost eller packa rester till nästa jobblunch).
+
+Användaren har uttryckligen valt en strikt spelregel som undantag från den
+generella principen om obrutna framsteg: en missad dag återställer hela
+trädgården och dagräknaren. Detta gäller enbart trädgården. Träningshistorik,
+matloggar och övriga personliga data påverkas inte. Alla fem vanor behöver
+bekräftas före midnatt i hushållets tidszon. Spelet börjar först när fröet
+planteras. Dagens bockar kan ångras; tidigare dagar kan inte fyllas i efteråt.
+
+Var tionde fullföljd dag i följd låses en hemlig upptäckt upp. Innehållet
+stannar på servern tills upptäckten öppnas. Minnet av öppnade upptäckter och
+tidigare placeringar överlever återställningar; trädgårdens variation ändras
+vid omstart. Samma innehåll återanvänds först när urvalet är genomgånget,
+med ändrad placering från förra gången det tilldelades.
+
+Webb och Telegram (`/vanor`, `/tradgard` eller ”🌱 Min trädgård”) använder
+samma privata lagring, med kontobehörighet och daterade avbockningsknappar.
+Bekräftelserna är egna vanobockar, inte automatiskt skapade träningspass,
+måltider eller kalenderhändelser. Arbetspass dupliceras inte.
+
+Kod och migration `029_project100_garden` finns. Driftsättning kräver att
+migrationen körs; Telegram behöver den uppdaterade serverversionen.
+
+Verifierat lokalt: 70 relevanta tester (vanomotor, lagring/API, Telegram,
+begäranssäkerhet, påminnelser och migrationskrav), riktad lint och
+webbläsarkontroll av komponenten i det befintliga navigationsskalet på mobil
+och dator. Webbläsarkontrollen använder testdata och simulerade API-svar;
+den verifierar plantering, avbockning, ångra, upptäcktsdialog och tangentbord.
+Full typkontroll stannar på två redan befintliga typfel i
+`src/server/jarvis-briefing.test.ts`. Migration `029_project100_garden` har
+därefter körts i dev-serverns lokala PostgreSQL och tabellen är verifierad.
+Fullständig databasintegration och liveprovning i Telegram återstår.
+
 Projekt 100 ska vara ett privat operativsystem för resan från cirka 80 kg mot
 100 kg: träning, kost, kropp, återhämtning, dagbok, bilder, minne och synlighet
 i ett sammanhängande flöde.

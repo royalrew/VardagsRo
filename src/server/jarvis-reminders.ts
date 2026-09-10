@@ -87,9 +87,14 @@ export function parseSwedishReminder(
   const text = rawText.trim();
   const lower = text.toLowerCase();
 
-  // Check if it is a reminder/task intent
+  // Reject query or management intents (e.g. "Vilka påminnelser har jag?", "Rensa gamla påminnelser")
+  if (/^(?:vilka|visa|vad\s+har\s+jag|hur\s+många|rensa|ta\s*bort|radera|klarmarkera|bocka\s*av)/i.test(lower)) {
+    return null;
+  }
+
+  // Check if it is an explicit reminder creation intent
   if (
-    !/(?:påminn\s+mig|påminnelse|lägg\s+in\s+en\s+påminnelse|skapa\s+en\s+påminnelse|kom\s+ihåg\s+att)/i.test(
+    !/(?:påminn\s+mig|ny\s+påminnelse|påminnelse\s*:|lägg\s+(?:in|till)\s+(?:en\s+)?påminnelse|skapa\s+(?:en\s+)?påminnelse|kom\s+ihåg\s+att)/i.test(
       lower,
     )
   ) {
@@ -177,6 +182,8 @@ export function parseSwedishReminder(
     .replace(/\s{2,}/g, " ")
     .trim()
     .replace(/^(?:att\s+|om\s+att\s+|om\s+)/i, "")
+    .trim()
+    .replace(/^(?:jag\s+måste\s+|jag\s+ska\s+|jag\s+skall\s+|att\s+)/i, "")
     .trim();
 
   if (!cleanTitle) {
@@ -424,6 +431,65 @@ export async function dispatchDueTelegramReminders(
         } catch (revertErr) {
           console.error(`Failed to revert claim stamp for task ${row.id}:`, revertErr);
         }
+      }
+    }
+
+    // Follow-up on uncompleted reminders dispatched at least 3 hours ago
+    const threeHoursAgoIso = new Date(now.getTime() - 3 * 60 * 60_000).toISOString();
+    const rawFollowupRows = await sql<
+      Array<{
+        id: string;
+        title: string;
+        notes: string | null;
+        due_at: string;
+        person_id: string;
+        person_name: string;
+        telegram_chat_id: string;
+      }>
+    >`
+      select t.id, t.title, t.notes, t.due_at, t.person_id,
+             p.name as person_name, a.telegram_chat_id
+      from family_tasks t
+      join telegram_accounts a on a.person_id = t.person_id and a.household_id = t.household_id
+      join family_people p on p.id = t.person_id and p.household_id = t.household_id
+      where t.completed_at is null
+        and t.due_at is not null
+        and t.due_at <= ${threeHoursAgoIso}
+        and t.notes like '%[telegram_reminded:%'
+        and (t.notes not like '%[telegram_followup:%')
+      order by t.due_at asc
+      limit 10
+    `;
+    const followupRows = Array.isArray(rawFollowupRows) ? rawFollowupRows : [];
+
+    for (const row of followupRows) {
+      const followupStamp = `[telegram_followup:${nowIso}]`;
+      const updatedNotes = row.notes ? `${row.notes}\n${followupStamp}` : followupStamp;
+
+      const claimed = await sql<Array<{ id: string }>>`
+        update family_tasks
+        set notes = ${updatedNotes}
+        where id = ${row.id}
+          and completed_at is null
+          and (notes not like '%[telegram_followup:%')
+        returning id
+      `;
+
+      if (!claimed || claimed.length === 0) continue;
+
+      const message = `🔔 Uppföljning från Jarvis\n\nHej ${row.person_name}! Du har inte klarmarkerat denna påminnelse:\n👉 ${row.title}\n\nHar du gjort detta?`;
+      try {
+        await sendTelegramMessage(row.telegram_chat_id, message, {
+          replyMarkup: taskReminderInlineKeyboard(row.id),
+        });
+        dispatched.push({
+          taskId: row.id,
+          title: `[Uppföljning] ${row.title}`,
+          personName: row.person_name,
+          chatId: row.telegram_chat_id,
+        });
+      } catch (err) {
+        console.error(`Failed to send Telegram follow-up for task ${row.id}:`, err);
       }
     }
 

@@ -470,15 +470,19 @@ export function JarvisWorkspace({
       </aside>
 
       {/* 2. Middle Column: Chat Area */}
-      <main className="p100-jarvis-main">
-        <header className="p100-jarvis-chat-header">
-          <div>
-            <h2>{activeConversation?.title ?? "Jarvis Assistent"}</h2>
-            <p>
-              Källbunden assistent · Läser träning, kost och jobbschema utan hallucination.
-            </p>
+      <main className="p100-jarvis-main jarvis-conversation-panel">
+        <header className="p100-jarvis-chat-header jarvis-conversation-header">
+          <div className="jarvis-chat-heading">
+            <span className="jarvis-chat-icon" aria-hidden="true"><Bot /></span>
+            <div>
+              <h2>{activeConversation?.title ?? "Jarvis Assistent"}</h2>
+              <p>
+                Källbunden assistent · Läser träning, kost och jobbschema utan hallucination.
+              </p>
+            </div>
           </div>
-          <div className="p100-briefing-quick-actions">
+          <div className="p100-briefing-quick-actions jarvis-header-actions">
+            <span className="jarvis-status"><i aria-hidden="true" /> Aktiv</span>
             <button
               type="button"
               className="p100-briefing-btn morning"

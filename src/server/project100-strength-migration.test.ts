@@ -32,13 +32,13 @@ import {
 } from "@/server/database";
 
 describe("Projekt 100 strength migration contract", () => {
-  it("requires migration 021 before readiness reports a healthy database", async () => {
+  it("requires the current garden migration before readiness reports a healthy database", async () => {
     await expect(databaseStatus()).resolves.toBe("ok");
 
     const readinessQuery = database.calls.find((call) =>
       call.text.includes("select exists") && call.text.includes("app_schema_migrations"),
     );
-    expect(LATEST_DATABASE_MIGRATION).toBe("021_project100_exercise_muscles");
+    expect(LATEST_DATABASE_MIGRATION).toBe("029_project100_garden");
     expect(readinessQuery?.values).toContain(LATEST_DATABASE_MIGRATION);
   });
 

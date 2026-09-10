@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, Bot, CalendarSearch, Check, Clock3, FileText, Sparkles } from "lucide-react";
+import { ArrowUp, Bot, CalendarSearch, Check, ChevronRight, Clock3, FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { AssistantAnswer, DashboardData } from "@/lib/types";
 
@@ -130,15 +130,21 @@ export function AskView({
         </span>
       </section>
 
-      <section className="chat-shell card" aria-busy={loading}>
+      <section className="chat-shell card jarvis-conversation-panel" aria-busy={loading}>
+        <header className="jarvis-conversation-header vardagsro-jarvis-header">
+          <div className="jarvis-chat-heading">
+            <span className="jarvis-chat-icon" aria-hidden="true"><Bot size={18} /></span>
+            <div>
+              <h2>Jarvis Assistent</h2>
+              <p>Familjens planer, tider och vardag samlade i en konversation.</p>
+            </div>
+          </div>
+          <span className="jarvis-status"><i aria-hidden="true" /> Aktiv</span>
+        </header>
+
         <div className="chat-messages" aria-live="polite">
           {messages.map((message) => (
             <div className={`chat-turn chat-${message.role}`} key={message.id}>
-              {message.role === "assistant" ? (
-                <span className="assistant-avatar" aria-hidden="true">
-                  <Sparkles size={18} />
-                </span>
-              ) : null}
               <div
                 className={
                   message.role === "assistant" && message.error
@@ -146,6 +152,12 @@ export function AskView({
                     : "message-bubble"
                 }
               >
+                <header className="message-bubble-header">
+                  <span>
+                    {message.role === "assistant" ? <Bot size={13} aria-hidden="true" /> : null}
+                    <strong>{message.role === "assistant" ? "Jarvis" : "Du"}</strong>
+                  </span>
+                </header>
                 <p>{message.text}</p>
                 {message.role === "assistant" && message.answer?.periodLabel ? (
                   <span className="answer-period">
@@ -171,11 +183,9 @@ export function AskView({
           ))}
           {loading ? (
             <div className="chat-turn chat-assistant">
-              <span className="assistant-avatar" aria-hidden="true">
-                <Bot size={18} />
-              </span>
               <div className="message-bubble typing-bubble" aria-label="Jarvis tänker">
-                <i /> <i /> <i />
+                <header className="message-bubble-header"><span><Bot size={13} /><strong>Jarvis</strong></span></header>
+                <span className="typing-dots"><i /> <i /> <i /></span>
               </div>
             </div>
           ) : null}
@@ -187,11 +197,13 @@ export function AskView({
             <span>
               <CalendarSearch size={16} /> Prova att fråga
             </span>
-            {starterQuestions.map((starter) => (
-              <button key={starter} disabled={loading} onClick={() => void ask(starter)}>
-                {starter}
-              </button>
-            ))}
+            <div className="starter-question-grid">
+              {starterQuestions.map((starter) => (
+                <button key={starter} disabled={loading} onClick={() => void ask(starter)}>
+                  <span>{starter}</span><ChevronRight size={14} aria-hidden="true" />
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
 

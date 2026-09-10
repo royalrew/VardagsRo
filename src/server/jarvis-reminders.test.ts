@@ -111,6 +111,18 @@ describe("Jarvis Contextual Reminder Engine", () => {
       expect(parsed?.targetDate).toBe("2026-08-31");
       expect(parsed?.timeString).toBe("20:00");
     });
+
+    it("parses 'Påminn mig imorgon kl 9:00 att jag måste ta med mig Hannis kuvert'", () => {
+      const parsed = parseSwedishReminder(
+        "Påminn mig imorgon kl 9:00 att jag måste ta med mig Hannis kuvert",
+        referenceMonday,
+      );
+
+      expect(parsed).not.toBeNull();
+      expect(parsed?.title).toBe("Ta med mig Hannis kuvert");
+      expect(parsed?.targetDate).toBe("2026-09-01");
+      expect(parsed?.timeString).toBe("09:00");
+    });
   });
 
   describe("createContextualReminder", () => {
@@ -206,7 +218,33 @@ describe("Jarvis Contextual Reminder Engine", () => {
       const result = await dispatchDueTelegramReminders(new Date("2026-08-31T18:05:00.000Z"));
 
       expect(result.dispatchedCount).toBe(0);
-      expect(dependencies.sqlQuery).toHaveBeenCalledTimes(3);
+      expect(dependencies.sqlQuery).toHaveBeenCalledTimes(4);
+    });
+
+    it("dispatches follow-up for reminders not completed after 3 hours", async () => {
+      dependencies.sqlQuery
+        .mockResolvedValueOnce([]) // no new due reminders
+        .mockResolvedValueOnce([
+          {
+            id: "task-followup-1",
+            title: "Ta med mig Hannis kuvert",
+            notes: "[telegram_reminded:2026-08-31T14:00:00.000Z]",
+            due_at: "2026-08-31T14:00:00.000Z",
+            person_id: "person-nora",
+            person_name: "Jimmy",
+            telegram_chat_id: "123456789",
+          },
+        ]) // follow-up tasks query
+        .mockResolvedValueOnce([{ id: "task-followup-1" }]); // follow-up claim succeeded
+
+      const result = await dispatchDueTelegramReminders(new Date("2026-08-31T18:05:00.000Z"));
+
+      expect(result.dispatchedCount).toBe(1);
+      expect(dependencies.sendTelegramMessage).toHaveBeenCalledWith(
+        "123456789",
+        expect.stringContaining("Du har inte klarmarkerat denna påminnelse"),
+        expect.objectContaining({ replyMarkup: expect.any(Object) }),
+      );
     });
 
     it("prevents overlapping executions with in-process lock", async () => {

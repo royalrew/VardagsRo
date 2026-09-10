@@ -2265,6 +2265,22 @@ export async function processJarvisAgentMessage(
   const proteinCapture = parseJarvisProteinCapture(text);
   const bodyStateCapture = parseJarvisBodyState(text);
 
+  // Reminders are high-confidence commands that mutate personal tasks.
+  const parsedReminderEarly = parseSwedishReminder(text, now);
+  if (parsedReminderEarly) {
+    executedActions.push("create_task");
+    const res = await createContextualReminder(actor, {
+      title: parsedReminderEarly.title,
+      targetDate: parsedReminderEarly.targetDate,
+      timeString: parsedReminderEarly.timeString,
+      contextAnchor: parsedReminderEarly.contextAnchor,
+    });
+    return {
+      text: `${getGreeting(callerName, now)} ${res.text}`,
+      executedActions,
+    };
+  }
+
   if (strengthCaptures.length > 0 || proteinCapture || bodyStateCapture) {
     const confirmations: string[] = [];
 
@@ -2573,12 +2589,25 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
   }
 
   // "Har barnen några läxor?" / "Vad ska barnen ta med sig?" / "Skolsaker"
-  if (/(?:läxa|läxor|ta\s*med|packa|packning|gympapåse|idrottskläder|skolsaker|skoluppgift)/i.test(lower)) {
+  const isSchoolPackingQuery =
+    /(?:läxor|skolsaker|skoluppgift|gympapåse|idrottskläder)/i.test(lower) ||
+    /(?:har\s+(?:barnen|vi)\s+(?:någon\s+|några\s+)?läx)/i.test(lower) ||
+    /(?:vad\s+ska\s+(?:barnen|vi)\s+(?:ta\s*med|packa)|vad\s+ska\s+packas|vad\s+behöver\s+(?:vi|barnen)\s+ta\s*med|vad\s+är\s+det\s+för\s+packning)/i.test(lower) ||
+    /(?:packning|ta\s*med).*(?:skol|förskol|dagis|idrott|gympa)/i.test(lower);
+
+  const isCommandPhrase = /^(?:påminn|lägg\s+till|lägg\s+in|skapa|glöm\s+inte|ta\s*bort|radera|rensa|klarmarkera|bocka\s*av)/i.test(lower);
+
+  if (isSchoolPackingQuery && !isCommandPhrase) {
     const dashboard = await loadDashboard(actor);
     executedActions.push("check_schedule");
-    const schoolTasks = dashboard.tasks.filter(
-      (t) => !t.completedAt && (t.kind === "homework" || t.kind === "bring" || t.kind === "preparation" || t.kind === "form"),
-    );
+    const schoolTasks = dashboard.tasks.filter((t) => {
+      if (t.completedAt) return false;
+      const person = dashboard.people.find((p) => p.id === t.personId);
+      const isChildTask = person ? person.personType === "child" : false;
+      const isSchoolKind = t.kind === "homework" || t.kind === "bring" || t.kind === "form";
+      const hasSchoolContext = /(?:skol|läxa|gympa|idrott|packa|ta\s*med|förskol|dagis)/i.test(t.title);
+      return (isChildTask && isSchoolKind) || t.kind === "homework" || (isSchoolKind && hasSchoolContext);
+    });
 
     if (schoolTasks.length === 0) {
       return {
@@ -2670,6 +2699,121 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
       text: `${getGreeting(callerName, now)}\n\n${res.summary}`,
       executedActions,
     };
+  }
+
+  // 1b. Complete command: "Klarmarkera medicin", "Bocka av köpa mjölk", "Klar med signera medicin"
+  const completeMatch = lower.match(
+    /^(?:klarmarkera|bocka\s*av|markera\s+(?:som\s+)?klar|klar\s+med|färdig\s+med)\s+(.+)$/i,
+  );
+  if (completeMatch) {
+    const rawTarget = completeMatch[1].trim();
+    const cleanTarget = rawTarget
+      .replace(/^(?:uppgift(?:en)?|påminnelse(?:n)?)\s*(?:om\s*att|att)?\s*/i, "")
+      .replace(/(?:\s+som\s+klar|\s+som\s+färdig)$/i, "")
+      .trim();
+
+    const resStr = await executeTool("update_item", {
+      type: "task",
+      query: cleanTarget || rawTarget,
+      completed: true,
+    });
+    const res = JSON.parse(resStr);
+    return {
+      text: `${getGreeting(callerName, now)} ${res.summary}`,
+      executedActions,
+    };
+  }
+
+  // 1c. Bulk cleanup of old / overdue reminders: "Rensa gamla påminnelser", "Ta bort gamla påminnelser", "Klarmarkera gamla påminnelser"
+  const isBulkOldRemindersCleanup =
+    /(?:rensa|ta\s*bort|radera|klarmarkera|bocka\s*av)\s+(?:alla\s+)?(?:gamla|förfallna|passerade)\s+(?:påminnelser|uppgifter)/i.test(lower);
+
+  if (isBulkOldRemindersCleanup) {
+    const dashboard = await loadDashboard(actor);
+    executedActions.push("check_schedule");
+    const todayStr = calendarDateInTimeZone(now, DEFAULT_TIME_ZONE);
+
+    const overdueTasks = dashboard.tasks.filter((t) => {
+      if (t.completedAt) return false;
+      const isCallerTask = t.personId === actor.personId || !t.personId || actor.role === "owner";
+      if (!isCallerTask) return false;
+      if (!t.dueAt) return false;
+      const dueDate = calendarDateInTimeZone(t.dueAt, DEFAULT_TIME_ZONE);
+      return dueDate < todayStr;
+    });
+
+    if (overdueTasks.length === 0) {
+      return {
+        text: `${getGreeting(callerName, now)} Du har inga gamla eller förfallna påminnelser att rensa. Allt är redan uppdaterat! ✨`,
+        executedActions,
+      };
+    }
+
+    const isDelete = /(?:ta\s*bort|radera)/i.test(lower);
+    for (const task of overdueTasks) {
+      if (isDelete) {
+        await removeTask(actor, task.id);
+      } else {
+        await updateManualTask(actor, task.id, { completedAt: now.toISOString() });
+      }
+    }
+
+    const actionWord = isDelete ? "tagit bort" : "klarmarkerat";
+    const cleanedList = overdueTasks.map((t) => `• ${t.title}${t.dueAt ? ` (från ${t.dueAt.slice(0, 10)})` : ""}`).join("\n");
+    return {
+      text: `${getGreeting(callerName, now)} Jag har ${actionWord} ${overdueTasks.length} gamla ${overdueTasks.length === 1 ? "påminnelse" : "påminnelser"}:\n\n${cleanedList}\n\nNu är det rent och snyggt! 🧹✨`,
+      executedActions: isDelete ? [...executedActions, "delete_item"] : [...executedActions, "update_item"],
+    };
+  }
+
+  // 1d. List reminders: "Vilka påminnelser har jag?", "Vad har jag för påminnelser?", "Mina påminnelser"
+  const isListRemindersQuery =
+    /(?:vilka\s+påminnelser|vad\s+har\s+jag\s+för\s+påminnelser|visa\s+(?:mina\s+)?påminnelser|mina\s+påminnelser|har\s+jag\s+några\s+(?:gamla\s+)?påminnelser)/i.test(lower);
+
+  if (isListRemindersQuery) {
+    const dashboard = await loadDashboard(actor);
+    executedActions.push("check_schedule");
+    const todayStr = calendarDateInTimeZone(now, DEFAULT_TIME_ZONE);
+
+    const callerPerson = dashboard.people.find(
+      (p) => p.id === actor.personId || p.name.toLowerCase() === callerName.toLowerCase(),
+    );
+    const resolvedPersonId = callerPerson?.id ?? actor.personId;
+
+    const callerTasks = dashboard.tasks.filter((t) => {
+      if (t.completedAt) return false;
+      return (
+        t.personId === resolvedPersonId ||
+        t.personId === actor.personId ||
+        !t.personId ||
+        actor.role === "owner"
+      );
+    });
+
+    if (callerTasks.length === 0) {
+      return {
+        text: `${getGreeting(callerName, now)} Du har inga öppna påminnelser eller uppgifter just nu. Allt är klart! 🎯`,
+        executedActions,
+      };
+    }
+
+    const overdue = callerTasks.filter((t) => t.dueAt && calendarDateInTimeZone(t.dueAt, DEFAULT_TIME_ZONE) < todayStr);
+    const todayTasks = callerTasks.filter((t) => t.dueAt && calendarDateInTimeZone(t.dueAt, DEFAULT_TIME_ZONE) === todayStr);
+    const upcoming = callerTasks.filter((t) => !t.dueAt || calendarDateInTimeZone(t.dueAt, DEFAULT_TIME_ZONE) > todayStr);
+
+    let reply = `${getGreeting(callerName, now)} Här är dina aktuella påminnelser:`;
+    if (overdue.length > 0) {
+      reply += `\n\n⚠️ **Förfallna (${overdue.length}):**\n` + overdue.map((t) => `• ${t.title} (förföll ${t.dueAt!.slice(0, 10)})`).join("\n");
+    }
+    if (todayTasks.length > 0) {
+      reply += `\n\n📅 **Idag (${todayTasks.length}):**\n` + todayTasks.map((t) => `• ${t.title}`).join("\n");
+    }
+    if (upcoming.length > 0) {
+      reply += `\n\n🔮 **Kommande (${upcoming.length}):**\n` + upcoming.map((t) => `• ${t.title}${t.dueAt ? ` (${t.dueAt.slice(0, 10)})` : ""}`).join("\n");
+    }
+
+    reply += `\n\n💡 *Tips: Du kan säga "Klarmarkera [namn]" eller "Rensa gamla påminnelser" för att bocka av.*`;
+    return { text: reply, executedActions };
   }
 
   // 2. Delete command: "Ta bort uppgiften köpa mjölk", "Ta bort mötet imorgon", "Ta bort minnet om portkoden"
@@ -3026,22 +3170,6 @@ MOTIVERANDE FAKTAÅTERKOPPLING: När du bekräftar mätningar, protein eller pas
     const toolRes = JSON.parse(toolResStr);
     return {
       text: `${getGreeting(callerName, now)} ${toolRes.summary}`,
-      executedActions,
-    };
-  }
-
-  // Natural Swedish reminder trigger ("påminn mig att storhandla på fredag efter jobbet")
-  const parsedReminder = parseSwedishReminder(text, now);
-  if (parsedReminder) {
-    executedActions.push("create_task");
-    const res = await createContextualReminder(actor, {
-      title: parsedReminder.title,
-      targetDate: parsedReminder.targetDate,
-      timeString: parsedReminder.timeString,
-      contextAnchor: parsedReminder.contextAnchor,
-    });
-    return {
-      text: `${getGreeting(callerName, now)} ${res.text}`,
       executedActions,
     };
   }

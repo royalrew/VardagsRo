@@ -16,6 +16,7 @@ const dependencies = vi.hoisted(() => ({
   transcribeTelegramVoice: vi.fn(),
   synthesizeJarvisSpeech: vi.fn(async () => Buffer.from("audio-bytes")),
   logProject100Meal: vi.fn(),
+  accessGarden: vi.fn(),
   generateMorningBriefing: vi.fn(async () => ({ text: "Morgonöversikt" })),
   generateEveningBriefing: vi.fn(async () => ({ text: "Kvällsavstämning" })),
   sql: vi.fn(async (...args: unknown[]) => {
@@ -37,6 +38,7 @@ vi.mock("@/server/database", () => ({
 vi.mock("@/server/project100-nutrition", () => ({
   logProject100Meal: dependencies.logProject100Meal,
 }));
+vi.mock("@/server/garden", () => ({ accessGarden: dependencies.accessGarden }));
 vi.mock("@/server/questions", () => ({
   answerFamilyQuestion: dependencies.answerFamilyQuestion,
 }));
@@ -205,7 +207,7 @@ describe("Telegram Jarvis Voice & Schedule Engine", () => {
       keyboard.inline_keyboard.flatMap((row) => row.map((button) => button.callback_data)),
     );
 
-    expect(callbackData).toHaveLength(7);
+    expect(callbackData).toHaveLength(8);
     for (const data of callbackData) {
       expect(new TextEncoder().encode(data).byteLength).toBeLessThanOrEqual(64);
       expect(parseTelegramCallbackAction(data)).not.toBeNull();
@@ -214,7 +216,7 @@ describe("Telegram Jarvis Voice & Schedule Engine", () => {
     expect(parseTelegramCallbackAction("unknown:button")).toBeNull();
   });
 
-  it("builds all four permanent quick buttons with the current Stockholm briefing label", () => {
+  it("builds permanent quick buttons including the garden with the current Stockholm briefing label", () => {
     const morning = getTelegramReplyKeyboard(new Date("2026-09-03T08:00:00.000Z"));
     const evening = getTelegramReplyKeyboard(new Date("2026-09-03T18:00:00.000Z"));
 
@@ -223,8 +225,32 @@ describe("Telegram Jarvis Voice & Schedule Engine", () => {
       "🏋️‍♂️ Dagens Träning",
       "🥩 Protein & Mat",
       "📅 Familjens Schema",
+      "🌱 Min trädgård",
     ]);
     expect(evening.keyboard[0][0].text).toBe("🌙 Kvällens Briefing");
+  });
+
+  it("opens daily habits via /vanor without asking the language model", async () => {
+    dependencies.accessGarden.mockResolvedValueOnce({ started: true, date: "2026-09-10", timeZone: "Europe/Stockholm", nextMidnight: "2026-09-10T22:00:00Z", checks: ["move"], streak: 3, run: 1, seed: 1, resetOn: null, surprises: [] });
+    await processTelegramUpdate({ update_id: 901, message: { chat: { id: 12345, type: "private" }, from: { id: 12345 }, text: "/vanor" } });
+    expect(dependencies.accessGarden).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1" }));
+    expect(dependencies.processJarvisAgentMessage).not.toHaveBeenCalled();
+    const payload = JSON.parse(vi.mocked(fetch).mock.calls.at(-1)![1]!.body as string);
+    expect(payload.reply_markup.inline_keyboard[0][0].callback_data).toBe("garden:check:2026-09-10:move:0");
+  });
+
+  it("saves a habit callback for the linked account and refreshes its checklist", async () => {
+    dependencies.accessGarden.mockResolvedValueOnce({ started: true, date: "2026-09-10", timeZone: "Europe/Stockholm", nextMidnight: "2026-09-10T22:00:00Z", checks: ["teeth"], streak: 0, run: 1, seed: 1, resetOn: null, surprises: [] });
+    await processTelegramUpdate({ update_id: 902, callback_query: { id: "garden-callback", from: { id: 12345 }, message: { message_id: 1, chat: { id: 12345, type: "private" } }, data: "garden:check:2026-09-10:teeth:1" } });
+    expect(dependencies.accessGarden).toHaveBeenCalledWith(expect.objectContaining({ userId: "user-1" }), { action: "check", date: "2026-09-10", habit: "teeth", done: true });
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/editMessageText"), expect.anything());
+  });
+
+  it("never reads or writes private garden data from group or mismatched callbacks", async () => {
+    for (const chat of [{ id: -987, type: "group" }, { id: 999, type: "private" }]) {
+      await processTelegramUpdate({ update_id: 903 + chat.id, callback_query: { id: "garden-group", from: { id: 12345 }, message: { message_id: 1, chat }, data: "garden:check:2026-09-10:teeth:1" } });
+    }
+    expect(dependencies.accessGarden).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -536,6 +562,29 @@ describe("Telegram Jarvis Voice & Schedule Engine", () => {
     expect(fetch).toHaveBeenCalledWith(
       "https://api.telegram.org/bottest-token/sendMessage",
       expect.objectContaining({ body: expect.stringContaining("gammal eller okänd") }),
+    );
+  });
+
+  it("deletes a reminder via callback and updates the message", async () => {
+    dependencies.sql.mockResolvedValueOnce([{ id: "task-1", title: "Packa lådor" }]);
+
+    await processTelegramUpdate({
+      update_id: 309,
+      callback_query: {
+        id: "cb-9",
+        from: { id: 12345, first_name: "Jimmy", is_bot: false },
+        message: {
+          message_id: 461,
+          chat: { id: 999, type: "private" },
+          text: "⏰ Påminnelse från Jarvis: Packa lådor",
+        },
+        data: "task:delete:task-1",
+      },
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.telegram.org/bottest-token/editMessageText",
+      expect.objectContaining({ body: expect.stringContaining("Borttagen") }),
     );
   });
 });

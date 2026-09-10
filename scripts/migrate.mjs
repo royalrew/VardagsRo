@@ -1400,6 +1400,18 @@ const migrations = [
   },
 ];
 
+migrations.push({
+  version: "029_project100_garden",
+  name: "Private daily habit garden and persistent surprise memory",
+  statements: [
+    `create table if not exists project100_gardens (
+      user_id text primary key references auth_users(id) on delete cascade,
+      state jsonb not null check (jsonb_typeof(state) = 'object'),
+      updated_at timestamptz not null default now()
+    )`,
+  ],
+});
+
 function checksum(migration) {
   return createHash("sha256")
     .update(`${migration.version}\n${migration.name}\n${migration.statements.join("\n-- statement --\n")}`)

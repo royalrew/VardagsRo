@@ -40,6 +40,7 @@ const dependencies = vi.hoisted(() => ({
         dueAt: "2026-08-31T08:00:00.000Z",
         completedAt: null,
         kind: "bring" as const,
+        personId: "person-nora" as string | undefined,
       },
     ],
     documents: [],
@@ -172,6 +173,34 @@ describe("Jarvis Briefing Service", () => {
       expect(briefing.text).toContain("Underkropp & Ben");
       expect(briefing.text).toContain("145g");
       expect(briefing.text).toContain("15g kvar");
+    });
+
+    it("includes open reminders follow-up question when reminders are overdue or due today", async () => {
+      dependencies.loadDashboard.mockResolvedValueOnce({
+        events: [],
+        people: [{ id: "person-nora", name: "Jimmy", aliases: ["Pappa"] }],
+        tasks: [
+          {
+            id: "t-1",
+            title: "Ta med mig Hannis kuvert",
+            dueAt: "2026-08-31T09:00:00.000Z",
+            completedAt: null,
+            kind: "bring" as const,
+            personId: "person-nora",
+          },
+        ],
+        documents: [],
+        folders: [],
+      });
+
+      const briefing = await generateEveningBriefing(TEST_ACTOR, {
+        date: "2026-08-31",
+        callerName: "Jimmy",
+      });
+
+      expect(briefing.openRemindersCount).toBe(1);
+      expect(briefing.text).toContain("Du har inte klarmarkerat \"Ta med mig Hannis kuvert\"");
+      expect(briefing.text).toContain("Har du gjort detta?");
     });
   });
 });

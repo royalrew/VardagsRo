@@ -46,6 +46,7 @@ export interface EveningBriefingResult {
   proteinRemainingG: number;
   hasJournalEntry: boolean;
   nextMorningEvent: { title: string; time: string } | null;
+  openRemindersCount?: number;
   text: string;
 }
 
@@ -295,6 +296,24 @@ export async function generateEveningBriefing(
     parts.push(`⏰ Imorgon: Första händelse är ${nextMorningEvent.title}${nextMorningEvent.time ? ` kl ${nextMorningEvent.time}` : ""}.`);
   }
 
+  // 5. Open reminders follow-up check
+  const openReminders = dashboard.tasks.filter((t) => {
+    if (t.completedAt) return false;
+    const isCallerTask = t.personId === actor.personId || !t.personId;
+    if (!isCallerTask) return false;
+    if (!t.dueAt) return false;
+    const dueDate = calendarDateInTimeZone(t.dueAt, DEFAULT_TIME_ZONE);
+    return dueDate <= targetDate;
+  });
+
+  if (openReminders.length > 0) {
+    const reminderTitles = openReminders.slice(0, 3).map((t) => `"${t.title}"`).join(", ");
+    const more = openReminders.length > 3 ? ` och ${openReminders.length - 3} till` : "";
+    parts.push(
+      `🔔 Påminnelser: Du har inte klarmarkerat ${reminderTitles}${more}. Har du gjort detta? Säg "Klarmarkera [namn]" eller "Rensa gamla påminnelser" för att bocka av.`,
+    );
+  }
+
   return {
     date: targetDate,
     completedSessionsCount: completedToday.length,
@@ -304,6 +323,7 @@ export async function generateEveningBriefing(
     proteinRemainingG,
     hasJournalEntry,
     nextMorningEvent,
+    openRemindersCount: openReminders.length,
     text: parts.join("\n"),
   };
 }

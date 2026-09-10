@@ -11,6 +11,9 @@ import { requireTelegramActor } from "@/server/actor";
 import { synthesizeJarvisSpeech } from "@/server/audio-synthesis";
 import { transcribeTelegramVoice } from "@/server/audio-transcription";
 import { telegramConfig } from "@/server/config";
+import { AppError } from "@/server/errors";
+import { accessGarden } from "@/server/garden";
+import { gardenTelegramMessage, isGardenCommand, parseGardenCallback } from "@/server/garden-telegram";
 import {
   claimTelegramUpdate,
   createTelegramLinkRequest,
@@ -46,6 +49,7 @@ export function getTelegramReplyKeyboard(now: Date = new Date()) {
     keyboard: [
       [{ text: briefingButtonText }, { text: "🏋️‍♂️ Dagens Träning" }],
       [{ text: "🥩 Protein & Mat" }, { text: "📅 Familjens Schema" }],
+      [{ text: "🌱 Min trädgård" }],
     ],
     resize_keyboard: true,
     is_persistent: true,
@@ -97,6 +101,7 @@ export function taskReminderInlineKeyboard(taskId: string) {
       ],
       [
         { text: "⏰ Snooza 1h", callback_data: `task:snooze:${taskId}` },
+        { text: "🗑️ Ta bort", callback_data: `task:delete:${taskId}` },
       ],
     ],
   };
@@ -268,10 +273,12 @@ function command(text: string): string | null {
 }
 
 type TelegramCallbackAction =
+  | NonNullable<ReturnType<typeof parseGardenCallback>>
   | { kind: "training" }
   | { kind: "nutrition" }
   | { kind: "quick_protein" }
   | { kind: "task_done"; taskId: string }
+  | { kind: "task_delete"; taskId: string }
   | { kind: "task_snooze_tomorrow"; taskId: string }
   | { kind: "task_snooze_hour"; taskId: string };
 
@@ -280,6 +287,8 @@ function validCallbackTaskId(taskId: string): boolean {
 }
 
 export function parseTelegramCallbackAction(data: string | undefined): TelegramCallbackAction | null {
+  const garden = parseGardenCallback(data);
+  if (garden) return garden;
   if (data === "cmd:training") return { kind: "training" };
   if (data === "cmd:nutrition") return { kind: "nutrition" };
   if (data === "act:quick_protein") return { kind: "quick_protein" };
@@ -288,6 +297,7 @@ export function parseTelegramCallbackAction(data: string | undefined): TelegramC
     ["task:snooze_tomorrow:", "task_snooze_tomorrow"],
     ["task:snooze:", "task_snooze_hour"],
     ["task:done:", "task_done"],
+    ["task:delete:", "task_delete"],
   ] as const;
 
   for (const [prefix, kind] of taskActions) {
@@ -382,6 +392,25 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
           return;
         }
 
+        if (action.kind === "garden") {
+          // Personal habits must never be displayed or changed from a group message.
+          if (cb.from.is_bot || cb.message?.chat?.type !== "private" || chatId !== userId) return;
+          try {
+            const view = await accessGarden(actor, action.input);
+            const reply = gardenTelegramMessage(view);
+            const edited = cb.message?.message_id
+              ? await editTelegramMessageText(chatId, cb.message.message_id, reply.text, { replyMarkup: reply.replyMarkup })
+              : false;
+            if (!edited) await sendTelegramMessage(chatId, reply.text, { replyMarkup: reply.replyMarkup });
+          } catch (error) {
+            if (!(error instanceof AppError)) throw error;
+            await sendTelegramMessage(chatId, error.message, {
+              replyMarkup: { inline_keyboard: [[{ text: "🌱 Hämta dagens vanor", callback_data: "garden:show" }]] },
+            });
+          }
+          return;
+        }
+
         if (action.kind === "training" || action.kind === "nutrition") {
           const prompt = action.kind === "training"
             ? TELEGRAM_QUICK_REPLY_PROMPTS["🏋️‍♂️ Dagens Träning"]
@@ -452,6 +481,35 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
             originalText,
             "✅ Klarmarkerad!",
             `✅ Uppgiften "${task.title}" är nu klarmarkerad!`,
+          );
+          return;
+        }
+
+        if (action.kind === "task_delete") {
+          const rows = await sql<Array<{ id: string; title: string }>>`
+            delete from family_tasks
+            where id = ${action.taskId}
+              and household_id = ${actor.householdId}
+              and person_id = ${actor.personId}
+            returning id, title
+          `;
+          const task = rows[0];
+          if (!task) {
+            await showCallbackResult(
+              cb,
+              chatId,
+              originalText,
+              "ℹ️ Påminnelsen är redan hanterad eller finns inte längre.",
+              "ℹ️ Påminnelsen är redan hanterad eller finns inte längre.",
+            );
+            return;
+          }
+          await showCallbackResult(
+            cb,
+            chatId,
+            originalText,
+            "🗑️ Borttagen!",
+            `🗑️ Påminnelsen "${task.title}" har tagits bort.`,
           );
           return;
         }
@@ -572,6 +630,16 @@ export async function processTelegramUpdate(update: TelegramUpdate): Promise<voi
     // The bot reads the household its chat is linked to, through the same
     // permission layer as the browser. It never reaches a household by default.
     const actor = await requireTelegramActor(userId);
+
+    if (isGardenCommand(message.text ?? "")) {
+      try {
+        const reply = gardenTelegramMessage(await accessGarden(actor));
+        await sendTelegramMessage(chatId, reply.text, { replyMarkup: reply.replyMarkup });
+      } catch (error) {
+        await sendTelegramMessage(chatId, error instanceof AppError ? error.message : "Trädgården gick inte att hämta. Försök med /vanor igen om en stund.");
+      }
+      return;
+    }
 
     const quickReplyText = message.text?.trim() ?? "";
     const quickPrompt = quickReplyPrompt(quickReplyText);

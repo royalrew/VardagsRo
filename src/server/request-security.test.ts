@@ -77,16 +77,26 @@ describe("trusted web mutations", () => {
     );
   });
 
-  it("allows a missing Origin for local tools but still blocks supplied foreign origins", () => {
+  it("allows the development server's own origin on a non-default port", () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("VARDAGSRO_BASE_URL", "http://localhost:3000");
 
-    const localRequest = new Request("http://localhost:3000/api/events", {
+    const localRequest = new Request("http://localhost:3001/api/events", {
+      method: "POST",
+      body: "{}",
+      headers: {
+        "content-type": "application/json",
+        origin: "http://localhost:3001",
+      },
+    });
+    expect(() => assertTrustedMutationRequest(localRequest)).not.toThrow();
+
+    const localToolRequest = new Request("http://localhost:3001/api/events", {
       method: "POST",
       body: "{}",
       headers: { "content-type": "application/json" },
     });
-    expect(() => assertTrustedMutationRequest(localRequest)).not.toThrow();
+    expect(() => assertTrustedMutationRequest(localToolRequest)).not.toThrow();
 
     expect(() =>
       assertTrustedMutationRequest(

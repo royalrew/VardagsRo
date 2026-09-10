@@ -40,6 +40,14 @@ const dependencies = vi.hoisted(() => {
         title: "Torka köksbänkar",
         completedAt: "2026-09-01T15:00:00.000Z",
       },
+      {
+        id: "task-medicin-1",
+        personId: "person-1",
+        title: "Jag måste signera en medicin på jobbet",
+        dueAt: "2026-09-03T08:00:00.000Z",
+        kind: "preparation",
+        completedAt: null,
+      },
     ],
     documents: [
       {
@@ -817,6 +825,75 @@ describe("jarvis-agent", () => {
     expect(dependencies.removeTask).toHaveBeenCalled();
     expect(res.executedActions).toContain("delete_item");
     expect(res.text).toContain("Tog bort uppgiften");
+  });
+
+  describe("Smart Reminders & Old Task Management", () => {
+    it("handles 'Påminn mig imorgon kl 9:00 att jag måste ta med mig Hannis kuvert' without triggering school packing", async () => {
+      const res = await processJarvisAgentMessage(
+        TEST_ACTOR,
+        "Påminn mig imorgon kl 9:00 att jag måste ta med mig Hannis kuvert",
+        { personName: "Jimmy" },
+      );
+
+      expect(res.executedActions).toContain("create_task");
+      expect(res.executedActions).not.toContain("check_schedule");
+      expect(res.text).not.toContain("skolan/packning");
+      expect(res.text).toContain("Ta med mig Hannis kuvert");
+      expect(res.text).toContain("09:00");
+    });
+
+    it("excludes adult work/preparation tasks from school/packing queries", async () => {
+      const res = await processJarvisAgentMessage(
+        TEST_ACTOR,
+        "Vad ska barnen ta med sig till skolan?",
+        { personName: "Jimmy" },
+      );
+
+      expect(res.text).not.toContain("signera en medicin på jobbet");
+    });
+
+    it("handles completing tasks via natural language ('Klarmarkera signera en medicin')", async () => {
+      const res = await processJarvisAgentMessage(
+        TEST_ACTOR,
+        "Klarmarkera signera en medicin",
+        { personName: "Jimmy" },
+      );
+
+      expect(dependencies.updateManualTask).toHaveBeenCalledWith(
+        TEST_ACTOR,
+        "task-medicin-1",
+        expect.objectContaining({ completedAt: expect.any(String) }),
+      );
+      expect(res.executedActions).toContain("update_item");
+      expect(res.text).toContain("markerad som klar");
+    });
+
+    it("handles bulk cleaning old reminders ('Rensa gamla påminnelser')", async () => {
+      const res = await processJarvisAgentMessage(
+        TEST_ACTOR,
+        "Rensa gamla påminnelser",
+        { personName: "Jimmy" },
+      );
+
+      expect(dependencies.updateManualTask).toHaveBeenCalledWith(
+        TEST_ACTOR,
+        "task-medicin-1",
+        expect.objectContaining({ completedAt: expect.any(String) }),
+      );
+      expect(res.text).toContain("klarmarkerat 1 gamla påminnelse");
+      expect(res.text).toContain("signera en medicin på jobbet");
+    });
+
+    it("handles listing active reminders ('Vilka påminnelser har jag?')", async () => {
+      const res = await processJarvisAgentMessage(
+        TEST_ACTOR,
+        "Vilka påminnelser har jag?",
+        { personName: "Jimmy" },
+      );
+
+      expect(res.text).toContain("Förfallna");
+      expect(res.text).toContain("signera en medicin på jobbet");
+    });
   });
 
   describe("Jarvis Wishes: Kylskåpstömning & Matförslag", () => {

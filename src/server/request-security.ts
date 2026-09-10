@@ -31,7 +31,10 @@ export function assertTrustedMutationRequest(request: Request): void {
   }
 
   const origin = request.headers.get("origin");
-  if (origin !== null && (origin === "null" || origin !== appBaseUrl())) {
+  const trustedOrigin = isProductionRuntime()
+    ? appBaseUrl()
+    : new URL(request.url).origin;
+  if (origin !== null && (origin === "null" || origin !== trustedOrigin)) {
     rejectOrigin();
   }
 

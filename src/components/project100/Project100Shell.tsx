@@ -14,6 +14,7 @@ import {
   Plus,
   Scale,
   Settings,
+  Sprout,
   Utensils,
   Video,
   X,
@@ -28,6 +29,7 @@ const groups = [
     items: [
       { href: "/projekt-100", label: "Översikt", icon: LayoutDashboard },
       { href: "/projekt-100/schema", label: "Schema", icon: CalendarDays },
+      { href: "/projekt-100/tradgard", label: "Min trädgård", icon: Sprout },
     ],
   },
   {
@@ -58,6 +60,7 @@ const groups = [
 const titles: Record<string, string> = {
   "/projekt-100": "Översikt",
   "/projekt-100/schema": "Schema",
+  "/projekt-100/tradgard": "Min trädgård",
   "/projekt-100/traning": "Träning",
   "/projekt-100/kost": "Kost",
   "/projekt-100/kropp": "Kropp",

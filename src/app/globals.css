@@ -1915,6 +1915,98 @@ button.event-row:hover {
   align-items: center;
 }
 
+.jarvis-conversation-panel {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+}
+
+.jarvis-conversation-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.jarvis-chat-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+}
+
+.jarvis-chat-heading > div {
+  min-width: 0;
+}
+
+.jarvis-chat-heading h2,
+.jarvis-chat-heading p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jarvis-chat-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: var(--green);
+  color: #f4c5a8;
+  place-items: center;
+}
+
+.jarvis-chat-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.jarvis-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid #d9e5dd;
+  border-radius: 999px;
+  background: #edf6f0;
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 800;
+  align-items: center;
+  gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.jarvis-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px rgba(65, 105, 91, .12);
+}
+
+.vardagsro-jarvis-header {
+  min-height: 64px;
+  padding: 11px 18px;
+  border-bottom: 1px solid var(--line);
+  background: #f8faf8;
+}
+
+.vardagsro-jarvis-header h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.vardagsro-jarvis-header p {
+  margin: 2px 0 0;
+  color: var(--ink-faint);
+  font-size: 9px;
+}
+
 .privacy-pill {
   display: inline-flex;
   padding: 8px 12px;
@@ -1929,12 +2021,10 @@ button.event-row:hover {
 }
 
 .chat-shell {
-  display: flex;
-  width: min(850px, 100%);
+  width: min(900px, 100%);
   min-height: 610px;
   margin: 0 auto;
-  overflow: hidden;
-  flex-direction: column;
+  border-radius: 12px;
 }
 
 .chat-messages {
@@ -1951,29 +2041,20 @@ button.event-row:hover {
 .chat-turn {
   display: flex;
   max-width: 78%;
-  gap: 9px;
 }
 
 .chat-user {
   margin-left: auto;
 }
 
-.assistant-avatar {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  border-radius: 11px;
-  background: var(--green);
-  color: #f4c5a8;
-  place-items: center;
-}
-
 .message-bubble {
-  padding: 14px 16px;
+  display: flex;
+  padding: 12px 15px;
   border: 1px solid #e6e1d9;
-  border-radius: 7px 17px 17px 17px;
+  border-radius: 11px 11px 11px 3px;
   background: #fbf8f2;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .message-bubble p {
@@ -1985,12 +2066,31 @@ button.event-row:hover {
 
 .chat-user .message-bubble {
   border: 0;
-  border-radius: 17px 17px 7px 17px;
+  border-radius: 11px 11px 3px 11px;
   background: var(--green);
 }
 
 .chat-user .message-bubble p {
   color: white;
+}
+
+.message-bubble-header {
+  display: flex;
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.message-bubble-header > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-user .message-bubble-header {
+  color: rgba(255, 255, 255, .72);
 }
 
 .message-error {
@@ -2044,11 +2144,14 @@ button.event-row:hover {
 }
 
 .typing-bubble {
-  display: flex;
   min-width: 58px;
-  min-height: 42px;
+  min-height: 54px;
+}
+
+.typing-dots {
+  display: flex;
+  min-height: 20px;
   align-items: center;
-  justify-content: center;
   gap: 4px;
 }
 
@@ -2075,9 +2178,9 @@ button.event-row:hover {
 
 .starter-questions {
   display: flex;
-  padding: 0 33px 18px 76px;
-  flex-wrap: wrap;
-  gap: 7px;
+  padding: 0 28px 20px;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .starter-questions > span {
@@ -2091,13 +2194,35 @@ button.event-row:hover {
   gap: 6px;
 }
 
+.starter-question-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .starter-questions button {
-  padding: 8px 11px;
+  display: flex;
+  min-width: 0;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 9px;
   background: white;
   color: var(--ink-soft);
-  font-size: 9px;
+  font-size: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+}
+
+.starter-questions button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.starter-questions button svg {
+  flex: 0 0 auto;
 }
 
 .starter-questions button:hover {
@@ -2108,24 +2233,26 @@ button.event-row:hover {
 
 .chat-composer {
   display: flex;
-  min-height: 66px;
-  margin: 0 24px;
-  padding: 8px 9px 8px 16px;
-  border: 1px solid #dcd7cf;
-  border-radius: 16px;
-  background: white;
-  box-shadow: 0 8px 24px rgba(35, 53, 47, 0.07);
+  min-height: 64px;
+  margin: 0;
+  padding: 11px 16px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: #f8faf8;
+  box-shadow: none;
   align-items: flex-end;
-  gap: 10px;
+  gap: 8px;
 }
 
 .chat-composer textarea {
-  min-height: 42px;
+  min-height: 40px;
   max-height: 110px;
-  padding: 11px 0 7px;
+  padding: 10px 12px;
   resize: none;
-  border: 0;
-  background: transparent;
+  border: 1px solid #dcd7cf;
+  border-radius: 9px;
+  background: white;
   flex: 1;
   font-size: 12px;
   line-height: 1.4;
@@ -2133,17 +2260,19 @@ button.event-row:hover {
 
 .chat-composer button {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   flex: 0 0 auto;
-  border-radius: 12px;
+  border-radius: 9px;
   background: var(--green);
   color: white;
   place-items: center;
 }
 
 .chat-disclaimer {
-  margin: 10px 0 16px;
+  margin: 0;
+  padding: 0 12px 10px;
+  background: #f8faf8;
   color: #9aa4a0;
   font-size: 8px;
   text-align: center;
@@ -4595,7 +4724,11 @@ button.event-row:hover {
   }
 
   .starter-questions {
-    padding: 0 15px 15px 59px;
+    padding: 0 15px 15px;
+  }
+
+  .starter-question-grid {
+    grid-template-columns: 1fr;
   }
 
   .starter-questions button {
@@ -4604,8 +4737,7 @@ button.event-row:hover {
 
   .chat-composer {
     min-height: 59px;
-    margin: 0 12px;
-    padding-left: 12px;
+    padding: 10px 12px;
   }
 
   .document-grid {
@@ -8909,6 +9041,9 @@ button.event-row:hover {
 .p100-jarvis-chat-header { padding: 12px 18px; border-bottom: 1px solid var(--p100-line); background: rgba(0,0,0,.15); }
 .p100-jarvis-chat-header h2 { margin: 0; font-size: .84rem; color: #cbd3cd; }
 .p100-jarvis-chat-header p { margin: 2px 0 0; font-size: .59rem; color: #68736c; }
+.p100-jarvis-chat-header .jarvis-chat-icon { background: rgba(200,244,93,.1); color: var(--p100-accent); }
+.p100-jarvis-chat-header .jarvis-status { border-color: rgba(200,244,93,.2); background: rgba(200,244,93,.08); color: var(--p100-accent); }
+.p100-jarvis-chat-header .jarvis-status i { box-shadow: 0 0 0 3px rgba(200,244,93,.1); }
 .p100-chat-messages-scroll { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
 .p100-chat-messages-list { display: flex; flex-direction: column; gap: 14px; }
 
@@ -8953,7 +9088,7 @@ button.event-row:hover {
 .p100-empty-prompt-card svg { width: 14px; height: 14px; }
 
 /* Right Panel: Memories & Context */
-.p100-right-tab-toggle { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--p100-line); }
+.p100-right-tab-toggle { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 1px solid var(--p100-line); }
 .p100-right-tab-toggle button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; background: transparent; border: 0; color: #77837b; font-size: .62rem; font-weight: 700; cursor: pointer; border-bottom: 2px solid transparent; }
 .p100-right-tab-toggle button.active { color: var(--p100-accent); border-bottom-color: var(--p100-accent); background: rgba(255,255,255,.02); }
 .p100-right-tab-toggle svg { width: 12px; }
@@ -9463,6 +9598,13 @@ button.event-row:hover {
 .p100-briefing-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .p100-jarvis-chat-header.jarvis-conversation-header { align-items: stretch; flex-direction: column; }
+  .p100-briefing-quick-actions { width: 100%; margin-left: 0; }
+  .p100-briefing-quick-actions .jarvis-status { display: none; }
+  .p100-briefing-btn { flex: 1; justify-content: center; }
 }
 
 /* Milestone Progress Gauge */
