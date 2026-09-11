@@ -288,6 +288,8 @@ export interface PushupTrackerState {
   currentRepMinElbow?: number;
   currentRepStartedAtMs?: number;
   currentRepMinBodyDeg?: number;
+  lastRepCompletedAtMs?: number;
+  isProne?: boolean;
   repsHistory: PushupRepSummary[];
   trajectorySamples: PushupTrajectorySample[];
   lastSampleAtMs?: number;
@@ -329,6 +331,38 @@ export function advancePushupTracker(
       (landmarks[14]?.visibility ?? 0) +
       (landmarks[16]?.visibility ?? 0)) /
     3;
+
+  // 1. Standing vs Prone check: A person standing upright is walking or getting into place, NOT doing pushups!
+  const leftShoulder = landmarks[11];
+  const rightShoulder = landmarks[12];
+  const avgShoulderY =
+    leftShoulder && rightShoulder
+      ? (leftShoulder.y + rightShoulder.y) / 2
+      : (leftShoulder?.y ?? rightShoulder?.y ?? 0.5);
+
+  const leftHip = landmarks[23];
+  const rightHip = landmarks[24];
+  const hasHips =
+    leftHip && rightHip &&
+    (leftHip.visibility ?? 0) > 0.35 &&
+    (rightHip.visibility ?? 0) > 0.35;
+  const avgHipY = hasHips ? (leftHip.y + rightHip.y) / 2 : null;
+
+  // Upright standing: shoulders high (Y < 0.45) and hips significantly below shoulders vertically (avgHipY - avgShoulderY > 0.20)
+  const isStandingUpright =
+    avgHipY !== null &&
+    avgShoulderY < 0.45 &&
+    avgHipY - avgShoulderY > 0.20;
+
+  if (isStandingUpright) {
+    return {
+      ...state,
+      phase: "plank-top",
+      currentRepStartedAtMs: undefined,
+      currentRepMinElbow: undefined,
+      isProne: false,
+    };
+  }
 
   // Hysteresis to stay locked to the primary arm unless the other arm is clearly more visible
   let side: "left" | "right" = state.side ?? (leftVis >= rightVis ? "left" : "right");
@@ -375,9 +409,15 @@ export function advancePushupTracker(
     }
   }
 
-  // Compute elbow angle:
-  // In front or diagonal view, both arms might be clearly visible.
-  let elbowAngle = computeJointAngle(shoulder, elbow, wrist) ?? 180;
+  // 2. Validate anatomical elbow angle:
+  // In 2D camera projection, deep flexion with hands planted can project down to ~25°.
+  // Angles < 20° are landmark overlap glitches.
+  const isValidElbowAngle = (ang: number | null): ang is number =>
+    ang !== null && ang >= 20 && ang <= 185;
+
+  const rawPrimary = computeJointAngle(shoulder, elbow, wrist);
+  let elbowAngle = isValidElbowAngle(rawPrimary) ? rawPrimary : state.elbowAngle ?? 180;
+
   const otherSide = side === "left" ? "right" : "left";
   const otherShoulder = otherSide === "left" ? landmarks[11] : landmarks[12];
   const otherElbow = otherSide === "left" ? landmarks[13] : landmarks[14];
@@ -389,9 +429,9 @@ export function advancePushupTracker(
     (otherShoulder.visibility ?? 0) >= 0.4 &&
     (otherElbow.visibility ?? 0) >= 0.4
   ) {
-    const altAngle = computeJointAngle(otherShoulder, otherElbow, otherWrist);
-    if (altAngle !== null && altAngle >= 30 && altAngle <= 180) {
-      elbowAngle = Math.min(elbowAngle, altAngle);
+    const rawAlt = computeJointAngle(otherShoulder, otherElbow, otherWrist);
+    if (isValidElbowAngle(rawAlt)) {
+      elbowAngle = Math.min(elbowAngle, rawAlt);
     }
   }
 
@@ -416,6 +456,7 @@ export function advancePushupTracker(
   let currentRepMinElbow = state.currentRepMinElbow ?? elbowAngle;
   let currentRepStartedAtMs = state.currentRepStartedAtMs;
   let currentRepMinBodyDeg = state.currentRepMinBodyDeg ?? bodyLine;
+  let lastRepCompletedAtMs = state.lastRepCompletedAtMs;
   const repsHistory = [...state.repsHistory];
 
   // Natural pushup thresholds for front and diagonal views
@@ -423,6 +464,8 @@ export function advancePushupTracker(
   const LOCKOUT_THRESHOLD = 145;
   const DESCENDING_THRESHOLD = 135;
   const ASCENDING_THRESHOLD = 108;
+  const MIN_REP_DURATION_MS = 650; // Minimum 0.65s for full down + up cycle
+  const MIN_REP_INTERVAL_MS = 600; // Debounce between completed reps
 
   // Track min/max during active rep
   if (
@@ -449,44 +492,37 @@ export function advancePushupTracker(
     } else if (elbowAngle > LOCKOUT_THRESHOLD + 5) {
       nextPhase = "plank-top";
     }
-  } else if (state.phase === "bottom") {
+  } else if (state.phase === "bottom" || state.phase === "ascending") {
     if (elbowAngle >= LOCKOUT_THRESHOLD) {
-      nextPhase = "plank-top";
-      nextReps += 1;
-      repsHistory.push({
-        repNumber: nextReps,
-        durationMs: currentRepStartedAtMs ? Math.round(nowMs - currentRepStartedAtMs) : 1500,
-        minElbowAngle: Math.round(currentRepMinElbow),
-        lockoutElbowAngle: Math.round(elbowAngle),
-        minBodyAlignmentDeg: Math.round(currentRepMinBodyDeg),
-        isFormWarning,
-        formMessage,
-        startedAtMs: currentRepStartedAtMs ?? (nowMs - 1500),
-        completedAtMs: nowMs,
-      });
+      const repDuration = currentRepStartedAtMs ? nowMs - currentRepStartedAtMs : 0;
+      const debounceOk =
+        lastRepCompletedAtMs === undefined || nowMs - lastRepCompletedAtMs >= MIN_REP_INTERVAL_MS;
+
+      if (
+        repDuration >= MIN_REP_DURATION_MS &&
+        debounceOk &&
+        currentRepMinElbow <= BOTTOM_THRESHOLD
+      ) {
+        nextReps += 1;
+        repsHistory.push({
+          repNumber: nextReps,
+          durationMs: Math.round(repDuration),
+          minElbowAngle: Math.round(currentRepMinElbow),
+          lockoutElbowAngle: Math.round(elbowAngle),
+          minBodyAlignmentDeg: Math.round(currentRepMinBodyDeg),
+          isFormWarning,
+          formMessage,
+          startedAtMs: currentRepStartedAtMs ?? (nowMs - 1500),
+          completedAtMs: nowMs,
+        });
+        lastRepCompletedAtMs = nowMs;
+      }
       currentRepMinElbow = 180;
       currentRepStartedAtMs = undefined;
-    } else if (elbowAngle > ASCENDING_THRESHOLD) {
+      nextPhase = "plank-top";
+    } else if (state.phase === "bottom" && elbowAngle > ASCENDING_THRESHOLD) {
       nextPhase = "ascending";
-    }
-  } else if (state.phase === "ascending") {
-    if (elbowAngle >= LOCKOUT_THRESHOLD) {
-      nextPhase = "plank-top";
-      nextReps += 1;
-      repsHistory.push({
-        repNumber: nextReps,
-        durationMs: currentRepStartedAtMs ? Math.round(nowMs - currentRepStartedAtMs) : 1500,
-        minElbowAngle: Math.round(currentRepMinElbow),
-        lockoutElbowAngle: Math.round(elbowAngle),
-        minBodyAlignmentDeg: Math.round(currentRepMinBodyDeg),
-        isFormWarning,
-        formMessage,
-        startedAtMs: currentRepStartedAtMs ?? (nowMs - 1500),
-        completedAtMs: nowMs,
-      });
-      currentRepMinElbow = 180;
-      currentRepStartedAtMs = undefined;
-    } else if (elbowAngle <= BOTTOM_THRESHOLD) {
+    } else if (state.phase === "ascending" && elbowAngle <= BOTTOM_THRESHOLD) {
       nextPhase = "bottom";
     }
   }
@@ -516,6 +552,8 @@ export function advancePushupTracker(
     currentRepMinElbow,
     currentRepStartedAtMs,
     currentRepMinBodyDeg,
+    lastRepCompletedAtMs,
+    isProne: true,
     repsHistory,
     trajectorySamples,
     lastSampleAtMs: nowMs,
