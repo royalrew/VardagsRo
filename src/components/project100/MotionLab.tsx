@@ -779,8 +779,6 @@ export function MotionLab({
   const lastUnifiedHoldRef = useRef<number>(0);
   const [framingFeedback, setFramingFeedback] = useState<ExerciseFramingFeedback | null>(null);
   const [cameraSetupProfile, setCameraSetupProfile] = useState<SavedCameraSetupProfile | null>(null);
-  const lastSpokenFramingRef = useRef<string | null>(null);
-  const lastSpokenFramingTimeRef = useRef<number>(0);
 
   const activeExerciseTitle = (() => {
     if (programSession) {
@@ -1948,27 +1946,9 @@ export function MotionLab({
 
     const prevTracker = unifiedTrackerRef.current;
 
-    // Steg 80: Utvärdera kameravinkel, höjd och utsnitt för vardagsrumstolerans
+    // Steg 80: Utvärdera kameravinkel, höjd och utsnitt för visuell HUD (utan rösttjat i högtalarna)
     const framing = evaluateExerciseFraming(snapshot.landmarks, currentExId);
     setFramingFeedback(framing);
-
-    if (!framing.isOptimal && voiceGuidanceRef.current) {
-      const now = performance.now();
-      if (
-        framing.advice !== lastSpokenFramingRef.current ||
-        now - lastSpokenFramingTimeRef.current > 12_000
-      ) {
-        // Röstguidning under uppställning / innan repetitioner startat
-        const isSetupPhase = !prevTracker || (prevTracker.reps === 0 && (!prevTracker.holdSeconds || prevTracker.holdSeconds < 1));
-        if (isSetupPhase) {
-          lastSpokenFramingRef.current = framing.advice;
-          lastSpokenFramingTimeRef.current = now;
-          speakSquatInstruction(framing.advice, false);
-        }
-      }
-    } else if (framing.isOptimal) {
-      lastSpokenFramingRef.current = null;
-    }
 
     const nextTracker = advanceUnifiedExerciseTracker(
       prevTracker,
