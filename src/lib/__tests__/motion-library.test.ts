@@ -441,6 +441,63 @@ describe("motion-library: Dumbbell Overhead Shoulder Press", () => {
     state = advanceOverheadPressTracker(lm, state, 1, time);
     expect(state.reps).toBe(2);
   });
+
+  it("does not multi-count kettlebell reps during overhead flutter/tremble", () => {
+    let state = createOverheadPressTracker();
+    let time = 1000;
+
+    for (let rep = 1; rep <= 5; rep++) {
+      const lm = createBaseBodyLandmarks();
+
+      // 1. Hands at chest
+      lm[13] = createMockLandmark(0.40, 0.40);
+      lm[14] = createMockLandmark(0.60, 0.40);
+      lm[15] = createMockLandmark(0.48, 0.32);
+      lm[16] = createMockLandmark(0.52, 0.32);
+      time += 400;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+
+      // 2. Lockout overhead
+      lm[13] = createMockLandmark(0.42, 0.18);
+      lm[14] = createMockLandmark(0.58, 0.18);
+      lm[15] = createMockLandmark(0.46, 0.08);
+      lm[16] = createMockLandmark(0.54, 0.08);
+      time += 700;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+      expect(state.phase).toBe("lockout");
+
+      // 3. Flutter in the air (hands still up, elbows wobble slightly to ~136 deg)
+      lm[13] = createMockLandmark(0.38, 0.22);
+      lm[14] = createMockLandmark(0.62, 0.22);
+      lm[15] = createMockLandmark(0.46, 0.10);
+      lm[16] = createMockLandmark(0.54, 0.10);
+      time += 300;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+      expect(state.reps).toBe(rep - 1); // Must NOT count here!
+
+      // Back to peak lockout in the air
+      lm[13] = createMockLandmark(0.42, 0.18);
+      lm[14] = createMockLandmark(0.58, 0.18);
+      lm[15] = createMockLandmark(0.46, 0.08);
+      lm[16] = createMockLandmark(0.54, 0.08);
+      time += 400;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+      expect(state.reps).toBe(rep - 1); // Still 1 rep!
+
+      // 4. Return all the way to chest (rack)
+      lm[13] = createMockLandmark(0.40, 0.40);
+      lm[14] = createMockLandmark(0.60, 0.40);
+      lm[15] = createMockLandmark(0.48, 0.32);
+      lm[16] = createMockLandmark(0.52, 0.32);
+      time += 800;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+      expect(state.phase).toBe("rack");
+      expect(state.reps).toBe(rep); // Exactly 1 rep counted!
+      expect(state.repsHistory[rep - 1]?.arm).toBe("both");
+    }
+
+    expect(state.reps).toBe(5);
+  });
 });
 
 describe("motion-library: Dumbbell Lateral Raise Tracker", () => {

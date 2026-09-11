@@ -635,6 +635,7 @@ export interface OverheadPressTrackerState {
   currentRepStartedAtMs?: number;
   currentRepMinAngle?: number;
   currentRepMaxAngle?: number;
+  currentRepMinWristY?: number;
   lastRepAtMs?: number;
   lastSampleAtMs?: number;
 }
@@ -699,27 +700,18 @@ export function advanceOverheadPressTracker(
   );
 
   // Determine active pressing arm:
-  // When pressing with 1 arm, the active arm extends high while the inactive arm stays bent at rack
+  // When both arms are overhead above head, it is a two-arm / kettlebell press.
+  // When only one arm is overhead, it is a single-arm press.
   let activeArm: "left" | "right" | "both";
   let angle: number;
   let isOverhead: boolean;
 
   if (isLeftOverhead && isRightOverhead) {
-    if (leftAngle !== null && rightAngle !== null && Math.abs(leftAngle - rightAngle) > 22) {
-      if (rightAngle > leftAngle) {
-        activeArm = "right";
-        angle = rightAngle;
-      } else {
-        activeArm = "left";
-        angle = leftAngle;
-      }
-    } else {
-      activeArm = "both";
-      angle =
-        leftAngle !== null && rightAngle !== null
-          ? (leftAngle + rightAngle) / 2
-          : (leftAngle ?? rightAngle ?? state.lastArmAngle);
-    }
+    activeArm = "both";
+    angle =
+      leftAngle !== null && rightAngle !== null
+        ? (leftAngle + rightAngle) / 2
+        : (leftAngle ?? rightAngle ?? state.lastArmAngle);
     isOverhead = true;
   } else if (isLeftOverhead) {
     activeArm = "left";
@@ -730,7 +722,7 @@ export function advanceOverheadPressTracker(
     angle = rightAngle ?? state.lastArmAngle;
     isOverhead = true;
   } else {
-    // Neither arm is overhead (resting by side or low rack)
+    // Neither arm is overhead (resting by side or rack at chest/shoulders)
     activeArm = state.activeArm ?? "both";
     if (activeArm === "left" && leftAngle !== null) {
       angle = leftAngle;
@@ -745,18 +737,29 @@ export function advanceOverheadPressTracker(
     isOverhead = false;
   }
 
+  // Active wrist height (lower y = higher up in the frame)
+  const activeWristY =
+    activeArm === "left"
+      ? leftWrist?.y ?? 0.5
+      : activeArm === "right"
+      ? rightWrist?.y ?? 0.5
+      : leftWrist && rightWrist
+      ? (leftWrist.y + rightWrist.y) / 2
+      : leftWrist?.y ?? rightWrist?.y ?? 0.5;
+
   let phase = state.phase;
   let nextReps = state.reps;
   let lastRepAtMs = state.lastRepAtMs;
   let currentRepStartedAtMs = state.currentRepStartedAtMs;
   let currentRepMinAngle = state.currentRepMinAngle ?? angle;
   let currentRepMaxAngle = Math.max(state.currentRepMaxAngle ?? angle, angle);
+  let currentRepMinWristY = state.currentRepMinWristY;
   let currentRepArm = state.currentRepArm ?? activeArm;
   let repsHistory = state.repsHistory ?? [];
 
   if (phase === "rack") {
     currentRepMinAngle = Math.min(currentRepMinAngle, angle);
-    if (angle <= 130) {
+    if (angle <= 126) {
       currentRepStartedAtMs = nowMs;
     }
 
@@ -764,6 +767,7 @@ export function advanceOverheadPressTracker(
       phase = "lockout";
       currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
       currentRepMaxAngle = angle;
+      currentRepMinWristY = activeWristY;
       currentRepArm = activeArm;
     } else if (angle > 115 && isOverhead) {
       phase = "pressing";
@@ -777,28 +781,37 @@ export function advanceOverheadPressTracker(
     if (activeArm !== "both") {
       currentRepArm = activeArm;
     }
-    if (angle <= 130) {
+    if (angle <= 126) {
       currentRepStartedAtMs = nowMs;
     }
 
     if (angle >= 145 && isOverhead) {
       phase = "lockout";
-    } else if (!isOverhead && angle <= 130) {
+      currentRepMinWristY = activeWristY;
+    } else if (!isOverhead && angle <= 126) {
       phase = "rack";
       currentRepStartedAtMs = undefined;
       currentRepMinAngle = angle;
       currentRepMaxAngle = angle;
+      currentRepMinWristY = undefined;
     }
   } else if (phase === "lockout") {
     currentRepMaxAngle = Math.max(currentRepMaxAngle, angle);
+    currentRepMinWristY = Math.min(currentRepMinWristY ?? activeWristY, activeWristY);
     if (activeArm !== "both") {
       currentRepArm = activeArm;
     }
 
-    // Returning to rack (arm lowered to shoulder/ear level or angle bent)
-    // Athletic dumbbell/kettlebell pressing bottom position is around 120°-133°
+    // Returning to rack:
+    // 1. In dumbbell press: user lowers weight to ear level (angle <= 125°)
+    // 2. In kettlebell press: user lowers weight to chest (angle <= 115°)
+    // 3. Hands actually descend from peak lockout height
+    // 4. Arm must travel through at least 20°-22° ROM drop
     const romDrop = currentRepMaxAngle - angle;
-    const hasLoweredToRack = angle <= 134 && romDrop >= 14;
+    const wristDescended =
+      activeWristY >= headY - 0.02 ||
+      activeWristY >= (currentRepMinWristY ?? activeWristY) + 0.07;
+    const hasLoweredToRack = wristDescended && angle <= 128 && romDrop >= 20;
 
     if (hasLoweredToRack) {
       phase = "rack";
@@ -806,7 +819,7 @@ export function advanceOverheadPressTracker(
       const isInstantCall = currentRepStartedAtMs !== undefined && rawDuration <= 50;
       const duration = isInstantCall ? 1200 : rawDuration;
       const timeSinceLast = lastRepAtMs ? nowMs - lastRepAtMs : Infinity;
-      if (isInstantCall || (duration >= 400 && timeSinceLast >= 450)) {
+      if (isInstantCall || (duration >= 600 && timeSinceLast >= 700)) {
         nextReps += 1;
         lastRepAtMs = nowMs;
         repsHistory = [
@@ -824,6 +837,7 @@ export function advanceOverheadPressTracker(
       currentRepStartedAtMs = undefined;
       currentRepMinAngle = angle;
       currentRepMaxAngle = angle;
+      currentRepMinWristY = undefined;
     }
   }
 
@@ -852,6 +866,7 @@ export function advanceOverheadPressTracker(
     currentRepStartedAtMs,
     currentRepMinAngle,
     currentRepMaxAngle,
+    currentRepMinWristY,
     lastRepAtMs,
     lastSampleAtMs: nowMs,
   };
