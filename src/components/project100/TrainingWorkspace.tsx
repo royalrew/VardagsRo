@@ -1405,6 +1405,14 @@ export function TrainingWorkspace({
           </Link>
           <Link
             className="p100-button-secondary"
+            href="/projekt-100/traning/motion?exercise=cycling"
+            title="Starta provbänk för motionscykel med live kadens (RPM), trampvarv och JSON-rapport"
+            style={{ borderColor: "rgba(52, 211, 153, 0.45)", color: "#34d399", fontWeight: 700 }}
+          >
+            <Bike size={16} /> Testa motionscykel
+          </Link>
+          <Link
+            className="p100-button-secondary"
             href="/projekt-100/traning/motion?exercise=cycling-intervals-30"
             title="Starta 30 minuters intervallpass på motionscykel med motståndsguidning"
           >
