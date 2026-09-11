@@ -135,7 +135,6 @@ import {
 } from "@/lib/motion-cycling-intervals";
 import type { CyclingTrackerState } from "@/lib/motion-cycling";
 import { CyclingTestBench } from "./motion/CyclingTestBench";
-import { PushupTestBench } from "./motion/PushupTestBench";
 import { buildPushupTestReport } from "@/lib/motion-pushup-test";
 import type { PushupTrackerState } from "@/lib/motion-exercises";
 import { MotionDiagnosticsOverlay, type BaselineNoticeState } from "./motion/MotionDiagnosticsOverlay";
@@ -3154,24 +3153,7 @@ export function MotionLab({
         </section>
       ) : null}
 
-      {activeWorkoutExercise === "pushup" ? (
-        <PushupTestBench
-          pushupTracker={
-            unifiedTracker?.exerciseId === "pushup"
-              ? (unifiedTracker.trackerState as PushupTrackerState)
-              : null
-          }
-          isLive={isLive}
-          trackingEnabled={squatTrackingEnabled}
-          poseVisible={poseVisible}
-          onStartCamera={() => void startCamera()}
-          onToggleTracking={toggleSquatTracking}
-          onResetTracking={resetSquatTracking}
-          onCloseTest={() => setActiveWorkoutExercise("squat")}
-        />
-      ) : null}
-
-      {activeTrackableExerciseId && activeTrackableExerciseId !== "cycling" && activeTrackableExerciseId !== "pushup" ? (
+      {activeTrackableExerciseId && activeTrackableExerciseId !== "cycling" ? (
         <AdaptiveCameraSetupPanel
           key={`${activeTrackableExerciseId}-${initialMissionLaunch?.environment ?? "free"}`}
           exerciseId={activeTrackableExerciseId}

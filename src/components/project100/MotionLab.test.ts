@@ -44,15 +44,13 @@ describe("Motion Lab focused training view", () => {
     expect(html).not.toContain("p100-adaptive-camera");
   });
 
-  it("opens the pushup test bench with instructions and copy report button", () => {
+  it("renders pushup with adaptive camera setup and motion workout panel", () => {
     const html = renderToStaticMarkup(createElement(MotionLab, {
       initialPairingCode: "123456",
       initialExercise: "pushup",
     }));
-    expect(html).toContain("Armhävningstest");
-    expect(html).toContain("p100-pushup-test-bench");
-    expect(html).toContain("Instruktioner för vinklar &amp; kameraplacering");
-    expect(html).toContain("Starta kamera &amp; armhävningstest");
-    expect(html).not.toContain("p100-adaptive-camera");
+    expect(html).toContain("Armhävningar");
+    expect(html).toContain("p100-adaptive-camera");
+    expect(html).not.toContain("p100-pushup-test-bench");
   });
 });
