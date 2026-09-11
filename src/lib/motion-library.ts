@@ -608,10 +608,34 @@ export function advanceBicepCurlTracker(
 
 export type OverheadPressPhase = "rack" | "pressing" | "lockout";
 
+export interface OverheadPressRepRecord {
+  repNumber: number;
+  arm: "left" | "right" | "both";
+  minArmAngle: number;
+  lockoutArmAngle: number;
+  durationMs: number;
+  lockoutPassed: boolean;
+}
+
+export interface OverheadPressTrajectorySample {
+  timestampMs: number;
+  armAngle: number;
+  phase: OverheadPressPhase;
+  arm: "left" | "right" | "both";
+}
+
 export interface OverheadPressTrackerState {
   phase: OverheadPressPhase;
   reps: number;
   lastArmAngle: number;
+  activeArm?: "left" | "right" | "both";
+  repsHistory: OverheadPressRepRecord[];
+  trajectorySamples: OverheadPressTrajectorySample[];
+  currentRepStartedAtMs?: number;
+  currentRepMinAngle?: number;
+  currentRepMaxAngle?: number;
+  lastRepAtMs?: number;
+  lastSampleAtMs?: number;
 }
 
 export function createOverheadPressTracker(): OverheadPressTrackerState {
@@ -619,6 +643,9 @@ export function createOverheadPressTracker(): OverheadPressTrackerState {
     phase: "rack",
     reps: 0,
     lastArmAngle: 85,
+    activeArm: "both",
+    repsHistory: [],
+    trajectorySamples: [],
   };
 }
 
@@ -626,6 +653,7 @@ export function advanceOverheadPressTracker(
   landmarks: readonly MotionLandmark[],
   state: OverheadPressTrackerState,
   aspectRatio = 1,
+  nowMs: number = Date.now(),
 ): OverheadPressTrackerState {
   const leftShoulder = landmarks[11];
   const rightShoulder = landmarks[12];
@@ -634,44 +662,141 @@ export function advanceOverheadPressTracker(
   const leftWrist = landmarks[15];
   const rightWrist = landmarks[16];
 
-  const leftAngle = computeJointAngle3D(leftShoulder, leftElbow, leftWrist, aspectRatio);
-  const rightAngle = computeJointAngle3D(rightShoulder, rightElbow, rightWrist, aspectRatio);
+  if (!leftShoulder || !rightShoulder) {
+    return state;
+  }
 
-  const angle = leftAngle !== null && rightAngle !== null
-    ? (leftAngle + rightAngle) / 2
-    : leftAngle ?? rightAngle ?? state.lastArmAngle;
+  const leftAngle =
+    leftElbow && leftWrist
+      ? computeJointAngle3D(leftShoulder, leftElbow, leftWrist, aspectRatio)
+      : null;
+  const rightAngle =
+    rightElbow && rightWrist
+      ? computeJointAngle3D(rightShoulder, rightElbow, rightWrist, aspectRatio)
+      : null;
 
-  // Wrists higher than shoulders and head
-  const avgWristY = (leftWrist.y + rightWrist.y) / 2;
-  const avgShoulderY = (leftShoulder.y + rightShoulder.y) / 2;
-  const isOverhead = avgWristY < avgShoulderY - 0.10;
+  // Determine overhead extension per arm: wrist is above shoulder
+  const isLeftOverhead = Boolean(leftWrist && leftWrist.y < leftShoulder.y - 0.08);
+  const isRightOverhead = Boolean(rightWrist && rightWrist.y < rightShoulder.y - 0.08);
+
+  // Determine active pressing arm: both, left only, right only, or default to both
+  let activeArm: "left" | "right" | "both";
+  let angle: number;
+  let isOverhead: boolean;
+
+  if (isLeftOverhead && isRightOverhead) {
+    activeArm = "both";
+    angle =
+      leftAngle !== null && rightAngle !== null
+        ? (leftAngle + rightAngle) / 2
+        : (leftAngle ?? rightAngle ?? state.lastArmAngle);
+    isOverhead = true;
+  } else if (isLeftOverhead) {
+    activeArm = "left";
+    angle = leftAngle ?? state.lastArmAngle;
+    isOverhead = true;
+  } else if (isRightOverhead) {
+    activeArm = "right";
+    angle = rightAngle ?? state.lastArmAngle;
+    isOverhead = true;
+  } else {
+    // Neither arm is overhead (both at rack or by side)
+    activeArm = state.activeArm ?? "both";
+    if (activeArm === "left" && leftAngle !== null) {
+      angle = leftAngle;
+    } else if (activeArm === "right" && rightAngle !== null) {
+      angle = rightAngle;
+    } else {
+      angle =
+        leftAngle !== null && rightAngle !== null
+          ? (leftAngle + rightAngle) / 2
+          : (leftAngle ?? rightAngle ?? state.lastArmAngle);
+    }
+    isOverhead = false;
+  }
 
   let phase = state.phase;
-  let reps = state.reps;
+  let nextReps = state.reps;
+  let lastRepAtMs = state.lastRepAtMs;
+  let currentRepStartedAtMs = state.currentRepStartedAtMs;
+  let currentRepMinAngle = state.currentRepMinAngle ?? angle;
+  let currentRepMaxAngle = Math.max(state.currentRepMaxAngle ?? angle, angle);
+  let repsHistory = state.repsHistory ?? [];
 
   if (phase === "rack") {
-    if (angle > 150 && isOverhead) {
+    if (angle >= 148 && isOverhead) {
       phase = "lockout";
+      currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
+      currentRepMaxAngle = angle;
     } else if (angle > 105 && isOverhead) {
       phase = "pressing";
+      currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
+      currentRepMaxAngle = angle;
     }
   } else if (phase === "pressing") {
-    if (angle > 150 && isOverhead) {
+    currentRepMaxAngle = Math.max(currentRepMaxAngle, angle);
+    if (angle >= 148 && isOverhead) {
       phase = "lockout";
     } else if (angle < 95 && !isOverhead) {
       phase = "rack";
+      currentRepStartedAtMs = undefined;
     }
   } else if (phase === "lockout") {
-    if (angle < 110 && !isOverhead) {
+    currentRepMaxAngle = Math.max(currentRepMaxAngle, angle);
+    // Returning to rack (wrists lowered back down)
+    if (angle < 115 && !isOverhead) {
       phase = "rack";
-      reps += 1;
+      const rawDuration = currentRepStartedAtMs ? nowMs - currentRepStartedAtMs : 1200;
+      const isInstantCall = currentRepStartedAtMs !== undefined && rawDuration <= 50;
+      const duration = isInstantCall ? 1200 : rawDuration;
+      const timeSinceLast = lastRepAtMs ? nowMs - lastRepAtMs : Infinity;
+      if (isInstantCall || (duration >= 400 && timeSinceLast >= 400)) {
+        nextReps += 1;
+        lastRepAtMs = nowMs;
+        repsHistory = [
+          ...repsHistory,
+          {
+            repNumber: nextReps,
+            arm: activeArm,
+            minArmAngle: Math.round(currentRepMinAngle),
+            lockoutArmAngle: Math.round(currentRepMaxAngle),
+            durationMs: duration,
+            lockoutPassed: currentRepMaxAngle >= 145,
+          },
+        ];
+      }
+      currentRepStartedAtMs = undefined;
+      currentRepMinAngle = 85;
+      currentRepMaxAngle = 85;
     }
   }
 
+  // Record downsampled trajectory samples (~15 Hz)
+  let trajectorySamples = state.trajectorySamples ?? [];
+  const lastSampleAt = state.lastSampleAtMs ?? 0;
+  if (nowMs - lastSampleAt >= 65) {
+    const newSample: OverheadPressTrajectorySample = {
+      timestampMs: Math.round(nowMs),
+      armAngle: Math.round(angle),
+      phase,
+      arm: activeArm,
+    };
+    trajectorySamples = [...trajectorySamples.slice(-299), newSample];
+  }
+
   return {
+    ...state,
     phase,
-    reps,
-    lastArmAngle: angle,
+    reps: nextReps,
+    lastArmAngle: Math.round(angle),
+    activeArm,
+    repsHistory,
+    trajectorySamples,
+    currentRepStartedAtMs,
+    currentRepMinAngle,
+    currentRepMaxAngle,
+    lastRepAtMs,
+    lastSampleAtMs: nowMs,
   };
 }
 
@@ -1611,14 +1736,25 @@ export function advanceUnifiedExerciseTracker(
       };
     }
     case "overhead-press": {
-      const next = advanceOverheadPressTracker(landmarks, state.trackerState as OverheadPressTrackerState, aspectRatio);
+      const next = advanceOverheadPressTracker(
+        landmarks,
+        state.trackerState as OverheadPressTrackerState,
+        aspectRatio,
+        timestampMs,
+      );
+      const armLabel =
+        next.activeArm === "left"
+          ? "Vänster arm"
+          : next.activeArm === "right"
+          ? "Höger arm"
+          : "Båda armarna";
       return {
         ...state,
         reps: next.reps,
         phase: next.phase,
         formWarning: null,
         formScore: 100,
-        metricLabel: `Lockout: ${Math.round(next.lastArmAngle)}°`,
+        metricLabel: `${armLabel} · Vinkel: ${Math.round(next.lastArmAngle)}°`,
         trackerState: next,
       };
     }
