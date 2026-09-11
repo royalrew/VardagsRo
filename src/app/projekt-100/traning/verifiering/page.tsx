@@ -79,22 +79,22 @@ export default async function Project100TrainingVerificationPage() {
               </p>
             </div>
             <Link
-              href="/projekt-100/traning/motion?exercise=pushup"
+              href="/projekt-100/traning/motion?exercise=bicep-curl"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "0.5rem",
                 padding: "10px 18px",
                 borderRadius: "10px",
-                background: "#0284c7",
+                background: "#7c3aed",
                 color: "#fff",
                 fontWeight: 700,
                 fontSize: "0.9rem",
                 textDecoration: "none",
-                boxShadow: "0 4px 14px rgba(2, 132, 199, 0.35)",
+                boxShadow: "0 4px 14px rgba(124, 58, 237, 0.35)",
               }}
             >
-              Starta Armhävningstest →
+              Starta Bicepscurltest →
             </Link>
           </div>
         </section>

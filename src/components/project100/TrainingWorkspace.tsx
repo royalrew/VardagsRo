@@ -1405,11 +1405,11 @@ export function TrainingWorkspace({
           </Link>
           <Link
             className="p100-button-secondary"
-            href="/projekt-100/traning/motion?exercise=overhead-press"
-            title="Starta axelpresstest (1 arm, 2 armar, kettlebell) med live vinkel och 1-klicks JSON-rapport"
-            style={{ borderColor: "rgba(56, 189, 248, 0.55)", color: "#38bdf8", fontWeight: 700 }}
+            href="/projekt-100/traning/motion?exercise=bicep-curl"
+            title="Starta bicepscurltest (höger, vänster, båda armarna) med live vinkel och 1-klicks JSON-rapport"
+            style={{ borderColor: "rgba(168, 85, 247, 0.55)", color: "#c084fc", fontWeight: 700 }}
           >
-            <Sparkles size={16} /> 🏋️ Testa axelpress
+            <Sparkles size={16} /> 💪 Testa bicepscurl
           </Link>
           <Link
             className="p100-button-secondary"
