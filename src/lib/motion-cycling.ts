@@ -71,18 +71,13 @@ function visibleKneeAngle(
   const leftVis = legVisibility(landmarks, left);
   const rightVis = legVisibility(landmarks, right);
 
-  // Hysteresis: stay on preferredSide unless other side is clearly more visible
+  // Strong hysteresis: stay on preferredSide unless current side is lost and other side is clearly superior
   let side: "left" | "right" = preferredSide;
-  if (preferredSide === "left" && rightVis > leftVis + 0.6) {
-    side = "right";
-  } else if (preferredSide === "right" && leftVis > rightVis + 0.6) {
-    side = "left";
-  } else if (!landmarks[left[0]] && landmarks[right[0]]) {
-    side = "right";
-  } else if (leftVis >= rightVis) {
-    side = "left";
-  } else {
-    side = "right";
+  const preferredVis = preferredSide === "left" ? leftVis : rightVis;
+  const otherVis = preferredSide === "left" ? rightVis : leftVis;
+
+  if (otherVis > preferredVis + 0.7) {
+    side = preferredSide === "left" ? "right" : "left";
   }
 
   const indexes = side === "left" ? left : right;
@@ -104,11 +99,16 @@ function visibleKneeAngle(
 }
 
 /**
- * Counts pedal revolutions using a hybrid approach:
- * 1. Knee angle flexion/extension (optimal in profile view).
- * 2. Vertical knee oscillation (Y-peaks and Y-valleys, optimal in front and diagonal view where handlebars may obscure feet).
+ * Counts pedal revolutions using a unified cycle state machine:
+ * - Phase "flexed" (knee pulled up to top of pedal stroke).
+ * - Phase "extended" (knee pushed down to bottom of pedal stroke).
+ * 
+ * Works across all camera placements:
+ * 1. Profile / Side: driven by knee flexion/extension angle.
+ * 2. Diagonal / Snett: reinforced by both angle and vertical knee oscillation.
+ * 3. Frontal / Rakt framifrån: driven by vertical knee oscillation when ankles are hidden.
  *
- * Debounced to count each revolution exactly once.
+ * Exactly ONE revolution is counted per full 360° crank rotation (at bottom dead center).
  */
 export function advanceCyclingTracker(
   landmarks: readonly MotionLandmark[],
@@ -138,53 +138,39 @@ export function advanceCyclingTracker(
   const maxObserved = Math.max(state.maxKneeAngleObserved, kneeAngle);
   let revolutionsHistory = state.revolutionsHistory;
 
-  // 1. Angle-based tracking
+  // 1. Angle thresholds (natural exercise bike angles)
   const FLEXION_THRESHOLD = 116;
   const EXTENSION_THRESHOLD = 130;
   const MIN_AMPLITUDE_DEG = 12;
-  let angleRevolutionTriggered = false;
+
+  let legIsFlexed = false;
+  let legIsExtended = false;
 
   if (visible !== null) {
-    if (phase === "seeking") {
-      if (kneeAngle >= EXTENSION_THRESHOLD) {
-        phase = "extended";
-        strokeMaxKnee = kneeAngle;
-        strokeMinKnee = kneeAngle;
-      } else if (kneeAngle <= FLEXION_THRESHOLD) {
-        phase = "flexed";
-        strokeMinKnee = kneeAngle;
-        strokeMaxKnee = kneeAngle;
-      }
-    } else if (phase === "extended" && kneeAngle <= FLEXION_THRESHOLD) {
-      phase = "flexed";
-      lastMovementAtMs = timestampMs;
-    } else if (phase === "flexed" && kneeAngle >= EXTENSION_THRESHOLD) {
-      if (strokeMaxKnee - strokeMinKnee >= MIN_AMPLITUDE_DEG) {
-        phase = "extended";
-        angleRevolutionTriggered = true;
-      }
+    if (kneeAngle <= FLEXION_THRESHOLD) {
+      legIsFlexed = true;
+    } else if (
+      kneeAngle >= EXTENSION_THRESHOLD &&
+      strokeMaxKnee - strokeMinKnee >= MIN_AMPLITUDE_DEG
+    ) {
+      legIsExtended = true;
     }
   }
 
-  // 2. Vertical knee oscillation tracking (works from Front, Diagonal, and Profile)
+  // 2. Vertical knee oscillation tracking (locked to the tracked leg)
   const leftKnee = landmarks[25];
   const rightKnee = landmarks[26];
   const leftKneeVis = leftKnee?.visibility ?? 0;
   const rightKneeVis = rightKnee?.visibility ?? 0;
 
   const kneeLandmark =
-    side === "left" && leftKneeVis >= 0.25
-      ? leftKnee
-      : rightKneeVis >= 0.25
-      ? rightKnee
-      : leftKneeVis >= 0.25
-      ? leftKnee
-      : null;
+    side === "left"
+      ? (leftKneeVis >= 0.25 ? leftKnee : null)
+      : (rightKneeVis >= 0.25 ? rightKnee : null);
 
   let strokeMinY = state.strokeMinY;
   let strokeMaxY = state.strokeMaxY;
   let verticalDirection = state.verticalDirection;
-  let verticalRevolutionTriggered = false;
   let currentKneeY = state.lastKneeY;
 
   if (kneeLandmark) {
@@ -202,39 +188,59 @@ export function advanceCyclingTracker(
     const verticalAmplitude = strokeMaxY - strokeMinY;
     const MIN_VERTICAL_AMPLITUDE = 0.035; // 3.5% of frame height
 
-    // Moving UP (pulling leg up, Y decreasing)
-    if (dy < -0.003) {
-      if (verticalDirection === "down" && verticalAmplitude >= MIN_VERTICAL_AMPLITUDE) {
-        verticalDirection = "up";
-        strokeMinY = currentKneeY;
-      } else if (verticalDirection === "seeking") {
+    if (verticalAmplitude >= MIN_VERTICAL_AMPLITUDE) {
+      const zoneThreshold = verticalAmplitude * 0.25;
+      // Top zone of pedal stroke (knee pulled up)
+      if (currentKneeY <= strokeMinY + zoneThreshold) {
+        legIsFlexed = true;
         verticalDirection = "up";
       }
-    }
-    // Moving DOWN (pushing pedal down, Y increasing)
-    else if (dy > 0.003) {
-      if (verticalDirection === "up" && verticalAmplitude >= MIN_VERTICAL_AMPLITUDE) {
-        verticalDirection = "down";
-        verticalRevolutionTriggered = true;
-        strokeMaxY = currentKneeY;
-      } else if (verticalDirection === "seeking") {
+      // Bottom zone of pedal stroke (knee pushed down)
+      else if (currentKneeY >= strokeMaxY - zoneThreshold) {
+        legIsExtended = true;
         verticalDirection = "down";
       }
     }
   }
 
-  // 3. Combined trigger with 250ms debounce (max 240 RPM)
-  const canCount = lastRevolutionAtMs === null || timestampMs - lastRevolutionAtMs >= 250;
-  const shouldCount = (angleRevolutionTriggered || verticalRevolutionTriggered) && canCount;
+  // 3. Unified cycle state machine: exactly 1 revolution per complete flexed -> extended cycle
+  const MIN_REVOLUTION_INTERVAL_MS = 360; // Debounce prevents half-cycle double counting (max 166 RPM)
+  let revolutionTriggered = false;
 
-  if (shouldCount) {
+  if (phase === "seeking") {
+    if (legIsExtended) {
+      phase = "extended";
+      strokeMaxKnee = kneeAngle;
+      strokeMinKnee = kneeAngle;
+    } else if (legIsFlexed) {
+      phase = "flexed";
+      strokeMinKnee = kneeAngle;
+      strokeMaxKnee = kneeAngle;
+    }
+  } else if (phase === "extended") {
+    if (legIsFlexed) {
+      phase = "flexed";
+      lastMovementAtMs = timestampMs;
+    }
+  } else if (phase === "flexed") {
+    if (legIsExtended) {
+      const canCount =
+        lastRevolutionAtMs === null || timestampMs - lastRevolutionAtMs >= MIN_REVOLUTION_INTERVAL_MS;
+      if (canCount) {
+        phase = "extended";
+        revolutionTriggered = true;
+      }
+    }
+  }
+
+  if (revolutionTriggered) {
     revolutions += 1;
     let revRpm = cadenceRpm ?? 0;
     let interval = 0;
     if (lastRevolutionAtMs !== null) {
       const intervalMs = timestampMs - lastRevolutionAtMs;
       interval = intervalMs;
-      if (intervalMs >= 250 && intervalMs <= 4_500) {
+      if (intervalMs >= MIN_REVOLUTION_INTERVAL_MS && intervalMs <= 4_500) {
         const instantRpm = Math.round(60_000 / intervalMs);
         revRpm = instantRpm;
         cadenceRpm = Math.round(
@@ -256,9 +262,13 @@ export function advanceCyclingTracker(
     };
     revolutionsHistory = [...revolutionsHistory.slice(-99), newRevSample];
 
-    // Reset stroke tracking
+    // Reset stroke tracking for the next revolution
     strokeMinKnee = kneeAngle;
     strokeMaxKnee = kneeAngle;
+    if (currentKneeY !== null) {
+      strokeMinY = currentKneeY;
+      strokeMaxY = currentKneeY;
+    }
   }
 
   const movementIsCurrent = lastMovementAtMs !== null && timestampMs - lastMovementAtMs <= 2_000;

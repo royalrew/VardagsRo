@@ -113,4 +113,56 @@ describe("cycling tracker", () => {
     expect(state.cadenceRpm).toBeGreaterThan(60);
     expect(state.cadenceRpm).toBeLessThan(75);
   });
+
+  it("accurately tracks 20 revolutions in DIAGONAL view with BOTH angle and vertical knee oscillation without double counting", () => {
+    let state = createCyclingTracker();
+    let time = 0;
+
+    function diagonalCyclingPose(kneeAngleDegrees: number, kneeY: number): MotionLandmark[] {
+      const landmarks = Array.from({ length: 33 }, () => ({
+        x: 0.5,
+        y: 0.5,
+        z: 0,
+        visibility: 0.9,
+      }));
+      const radians = (kneeAngleDegrees * Math.PI) / 180;
+      // Right side in foreground (facing camera diagonally)
+      landmarks[24] = { x: 0.55, y: 0.40, z: 0, visibility: 0.95 }; // Right hip
+      landmarks[26] = { x: 0.55, y: kneeY, z: 0, visibility: 0.95 }; // Right knee
+      landmarks[28] = {
+        x: 0.55 + Math.sin(radians) * 0.25,
+        y: kneeY + Math.cos(radians) * 0.25,
+        z: 0,
+        visibility: 0.85,
+      }; // Right ankle
+
+      // Left leg partially obscured in background
+      landmarks[23] = { x: 0.45, y: 0.40, z: 0, visibility: 0.4 };
+      landmarks[25] = { x: 0.45, y: 1.05 - kneeY, z: 0, visibility: 0.4 };
+      landmarks[27] = { x: 0.45, y: 0.80, z: 0, visibility: 0.2 };
+      return landmarks;
+    }
+
+    // Start in bottom/extended position
+    state = advanceCyclingTracker(diagonalCyclingPose(155, 0.62), state, 0, 1, 0);
+
+    // Simulate 20 pedal strokes
+    for (let i = 1; i <= 20; i++) {
+      // Top of stroke (flexed knee 102°, knee pulled up to 0.45)
+      time += 450;
+      state = advanceCyclingTracker(diagonalCyclingPose(102, 0.45), state, 0.45, 1, time);
+
+      // Bottom of stroke (extended knee 155°, knee pushed down to 0.62)
+      time += 450;
+      state = advanceCyclingTracker(diagonalCyclingPose(155, 0.62), state, 0.45, 1, time);
+
+      expect(state.revolutions).toBe(i);
+    }
+
+    expect(state.revolutions).toBe(20);
+    expect(state.cadenceRpm).toBeGreaterThan(60);
+    expect(state.cadenceRpm).toBeLessThan(75);
+    expect(state.revolutionsHistory.length).toBe(20);
+  });
 });
+
