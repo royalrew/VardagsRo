@@ -52,8 +52,8 @@ export function BicepCurlTestBench({
   const repsHistory = curlTracker?.repsHistory ?? [];
   const elbowSwayWarning = curlTracker?.elbowSwayWarning ?? false;
 
-  const isContracted = phase === "contracted" || lastAngle <= 68;
-  const isExtended = phase === "extended" || lastAngle >= 130;
+  const isContracted = phase === "contracted" || lastAngle <= 106;
+  const isExtended = phase === "extended" || lastAngle >= 126;
 
   const phaseLabel =
     phase === "extended"
@@ -227,16 +227,16 @@ export function BicepCurlTestBench({
         <div className="p100-testbench-metric-card">
           <span className="label">Vinkel Vänster / Höger</span>
           <div style={{ display: "flex", gap: "12px", alignItems: "baseline", marginTop: "4px" }}>
-            <span style={{ fontSize: "1.3rem", fontWeight: 700, color: leftAngle <= 68 ? "#34d399" : leftAngle >= 130 ? "#38bdf8" : "#fbbf24" }}>
+            <span style={{ fontSize: "1.3rem", fontWeight: 700, color: leftAngle <= 106 ? "#34d399" : leftAngle >= 126 ? "#38bdf8" : "#fbbf24" }}>
               V: {leftAngle}°
             </span>
             <span style={{ color: "#64748b" }}>|</span>
-            <span style={{ fontSize: "1.3rem", fontWeight: 700, color: rightAngle <= 68 ? "#34d399" : rightAngle >= 130 ? "#38bdf8" : "#fbbf24" }}>
+            <span style={{ fontSize: "1.3rem", fontWeight: 700, color: rightAngle <= 106 ? "#34d399" : rightAngle >= 126 ? "#38bdf8" : "#fbbf24" }}>
               H: {rightAngle}°
             </span>
           </div>
           <span className="sub">
-            {isContracted ? "🟢 Toppkontraktion (< 68°)" : isExtended ? "Bottenläge (> 130°)" : "Curlar..."}
+            {isContracted ? "🟢 Toppkontraktion (<= 106°)" : isExtended ? "Bottenläge (>= 126°)" : "Curlar..."}
           </span>
         </div>
 
@@ -368,13 +368,13 @@ export function BicepCurlTestBench({
           <div className="instruction-step">
             <span className="step-badge">2</span>
             <div>
-              <strong>5 Reps Höger arm:</strong> Håll vänster arm stilla längs sidan. Curla hanteln med höger arm upp mot axeln (&lt; 65°), sträck sedan ut armen kontrollerat i botten (&gt; 130°).
+              <strong>5 Reps Höger arm:</strong> Håll vänster arm stilla längs sidan. Curla hanteln med höger arm upp mot axeln (&lt;= 106°), sträck sedan ut armen kontrollerat i botten (&gt;= 126°).
             </div>
           </div>
           <div className="instruction-step">
             <span className="step-badge">3</span>
             <div>
-              <strong>5 Reps Vänster arm:</strong> Håll höger arm stilla längs sidan. Curla hanteln med vänster arm upp mot axeln (&lt; 65°) och sträck ut hela vägen.
+              <strong>5 Reps Vänster arm:</strong> Håll höger arm stilla längs sidan. Curla hanteln med vänster arm upp mot axeln (&lt;= 106°) och sträck ut hela vägen (&gt;= 126°).
             </div>
           </div>
           <div className="instruction-step">

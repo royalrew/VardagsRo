@@ -606,11 +606,11 @@ export function advanceBicepCurlTracker(
   const effectiveLeft = leftAngle ?? state.leftAngle ?? 155;
   const effectiveRight = rightAngle ?? state.rightAngle ?? 155;
 
-  const isLeftCurling = Boolean(leftWrist && leftElbow && (leftWrist.y < leftElbow.y + 0.08 || effectiveLeft < 120));
-  const isRightCurling = Boolean(rightWrist && rightElbow && (rightWrist.y < rightElbow.y + 0.08 || effectiveRight < 120));
+  const isLeftCurling = Boolean(leftWrist && leftElbow && (leftWrist.y < leftElbow.y + 0.08 || effectiveLeft < 124));
+  const isRightCurling = Boolean(rightWrist && rightElbow && (rightWrist.y < rightElbow.y + 0.08 || effectiveRight < 124));
 
-  const isLeftContracted = effectiveLeft <= 68 && Boolean(leftWrist && leftElbow && leftWrist.y < leftElbow.y + 0.05);
-  const isRightContracted = effectiveRight <= 68 && Boolean(rightWrist && rightElbow && rightWrist.y < rightElbow.y + 0.05);
+  const isLeftContracted = effectiveLeft <= 106;
+  const isRightContracted = effectiveRight <= 106;
 
   let activeArm: "left" | "right" | "both";
   let angle: number;
@@ -619,19 +619,19 @@ export function advanceBicepCurlTracker(
     if (isLeftContracted && isRightContracted) {
       activeArm = "both";
       angle = (leftAngle + rightAngle) / 2;
-    } else if (isLeftContracted) {
+    } else if (isLeftContracted && effectiveRight > effectiveLeft + 15) {
       activeArm = "left";
       angle = leftAngle;
-    } else if (isRightContracted) {
+    } else if (isRightContracted && effectiveLeft > effectiveRight + 15) {
       activeArm = "right";
       angle = rightAngle;
-    } else if (effectiveLeft < 115 && effectiveRight < 115) {
+    } else if (effectiveLeft < 118 && effectiveRight < 118 && Math.abs(effectiveLeft - effectiveRight) <= 18) {
       activeArm = "both";
       angle = (leftAngle + rightAngle) / 2;
-    } else if (effectiveLeft < 115) {
+    } else if (effectiveLeft < effectiveRight - 12) {
       activeArm = "left";
       angle = leftAngle;
-    } else if (effectiveRight < 115) {
+    } else if (effectiveRight < effectiveLeft - 12) {
       activeArm = "right";
       angle = rightAngle;
     } else {
@@ -673,12 +673,12 @@ export function advanceBicepCurlTracker(
 
   if (phase === "extended") {
     currentRepMaxAngle = Math.max(currentRepMaxAngle, angle);
-    if (angle <= 68) {
+    if (angle <= 106) {
       phase = "contracted";
       currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
       currentRepMinAngle = angle;
       currentRepArm = activeArm;
-    } else if (angle < 120) {
+    } else if (angle < 124) {
       phase = "flexing";
       currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
       currentRepMinAngle = angle;
@@ -691,9 +691,9 @@ export function advanceBicepCurlTracker(
       currentRepArm = activeArm;
     }
 
-    if (angle <= 68) {
+    if (angle <= 106) {
       phase = "contracted";
-    } else if (angle > 138) {
+    } else if (angle >= 135 && (currentRepMaxAngle - currentRepMinAngle < 15)) {
       phase = "extended";
       currentRepStartedAtMs = undefined;
       currentRepMinAngle = angle;
@@ -706,7 +706,7 @@ export function advanceBicepCurlTracker(
     }
 
     const romIncrease = angle - currentRepMinAngle;
-    const hasLoweredToBottom = angle >= 130 && romIncrease >= 50;
+    const hasLoweredToBottom = (angle >= 126 && romIncrease >= 22) || (angle >= 134 && romIncrease >= 18);
 
     if (hasLoweredToBottom) {
       phase = "extended";
@@ -715,7 +715,7 @@ export function advanceBicepCurlTracker(
       const duration = isInstantCall ? 1200 : rawDuration;
       const timeSinceLast = lastRepAtMs ? nowMs - lastRepAtMs : Infinity;
 
-      if (isInstantCall || (duration >= 500 && timeSinceLast >= 600)) {
+      if (isInstantCall || (duration >= 450 && timeSinceLast >= 550)) {
         nextReps += 1;
         lastRepAtMs = nowMs;
         repsHistory = [
@@ -726,7 +726,7 @@ export function advanceBicepCurlTracker(
             minElbowAngle: Math.round(currentRepMinAngle),
             extensionElbowAngle: Math.round(angle),
             durationMs: duration,
-            contractionPassed: currentRepMinAngle <= 68,
+            contractionPassed: currentRepMinAngle <= 106,
             swayWarning: elbowSway,
           },
         ];

@@ -133,4 +133,27 @@ describe("Bicep Curl Engine & Test Report", () => {
     expect(report.reps[0].durationSeconds).toBeGreaterThan(0);
     expect(report.evaluationNotes.length).toBeGreaterThan(0);
   });
+
+  it("validates curls in the 85°-105° athletic dumbbell range from front webcam perspective", () => {
+    let state = createBicepCurlTracker();
+    const lm = createBaseBodyLandmarks();
+
+    // 1. Initial bottom position (~155 deg)
+    state = advanceBicepCurlTracker(lm, state, 1, 1000);
+    expect(state.phase).toBe("extended");
+
+    // 2. Right curl reaching 92 deg (wrist elevated to chest level)
+    lm[16] = createMockLandmark(0.62, 0.44, 0);
+    state = advanceBicepCurlTracker(lm, state, 1, 1800);
+    expect(state.phase).toBe("contracted");
+    expect(state.activeArm).toBe("right");
+
+    // 3. Lowered back down to 145 deg
+    lm[16] = createMockLandmark(0.62, 0.70, 0);
+    state = advanceBicepCurlTracker(lm, state, 1, 2600);
+    expect(state.phase).toBe("extended");
+    expect(state.reps).toBe(1);
+    expect(state.repsHistory[0].arm).toBe("right");
+    expect(state.repsHistory[0].contractionPassed).toBe(true);
+  });
 });

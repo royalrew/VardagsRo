@@ -51,7 +51,7 @@ export function buildBicepCurlTestReport(
 ): BicepCurlTestReport {
   const repsHistory = state.repsHistory ?? [];
   const reps = repsHistory.map((rep) => {
-    const contractionPassed = rep.minElbowAngle <= 68;
+    const contractionPassed = rep.minElbowAngle <= 106;
 
     return {
       repNumber: rep.repNumber,
@@ -108,7 +108,7 @@ export function buildBicepCurlTestReport(
       notes.push("Utmärkt toppkontraktion och rörelseomfång vid curl.");
     } else {
       notes.push(
-        "Vissa repetitioner nådde inte full kontraktion (< 65° armbågsvinkel).",
+        "Vissa repetitioner nådde inte full kontraktion (<= 106° armbågsvinkel).",
       );
     }
   }
@@ -137,8 +137,8 @@ export function buildBicepCurlTestReport(
       cameraAngle: "Framifrån (rekommenderas) eller 45° diagonal",
       recommendedHeight: "Höft- till brösthöjd (0.9 - 1.2 m)",
       recommendedDistance: "2.0 - 2.5 m (överkropp och armar fullt synliga)",
-      targetContractionDeg: "< 65° i toppläget vid axeln",
-      targetExtensionDeg: "> 130° i bottenläget längs kroppen",
+      targetContractionDeg: "<= 106° i toppläget vid axeln/bröstet",
+      targetExtensionDeg: ">= 126° i bottenläget längs kroppen",
     },
     evaluationNotes: notes,
   };
