@@ -1,4 +1,4 @@
-import { computeJointAngle3D } from "./motion-camera-coach";
+import { computeJointAngle } from "./motion-exercises";
 import type { MotionLandmark } from "./motion-engine";
 
 export type CyclingPhase = "seeking" | "extended" | "flexed";
@@ -84,7 +84,7 @@ function visibleKneeAngle(
   // Hip and Knee are primary landmarks; ankle can be partially blocked by bike frame/pedals
   if (hipVis < 0.35 || kneeVis < 0.35 || ankleVis < 0.20) return null;
 
-  const angle = computeJointAngle3D(
+  const angle = computeJointAngle(
     landmarks[indexes[0]],
     landmarks[indexes[1]],
     landmarks[indexes[2]],
