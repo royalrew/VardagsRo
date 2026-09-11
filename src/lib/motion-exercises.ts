@@ -192,6 +192,8 @@ export interface LungeTrackerState {
   trajectorySamples: LungeTrajectorySample[];
   currentRepMinKnee?: number;
   currentRepStartedAtMs?: number;
+  currentRepMaxHipDrop?: number;
+  standingHipY?: number;
   lastSampleAtMs?: number;
 }
 
@@ -208,16 +210,20 @@ export function createLungeTrackerState(): LungeTrackerState {
 }
 
 const MIN_LUNGE_REP_DURATION_MS = 600;
+const MAX_LUNGE_REP_DURATION_MS = 4000;
 const MIN_LUNGE_REP_INTERVAL_MS = 500;
 const LUNGE_BOTTOM_THRESHOLD = 100;
 const LUNGE_DESCENDING_THRESHOLD = 148;
 const LUNGE_STANDING_THRESHOLD = 155;
+const MIN_LUNGE_HIP_DROP = 0.035;
 
 export function advanceLungeTracker(
   state: LungeTrackerState,
   landmarks: readonly MotionLandmark[],
   nowMs: number,
 ): LungeTrackerState {
+  const leftShoulder = landmarks[11];
+  const rightShoulder = landmarks[12];
   const leftHip = landmarks[23];
   const leftKnee = landmarks[25];
   const leftAnkle = landmarks[27];
@@ -226,18 +232,30 @@ export function advanceLungeTracker(
   const rightKnee = landmarks[26];
   const rightAnkle = landmarks[28];
 
-  const leftKneeAngle =
+  // 1. Proximity guard: if person is right up against the camera (e.g. to turn off), ignore
+  const shoulderWidth =
+    leftShoulder && rightShoulder
+      ? Math.hypot(leftShoulder.x - rightShoulder.x, leftShoulder.y - rightShoulder.y)
+      : 0.15;
+  const isTooCloseToCamera = shoulderWidth > 0.36;
+
+  const rawLeftAngle =
     leftHip && leftKnee && leftAnkle
       ? computeJointAngle(leftHip, leftKnee, leftAnkle)
       : null;
-  const rightKneeAngle =
+  const rawRightAngle =
     rightHip && rightKnee && rightAnkle
       ? computeJointAngle(rightHip, rightKnee, rightAnkle)
       : null;
 
-  if (leftKneeAngle === null && rightKneeAngle === null) {
+  if (rawLeftAngle === null && rawRightAngle === null) {
     return state;
   }
+
+  // Anatomical floor: human knee cannot bend < 40°. Extreme small angles are 2D optical
+  // foreshortening from stepping straight into the camera lens.
+  const leftKneeAngle = rawLeftAngle !== null ? Math.max(40, rawLeftAngle) : null;
+  const rightKneeAngle = rawRightAngle !== null ? Math.max(40, rawRightAngle) : null;
 
   // Active leg is the one bending deepest, or the only visible one
   let isLeftLead: boolean;
@@ -256,6 +274,20 @@ export function advanceLungeTracker(
 
   const detectedLeadLeg: "left" | "right" = isLeftLead ? "left" : "right";
 
+  // Track standing hip height vs current hip height to distinguish true lunges from walking strides
+  const avgHipY =
+    leftHip && rightHip ? (leftHip.y + rightHip.y) / 2 : leftHip?.y ?? rightHip?.y ?? null;
+
+  let standingHipY = state.standingHipY;
+  if (state.phase === "standing" && activeKneeAngle >= 155 && avgHipY !== null && !isTooCloseToCamera) {
+    standingHipY = standingHipY !== undefined ? standingHipY * 0.85 + avgHipY * 0.15 : avgHipY;
+  }
+
+  const currentHipDrop =
+    standingHipY !== undefined && avgHipY !== null ? Math.max(0, avgHipY - standingHipY) : 0.08;
+
+  let currentRepMaxHipDrop = Math.max(state.currentRepMaxHipDrop ?? 0, currentHipDrop);
+
   let nextPhase = state.phase;
   let nextReps = state.reps;
   let lastRepAtMs = state.lastRepAtMs;
@@ -264,30 +296,47 @@ export function advanceLungeTracker(
   let repsHistory = state.repsHistory ?? [];
 
   if (state.phase === "standing") {
-    if (activeKneeAngle <= LUNGE_BOTTOM_THRESHOLD) {
-      nextPhase = "bottom";
-      currentRepMinKnee = activeKneeAngle;
-      currentRepStartedAtMs = nowMs;
-    } else if (activeKneeAngle < LUNGE_DESCENDING_THRESHOLD) {
-      nextPhase = "descending";
-      currentRepMinKnee = activeKneeAngle;
-      currentRepStartedAtMs = nowMs;
+    if (!isTooCloseToCamera) {
+      if (activeKneeAngle <= LUNGE_BOTTOM_THRESHOLD) {
+        nextPhase = "bottom";
+        currentRepMinKnee = activeKneeAngle;
+        currentRepStartedAtMs = nowMs;
+        currentRepMaxHipDrop = currentHipDrop;
+      } else if (activeKneeAngle < LUNGE_DESCENDING_THRESHOLD) {
+        nextPhase = "descending";
+        currentRepMinKnee = activeKneeAngle;
+        currentRepStartedAtMs = nowMs;
+        currentRepMaxHipDrop = currentHipDrop;
+      }
     }
   } else if (state.phase === "descending") {
     currentRepMinKnee = Math.min(currentRepMinKnee, activeKneeAngle);
+    currentRepMaxHipDrop = Math.max(currentRepMaxHipDrop, currentHipDrop);
+
     if (activeKneeAngle <= LUNGE_BOTTOM_THRESHOLD) {
       nextPhase = "bottom";
     } else if (activeKneeAngle > LUNGE_STANDING_THRESHOLD) {
       nextPhase = "standing";
       currentRepMinKnee = 180;
       currentRepStartedAtMs = undefined;
+      currentRepMaxHipDrop = 0;
     }
   } else if (state.phase === "bottom") {
     currentRepMinKnee = Math.min(currentRepMinKnee, activeKneeAngle);
+    currentRepMaxHipDrop = Math.max(currentRepMaxHipDrop, currentHipDrop);
+
     if (activeKneeAngle >= LUNGE_STANDING_THRESHOLD) {
       const duration = currentRepStartedAtMs ? nowMs - currentRepStartedAtMs : 1000;
       const timeSinceLast = lastRepAtMs ? nowMs - lastRepAtMs : Infinity;
-      if (duration >= MIN_LUNGE_REP_DURATION_MS && timeSinceLast >= MIN_LUNGE_REP_INTERVAL_MS) {
+      const hasValidHipDrop = standingHipY === undefined || currentRepMaxHipDrop >= MIN_LUNGE_HIP_DROP;
+
+      if (
+        !isTooCloseToCamera &&
+        duration >= MIN_LUNGE_REP_DURATION_MS &&
+        duration <= MAX_LUNGE_REP_DURATION_MS &&
+        timeSinceLast >= MIN_LUNGE_REP_INTERVAL_MS &&
+        hasValidHipDrop
+      ) {
         nextReps += 1;
         lastRepAtMs = nowMs;
         repsHistory = [
@@ -306,14 +355,25 @@ export function advanceLungeTracker(
       nextPhase = "standing";
       currentRepMinKnee = 180;
       currentRepStartedAtMs = undefined;
+      currentRepMaxHipDrop = 0;
     } else if (activeKneeAngle > 105) {
       nextPhase = "ascending";
     }
   } else if (state.phase === "ascending") {
+    currentRepMaxHipDrop = Math.max(currentRepMaxHipDrop, currentHipDrop);
+
     if (activeKneeAngle >= LUNGE_STANDING_THRESHOLD) {
       const duration = currentRepStartedAtMs ? nowMs - currentRepStartedAtMs : 1000;
       const timeSinceLast = lastRepAtMs ? nowMs - lastRepAtMs : Infinity;
-      if (duration >= MIN_LUNGE_REP_DURATION_MS && timeSinceLast >= MIN_LUNGE_REP_INTERVAL_MS) {
+      const hasValidHipDrop = standingHipY === undefined || currentRepMaxHipDrop >= MIN_LUNGE_HIP_DROP;
+
+      if (
+        !isTooCloseToCamera &&
+        duration >= MIN_LUNGE_REP_DURATION_MS &&
+        duration <= MAX_LUNGE_REP_DURATION_MS &&
+        timeSinceLast >= MIN_LUNGE_REP_INTERVAL_MS &&
+        hasValidHipDrop
+      ) {
         nextReps += 1;
         lastRepAtMs = nowMs;
         repsHistory = [
@@ -332,6 +392,7 @@ export function advanceLungeTracker(
       nextPhase = "standing";
       currentRepMinKnee = 180;
       currentRepStartedAtMs = undefined;
+      currentRepMaxHipDrop = 0;
     } else if (activeKneeAngle <= LUNGE_BOTTOM_THRESHOLD) {
       nextPhase = "bottom";
       currentRepMinKnee = Math.min(currentRepMinKnee, activeKneeAngle);
@@ -360,6 +421,8 @@ export function advanceLungeTracker(
     lastRepAtMs,
     currentRepMinKnee,
     currentRepStartedAtMs,
+    currentRepMaxHipDrop,
+    standingHipY,
     repsHistory,
     trajectorySamples,
     lastSampleAtMs: nowMs,

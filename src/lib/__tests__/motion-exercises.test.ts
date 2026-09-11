@@ -91,6 +91,39 @@ describe("Exercise Engine (Fas H: Steg 71–75)", () => {
       expect(tracker.reps).toBe(1);
       expect(tracker.leadLeg).toBe("left");
     });
+
+    it("rejects walking strides and proximity to camera as false reps", () => {
+      let tracker = createLungeTrackerState();
+
+      const standing = Array.from({ length: 33 }, () => point(0.5, 0.5));
+      standing[11] = point(0.42, 0.25);
+      standing[12] = point(0.58, 0.25);
+      standing[23] = point(0.45, 0.45);
+      standing[25] = point(0.45, 0.70);
+      standing[27] = point(0.45, 0.95);
+      standing[24] = point(0.55, 0.45);
+      standing[26] = point(0.55, 0.70);
+      standing[28] = point(0.55, 0.95);
+
+      tracker = advanceLungeTracker(tracker, standing, 1000);
+
+      // Walking up right against the camera lens (shoulder width > 0.36)
+      const closeToCamera = Array.from({ length: 33 }, () => point(0.5, 0.5));
+      closeToCamera[11] = point(0.20, 0.25);
+      closeToCamera[12] = point(0.80, 0.25); // very wide shoulders close to lens
+      closeToCamera[23] = point(0.35, 0.55);
+      closeToCamera[25] = point(0.55, 0.75);
+      closeToCamera[27] = point(0.55, 0.95);
+      closeToCamera[24] = point(0.65, 0.55);
+      closeToCamera[26] = point(0.45, 0.75);
+      closeToCamera[28] = point(0.45, 0.95);
+
+      tracker = advanceLungeTracker(tracker, closeToCamera, 2000);
+      tracker = advanceLungeTracker(tracker, closeToCamera, 3000);
+      tracker = advanceLungeTracker(tracker, standing, 4000);
+
+      expect(tracker.reps).toBe(0);
+    });
   });
 
   describe("Push-up Tracker (Steg 72)", () => {
