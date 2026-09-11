@@ -808,9 +808,10 @@ export function advanceOverheadPressTracker(
     // 3. Hands actually descend from peak lockout height
     // 4. Arm must travel through at least 20°-22° ROM drop
     const romDrop = currentRepMaxAngle - angle;
+    const rackLevelY = nose ? (nose.y + shoulderY) / 2 : shoulderY - 0.06;
     const wristDescended =
-      activeWristY >= headY - 0.02 ||
-      activeWristY >= (currentRepMinWristY ?? activeWristY) + 0.07;
+      activeWristY >= rackLevelY ||
+      activeWristY >= (currentRepMinWristY ?? activeWristY) + 0.12;
     const hasLoweredToRack = wristDescended && angle <= 128 && romDrop >= 20;
 
     if (hasLoweredToRack) {
