@@ -70,4 +70,47 @@ describe("cycling tracker", () => {
     expect(state.cadenceRpm).toBeLessThan(75);
     expect(state.revolutionsHistory.length).toBe(20);
   });
+
+  it("accurately tracks pedaling from FRONT VIEW where ankles are obscured and knees oscillate vertically", () => {
+    let state = createCyclingTracker();
+    let time = 0;
+
+    function frontKneePose(kneeY: number): MotionLandmark[] {
+      const landmarks = Array.from({ length: 33 }, () => ({
+        x: 0.5,
+        y: 0.5,
+        z: 0,
+        visibility: 0, // Other landmarks obscured by bike/handlebars
+      }));
+      // Hips visible
+      landmarks[23] = { x: 0.45, y: 0.40, z: 0, visibility: 0.9 };
+      landmarks[24] = { x: 0.55, y: 0.40, z: 0, visibility: 0.9 };
+      // Knees pumping up and down in front view
+      landmarks[25] = { x: 0.45, y: kneeY, z: 0, visibility: 0.9 };
+      landmarks[26] = { x: 0.55, y: 1.05 - kneeY, z: 0, visibility: 0.9 };
+      // Ankles obscured by pedals/flywheel (visibility 0.1)
+      landmarks[27] = { x: 0.45, y: 0.85, z: 0, visibility: 0.1 };
+      landmarks[28] = { x: 0.55, y: 0.85, z: 0, visibility: 0.1 };
+      return landmarks;
+    }
+
+    // Initial starting pose with foot down at 0.62
+    state = advanceCyclingTracker(frontKneePose(0.62), state, 0, 1, 0);
+
+    // Pedal 10 strokes in front view: knee oscillates between y=0.45 (top) and y=0.62 (bottom)
+    for (let i = 1; i <= 10; i++) {
+      // Pull knee up towards top of stroke (y decreases to 0.45)
+      time += 450;
+      state = advanceCyclingTracker(frontKneePose(0.45), state, 0.45, 1, time);
+      // Push pedal down (y increases to 0.62)
+      time += 450;
+      state = advanceCyclingTracker(frontKneePose(0.62), state, 0.45, 1, time);
+
+      expect(state.revolutions).toBe(i);
+    }
+
+    expect(state.revolutions).toBe(10);
+    expect(state.cadenceRpm).toBeGreaterThan(60);
+    expect(state.cadenceRpm).toBeLessThan(75);
+  });
 });
