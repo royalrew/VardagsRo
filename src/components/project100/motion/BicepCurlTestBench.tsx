@@ -14,7 +14,7 @@ import {
   Sparkles,
   Zap,
 } from "lucide-react";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import type { BicepCurlTrackerState } from "@/lib/motion-library";
 import { buildBicepCurlTestReport } from "@/lib/motion-bicep-curl-test";
@@ -42,6 +42,74 @@ export function BicepCurlTestBench({
 }: BicepCurlTestBenchProps) {
   const [copied, setCopied] = useState(false);
   const [showInstructions, setShowInstructions] = useState(true);
+  const [countdown, setCountdown] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown <= 0) {
+      setCountdown(null);
+      onResetTracking();
+      if (!trackingEnabled) {
+        onToggleTracking();
+      }
+      try {
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          const utterance = new SpeechSynthesisUtterance("Kör!");
+          utterance.lang = "sv-SE";
+          window.speechSynthesis.speak(utterance);
+        }
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    const timer = setTimeout(() => {
+      setCountdown(countdown - 1);
+      try {
+        if (typeof window !== "undefined" && "speechSynthesis" in window && countdown > 1) {
+          const utterance = new SpeechSynthesisUtterance(String(countdown - 1));
+          utterance.lang = "sv-SE";
+          window.speechSynthesis.speak(utterance);
+        }
+      } catch {
+        // ignore
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [countdown, onResetTracking, onToggleTracking, trackingEnabled]);
+
+  function handleStartCountdown() {
+    setCountdown(5);
+    try {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance("Gör dig redo. Fem.");
+        utterance.lang = "sv-SE";
+        window.speechSynthesis.speak(utterance);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  function handleSkipCountdown() {
+    setCountdown(null);
+    onResetTracking();
+    if (!trackingEnabled) {
+      onToggleTracking();
+    }
+  }
+
+  function handleCancelCountdown() {
+    setCountdown(null);
+    try {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   const reps = curlTracker?.reps ?? 0;
   const lastAngle = curlTracker?.lastAngle ?? 155;
@@ -145,7 +213,59 @@ export function BicepCurlTestBench({
 
       {/* 2. Big Action Controls */}
       <div className="p100-testbench-actions">
-        {!isLive ? (
+        {countdown !== null ? (
+          <div
+            className="p100-testbench-countdown-card"
+            style={{
+              background: "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(56,189,248,0.18))",
+              border: "1px solid rgba(168,85,247,0.4)",
+              borderRadius: "16px",
+              padding: "20px 24px",
+              textAlign: "center",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "10px",
+              width: "100%",
+            }}
+          >
+            <div style={{ fontSize: "1.05rem", fontWeight: 600, color: "#f8fafc" }}>
+              🚶 Inta position med hantlarna...
+            </div>
+            <div
+              style={{
+                fontSize: "4.5rem",
+                fontWeight: 900,
+                color: "#38bdf8",
+                lineHeight: 1,
+                textShadow: "0 0 35px rgba(56,189,248,0.6)",
+              }}
+            >
+              {countdown}
+            </div>
+            <div style={{ fontSize: "0.88rem", color: "#94a3b8" }}>
+              Ställ dig 2–2.5 meter från kameran och låt armarna hänga rakt ned längs sidan.
+            </div>
+            <div style={{ display: "flex", gap: "10px", marginTop: "6px" }}>
+              <button
+                type="button"
+                className="p100-testbench-secondary-btn"
+                onClick={handleSkipCountdown}
+                style={{ padding: "8px 16px" }}
+              >
+                <span>Börja direkt (hoppa över)</span>
+              </button>
+              <button
+                type="button"
+                className="p100-testbench-secondary-btn"
+                onClick={handleCancelCountdown}
+                style={{ padding: "8px 16px" }}
+              >
+                <span>Avbryt</span>
+              </button>
+            </div>
+          </div>
+        ) : !isLive ? (
           <button
             type="button"
             className="p100-testbench-big-btn"
@@ -158,11 +278,15 @@ export function BicepCurlTestBench({
           <button
             type="button"
             className="p100-testbench-big-btn ready"
-            onClick={onToggleTracking}
+            onClick={handleStartCountdown}
             disabled={!poseVisible}
           >
             <Zap size={20} />
-            <span>{poseVisible ? "Starta mätning nu" : "Ställ dig i bild för att starta"}</span>
+            <span>
+              {poseVisible
+                ? "Starta mätning (5s nedräkning)"
+                : "Ställ dig i bild för att starta"}
+            </span>
           </button>
         ) : (
           <div className="p100-testbench-running-controls">
@@ -182,11 +306,21 @@ export function BicepCurlTestBench({
             <button
               type="button"
               className="p100-testbench-secondary-btn"
-              onClick={onResetTracking}
-              title="Nollställ räknaren och börja om från 0"
+              onClick={handleStartCountdown}
+              title="Nollställ och kör 5s nedräkning så du hinner ställa dig på plats"
             >
               <RotateCcw size={16} />
-              <span>Nollställ</span>
+              <span>Nollställ (5s nedräkning)</span>
+            </button>
+
+            <button
+              type="button"
+              className="p100-testbench-secondary-btn"
+              onClick={onResetTracking}
+              title="Nollställ räknaren direkt utan nedräkning"
+            >
+              <RotateCcw size={16} />
+              <span>Direkt-nollställ</span>
             </button>
 
             <button

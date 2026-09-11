@@ -156,4 +156,62 @@ describe("Bicep Curl Engine & Test Report", () => {
     expect(state.repsHistory[0].arm).toBe("right");
     expect(state.repsHistory[0].contractionPassed).toBe(true);
   });
+
+  it("does not count false reps when user is walking into place with arms dangling or swinging naturally", () => {
+    let state = createBicepCurlTracker();
+    const lm = createBaseBodyLandmarks();
+
+    // 1. Walking with arms swinging back and forth, but wrists dangling near hips (y > elbow.y + 0.08)
+    // Even if projected elbow angle is bent (~85 deg), wrist is NOT elevated towards shoulder
+    lm[13] = createMockLandmark(0.38, 0.55, 0);
+    lm[15] = createMockLandmark(0.38, 0.68, 0); // hands down at hip level
+    lm[14] = createMockLandmark(0.62, 0.55, 0);
+    lm[16] = createMockLandmark(0.62, 0.68, 0);
+
+    state = advanceBicepCurlTracker(lm, state, 1, 1000);
+    expect(state.reps).toBe(0);
+    expect(state.phase).toBe("extended");
+
+    // Pendulum swing 1
+    state = advanceBicepCurlTracker(lm, state, 1, 1500);
+    state = advanceBicepCurlTracker(lm, state, 1, 2200);
+    expect(state.reps).toBe(0);
+    expect(state.phase).toBe("extended");
+
+    // 2. Proximity guard: user stands right up against camera clicking start button
+    // Shoulders appear very wide (> 0.38)
+    lm[11] = createMockLandmark(0.25, 0.35, 0);
+    lm[12] = createMockLandmark(0.75, 0.35, 0); // shoulder width = 0.50
+    state = advanceBicepCurlTracker(lm, state, 1, 3000);
+    expect(state.reps).toBe(0);
+    expect(state.phase).toBe("extended");
+  });
+
+  it("requires establishing stable bottom extension before starting repetitions", () => {
+    let state = createBicepCurlTracker();
+    const lm = createBaseBodyLandmarks();
+
+    // User starts tracker while already holding arms bent at 90 deg
+    lm[16] = createMockLandmark(0.62, 0.48, 0);
+    state = advanceBicepCurlTracker(lm, state, 1, 1000);
+    expect(state.reps).toBe(0);
+    expect(state.phase).toBe("extended"); // Won't transition to contracted because no starting extension
+
+    // Now user lowers dumbbells to sides (establishing bottom position)
+    lm[16] = createMockLandmark(0.62, 0.75, 0);
+    state = advanceBicepCurlTracker(lm, state, 1, 2000);
+    expect(state.hasEstablishedStartingExtension).toBe(true);
+
+    // Now performs a real curl: elevates wrist to chest level
+    lm[16] = createMockLandmark(0.62, 0.40, 0);
+    state = advanceBicepCurlTracker(lm, state, 1, 2800);
+    expect(state.phase).toBe("contracted");
+
+    // Lowers back down
+    lm[16] = createMockLandmark(0.62, 0.75, 0);
+    state = advanceBicepCurlTracker(lm, state, 1, 3600);
+    expect(state.phase).toBe("extended");
+    expect(state.reps).toBe(1);
+  });
 });
+
