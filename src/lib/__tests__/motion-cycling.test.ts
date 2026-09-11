@@ -49,4 +49,25 @@ describe("cycling tracker", () => {
     state = advanceCyclingTracker(cyclingPose(150), state, 0.5, 1, 1_000);
     expect(state.revolutions).toBe(0);
   });
+
+  it("accurately counts 20 consecutive revolutions with natural exercise bike angles (112° to 145°)", () => {
+    let state = createCyclingTracker();
+    let time = 0;
+
+    for (let i = 1; i <= 20; i++) {
+      // Flexed at top of stroke (112 deg)
+      time += 450;
+      state = advanceCyclingTracker(cyclingPose(112), state, 0.45, 1, time);
+      // Extended at bottom of stroke (145 deg)
+      time += 450;
+      state = advanceCyclingTracker(cyclingPose(145), state, 0.45, 1, time);
+
+      expect(state.revolutions).toBe(i);
+    }
+
+    expect(state.revolutions).toBe(20);
+    expect(state.cadenceRpm).toBeGreaterThan(60);
+    expect(state.cadenceRpm).toBeLessThan(75);
+    expect(state.revolutionsHistory.length).toBe(20);
+  });
 });
