@@ -220,6 +220,161 @@ describe("motion-library: Dumbbell Overhead Shoulder Press", () => {
     expect(state.phase).toBe("rack");
     expect(state.reps).toBe(1);
   });
+
+  it("tracks 5 reps of continuous single-arm right dumbbell presses with ear/chin rack depth", () => {
+    let state = createOverheadPressTracker();
+    let time = 1000;
+
+    for (let rep = 1; rep <= 5; rep++) {
+      const lm = createBaseBodyLandmarks();
+      // Left arm stays bent at shoulder rack (angle ~90 deg)
+      lm[13] = createMockLandmark(0.35, 0.38);
+      lm[15] = createMockLandmark(0.35, 0.28);
+
+      // Right arm at ear rack (angle ~125 deg)
+      lm[14] = createMockLandmark(0.65, 0.38);
+      lm[16] = createMockLandmark(0.65, 0.26);
+      time += 400;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+
+      // Right arm locks out overhead (angle ~160 deg)
+      lm[14] = createMockLandmark(0.60, 0.18);
+      lm[16] = createMockLandmark(0.59, 0.08);
+      time += 800;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+      expect(state.phase).toBe("lockout");
+      expect(state.activeArm).toBe("right");
+
+      // Right arm lowers back down to ear rack (angle ~127 deg)
+      lm[14] = createMockLandmark(0.65, 0.38);
+      lm[16] = createMockLandmark(0.65, 0.26);
+      time += 800;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+      expect(state.phase).toBe("rack");
+      expect(state.reps).toBe(rep);
+      expect(state.repsHistory[rep - 1]?.arm).toBe("right");
+    }
+
+    expect(state.reps).toBe(5);
+  });
+
+  it("tracks 5 reps of continuous single-arm left dumbbell presses", () => {
+    let state = createOverheadPressTracker();
+    let time = 1000;
+
+    for (let rep = 1; rep <= 5; rep++) {
+      const lm = createBaseBodyLandmarks();
+      // Right arm stays bent at shoulder rack (angle ~90 deg)
+      lm[14] = createMockLandmark(0.65, 0.38);
+      lm[16] = createMockLandmark(0.65, 0.28);
+
+      // Left arm at ear rack (angle ~125 deg)
+      lm[13] = createMockLandmark(0.35, 0.38);
+      lm[15] = createMockLandmark(0.35, 0.26);
+      time += 400;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+
+      // Left arm locks out overhead (angle ~165 deg)
+      lm[13] = createMockLandmark(0.40, 0.18);
+      lm[15] = createMockLandmark(0.41, 0.08);
+      time += 800;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+      expect(state.phase).toBe("lockout");
+      expect(state.activeArm).toBe("left");
+
+      // Left arm lowers back down to ear rack (angle ~125 deg)
+      lm[13] = createMockLandmark(0.35, 0.38);
+      lm[15] = createMockLandmark(0.35, 0.26);
+      time += 800;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+      expect(state.phase).toBe("rack");
+      expect(state.reps).toBe(rep);
+      expect(state.repsHistory[rep - 1]?.arm).toBe("left");
+    }
+
+    expect(state.reps).toBe(5);
+  });
+
+  it("tracks 5 reps of kettlebell / 2-arm presses and achieves 15 total reps in combined session", () => {
+    let state = createOverheadPressTracker();
+    let time = 1000;
+
+    // 1. Five right arm reps
+    for (let i = 0; i < 5; i++) {
+      const lm = createBaseBodyLandmarks();
+      lm[13] = createMockLandmark(0.35, 0.38);
+      lm[15] = createMockLandmark(0.35, 0.28);
+      lm[14] = createMockLandmark(0.65, 0.38);
+      lm[16] = createMockLandmark(0.65, 0.26);
+      time += 300;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+
+      lm[14] = createMockLandmark(0.60, 0.18);
+      lm[16] = createMockLandmark(0.59, 0.08);
+      time += 700;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+
+      lm[14] = createMockLandmark(0.65, 0.38);
+      lm[16] = createMockLandmark(0.65, 0.26);
+      time += 700;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+    }
+    expect(state.reps).toBe(5);
+
+    // 2. Five left arm reps
+    for (let i = 0; i < 5; i++) {
+      const lm = createBaseBodyLandmarks();
+      lm[14] = createMockLandmark(0.65, 0.38);
+      lm[16] = createMockLandmark(0.65, 0.28);
+      lm[13] = createMockLandmark(0.35, 0.38);
+      lm[15] = createMockLandmark(0.35, 0.26);
+      time += 300;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+
+      lm[13] = createMockLandmark(0.40, 0.18);
+      lm[15] = createMockLandmark(0.41, 0.08);
+      time += 700;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+
+      lm[13] = createMockLandmark(0.35, 0.38);
+      lm[15] = createMockLandmark(0.35, 0.26);
+      time += 700;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+    }
+    expect(state.reps).toBe(10);
+
+    // 3. Five kettlebell / both arms presses from chest
+    for (let i = 0; i < 5; i++) {
+      const lm = createBaseBodyLandmarks();
+      // Hands together at chest level
+      lm[13] = createMockLandmark(0.40, 0.40);
+      lm[14] = createMockLandmark(0.60, 0.40);
+      lm[15] = createMockLandmark(0.48, 0.32);
+      lm[16] = createMockLandmark(0.52, 0.32);
+      time += 300;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+
+      // Lockout overhead
+      lm[13] = createMockLandmark(0.42, 0.18);
+      lm[14] = createMockLandmark(0.58, 0.18);
+      lm[15] = createMockLandmark(0.46, 0.08);
+      lm[16] = createMockLandmark(0.54, 0.08);
+      time += 700;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+
+      // Return to chest
+      lm[13] = createMockLandmark(0.40, 0.40);
+      lm[14] = createMockLandmark(0.60, 0.40);
+      lm[15] = createMockLandmark(0.48, 0.32);
+      lm[16] = createMockLandmark(0.52, 0.32);
+      time += 700;
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+    }
+    expect(state.reps).toBe(15);
+    expect(state.repsHistory.filter((r) => r.arm === "right").length).toBe(5);
+    expect(state.repsHistory.filter((r) => r.arm === "left").length).toBe(5);
+    expect(state.repsHistory.filter((r) => r.arm === "both").length).toBe(5);
+  });
 });
 
 describe("motion-library: Dumbbell Lateral Raise Tracker", () => {

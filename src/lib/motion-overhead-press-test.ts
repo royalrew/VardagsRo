@@ -81,7 +81,7 @@ export function buildOverheadPressTestReport(
   const evaluationNotes: string[] = [];
   if (totalReps === 0) {
     evaluationNotes.push(
-      "Inga repetitioner registrerades ännu. Pressa armarna rakt upp ovanför huvudet till minst 148° utlåsning och sänk ner till axelhöjd.",
+      "Inga repetitioner registrerades ännu. Pressa armarna rakt upp ovanför huvudet till minst 145° utlåsning och sänk ner till axelhöjd.",
     );
   } else {
     if (lockoutSuccessRatePercent >= 80) {
@@ -128,7 +128,7 @@ export function buildOverheadPressTestReport(
       cameraAngle: "framifrån mot skärmen/TV:n",
       recommendedHeight: "ca 60–100 cm från golvet",
       recommendedDistance: "2.0–2.8 meter (så händerna ryms i bild vid toppläge)",
-      targetLockoutDeg: ">= 148° (nära raka armar över huvudet)",
+      targetLockoutDeg: ">= 145° (nära raka armar över huvudet)",
     },
     evaluationNotes,
   };

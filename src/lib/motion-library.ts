@@ -629,6 +629,7 @@ export interface OverheadPressTrackerState {
   reps: number;
   lastArmAngle: number;
   activeArm?: "left" | "right" | "both";
+  currentRepArm?: "left" | "right" | "both";
   repsHistory: OverheadPressRepRecord[];
   trajectorySamples: OverheadPressTrajectorySample[];
   currentRepStartedAtMs?: number;
@@ -644,6 +645,7 @@ export function createOverheadPressTracker(): OverheadPressTrackerState {
     reps: 0,
     lastArmAngle: 85,
     activeArm: "both",
+    currentRepArm: "both",
     repsHistory: [],
     trajectorySamples: [],
   };
@@ -675,21 +677,32 @@ export function advanceOverheadPressTracker(
       ? computeJointAngle3D(rightShoulder, rightElbow, rightWrist, aspectRatio)
       : null;
 
-  // Determine overhead extension per arm: wrist is above shoulder
-  const isLeftOverhead = Boolean(leftWrist && leftWrist.y < leftShoulder.y - 0.08);
-  const isRightOverhead = Boolean(rightWrist && rightWrist.y < rightShoulder.y - 0.08);
+  // Determine overhead extension per arm: wrist is at or above shoulder
+  const isLeftOverhead = Boolean(leftWrist && leftWrist.y < leftShoulder.y);
+  const isRightOverhead = Boolean(rightWrist && rightWrist.y < rightShoulder.y);
 
-  // Determine active pressing arm: both, left only, right only, or default to both
+  // Determine active pressing arm:
+  // When pressing with 1 arm, the active arm extends high while the inactive arm stays bent at rack
   let activeArm: "left" | "right" | "both";
   let angle: number;
   let isOverhead: boolean;
 
   if (isLeftOverhead && isRightOverhead) {
-    activeArm = "both";
-    angle =
-      leftAngle !== null && rightAngle !== null
-        ? (leftAngle + rightAngle) / 2
-        : (leftAngle ?? rightAngle ?? state.lastArmAngle);
+    if (leftAngle !== null && rightAngle !== null && Math.abs(leftAngle - rightAngle) > 22) {
+      if (rightAngle > leftAngle) {
+        activeArm = "right";
+        angle = rightAngle;
+      } else {
+        activeArm = "left";
+        angle = leftAngle;
+      }
+    } else {
+      activeArm = "both";
+      angle =
+        leftAngle !== null && rightAngle !== null
+          ? (leftAngle + rightAngle) / 2
+          : (leftAngle ?? rightAngle ?? state.lastArmAngle);
+    }
     isOverhead = true;
   } else if (isLeftOverhead) {
     activeArm = "left";
@@ -700,7 +713,7 @@ export function advanceOverheadPressTracker(
     angle = rightAngle ?? state.lastArmAngle;
     isOverhead = true;
   } else {
-    // Neither arm is overhead (both at rack or by side)
+    // Neither arm is overhead (resting by side or low rack)
     activeArm = state.activeArm ?? "both";
     if (activeArm === "left" && leftAngle !== null) {
       angle = leftAngle;
@@ -721,43 +734,69 @@ export function advanceOverheadPressTracker(
   let currentRepStartedAtMs = state.currentRepStartedAtMs;
   let currentRepMinAngle = state.currentRepMinAngle ?? angle;
   let currentRepMaxAngle = Math.max(state.currentRepMaxAngle ?? angle, angle);
+  let currentRepArm = state.currentRepArm ?? activeArm;
   let repsHistory = state.repsHistory ?? [];
 
   if (phase === "rack") {
-    if (angle >= 148 && isOverhead) {
+    currentRepMinAngle = Math.min(currentRepMinAngle, angle);
+    if (angle <= 130) {
+      currentRepStartedAtMs = nowMs;
+    }
+
+    if (angle >= 145 && isOverhead) {
       phase = "lockout";
       currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
       currentRepMaxAngle = angle;
-    } else if (angle > 105 && isOverhead) {
+      currentRepArm = activeArm;
+    } else if (angle > 115 && isOverhead) {
       phase = "pressing";
       currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
       currentRepMaxAngle = angle;
+      currentRepArm = activeArm;
     }
   } else if (phase === "pressing") {
+    currentRepMinAngle = Math.min(currentRepMinAngle, angle);
     currentRepMaxAngle = Math.max(currentRepMaxAngle, angle);
-    if (angle >= 148 && isOverhead) {
+    if (activeArm !== "both") {
+      currentRepArm = activeArm;
+    }
+    if (angle <= 130) {
+      currentRepStartedAtMs = nowMs;
+    }
+
+    if (angle >= 145 && isOverhead) {
       phase = "lockout";
     } else if (angle < 95 && !isOverhead) {
       phase = "rack";
       currentRepStartedAtMs = undefined;
+      currentRepMinAngle = angle;
+      currentRepMaxAngle = angle;
     }
   } else if (phase === "lockout") {
     currentRepMaxAngle = Math.max(currentRepMaxAngle, angle);
-    // Returning to rack (wrists lowered back down)
-    if (angle < 115 && !isOverhead) {
+    if (activeArm !== "both") {
+      currentRepArm = activeArm;
+    }
+
+    // Returning to rack (arm lowered to shoulder/ear level or angle bent)
+    // Athletic dumbbell/kettlebell pressing bottom position is around 120°-133°
+    const romDrop = currentRepMaxAngle - angle;
+    const hasLoweredToRack = angle <= 134 && romDrop >= 14;
+
+    if (hasLoweredToRack) {
       phase = "rack";
       const rawDuration = currentRepStartedAtMs ? nowMs - currentRepStartedAtMs : 1200;
       const isInstantCall = currentRepStartedAtMs !== undefined && rawDuration <= 50;
       const duration = isInstantCall ? 1200 : rawDuration;
       const timeSinceLast = lastRepAtMs ? nowMs - lastRepAtMs : Infinity;
-      if (isInstantCall || (duration >= 400 && timeSinceLast >= 400)) {
+      if (isInstantCall || (duration >= 400 && timeSinceLast >= 450)) {
         nextReps += 1;
         lastRepAtMs = nowMs;
         repsHistory = [
           ...repsHistory,
           {
             repNumber: nextReps,
-            arm: activeArm,
+            arm: currentRepArm,
             minArmAngle: Math.round(currentRepMinAngle),
             lockoutArmAngle: Math.round(currentRepMaxAngle),
             durationMs: duration,
@@ -766,8 +805,8 @@ export function advanceOverheadPressTracker(
         ];
       }
       currentRepStartedAtMs = undefined;
-      currentRepMinAngle = 85;
-      currentRepMaxAngle = 85;
+      currentRepMinAngle = angle;
+      currentRepMaxAngle = angle;
     }
   }
 
@@ -790,6 +829,7 @@ export function advanceOverheadPressTracker(
     reps: nextReps,
     lastArmAngle: Math.round(angle),
     activeArm,
+    currentRepArm,
     repsHistory,
     trajectorySamples,
     currentRepStartedAtMs,

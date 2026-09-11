@@ -49,8 +49,8 @@ export function OverheadPressTestBench({
   const activeArm = pressTracker?.activeArm ?? "both";
   const repsHistory = pressTracker?.repsHistory ?? [];
 
-  const isLockout = armAngle >= 148;
-  const isRack = armAngle <= 100;
+  const isLockout = armAngle >= 145;
+  const isRack = armAngle <= 130;
 
   const phaseLabel =
     phase === "rack"
@@ -217,7 +217,7 @@ export function OverheadPressTestBench({
             {armAngle}°
           </span>
           <span className="sub">
-            {isLockout ? "🟢 Full utlåsning (>= 148°)" : isRack ? "Rackläge vid axlar (<= 100°)" : "Pressar..."}
+            {isLockout ? "🟢 Full utlåsning (>= 145°)" : isRack ? "Rackläge vid axlar (<= 130°)" : "Pressar..."}
           </span>
         </div>
 
@@ -276,7 +276,7 @@ export function OverheadPressTestBench({
                 <strong>2-arms & Kettlebell:</strong> Pressa båda händerna uppåt samtidigt. Trackern mäter båda armarnas utlåsning.
               </li>
               <li>
-                <strong>Godkänd repetition:</strong> Pressa till full sträckning (&gt;= 148°) ovanför huvudet och sänk tillbaka ner till axel- eller brösthöjd.
+                <strong>Godkänd repetition:</strong> Pressa till full sträckning (&gt;= 145°) ovanför huvudet och sänk tillbaka ner till axel- eller brösthöjd.
               </li>
             </ul>
           </div>
