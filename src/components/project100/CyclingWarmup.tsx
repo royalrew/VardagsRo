@@ -47,6 +47,27 @@ export function CyclingWarmup({ missionId, onComplete }: {
         )}
       </div>
       <small>Kameran startar på nästa sida och följer pedalvarv, kadens och tid. Uppvärmningen räknas inte som ett styrkeset.</small>
+      <div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem" }}>
+        <span style={{ color: "rgba(255,255,255,0.7)" }}>Vill du köra ett helt konditionspass istället för uppvärmning?</span>
+        <Link
+          href="/projekt-100/traning/motion?exercise=cycling-intervals-30"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.4rem",
+            color: "#38bdf8",
+            textDecoration: "none",
+            fontWeight: 600,
+            fontSize: "0.82rem",
+            padding: "4px 8px",
+            borderRadius: "6px",
+            background: "rgba(56, 189, 248, 0.1)",
+            border: "1px solid rgba(56, 189, 248, 0.25)",
+          }}
+        >
+          <Bike size={14} /> 30 min Intervallpass & motstånd →
+        </Link>
+      </div>
     </section>
   );
 }

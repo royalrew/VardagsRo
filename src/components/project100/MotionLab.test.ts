@@ -28,4 +28,28 @@ describe("Motion Lab focused training view", () => {
     expect(html).not.toContain("p100-adaptive-camera");
     expect(html).not.toContain("p100-motion-session-control");
   });
+
+  it("opens the 30 min cycling interval session with resistance coaching and overlay", () => {
+    const html = renderToStaticMarkup(createElement(MotionLab, {
+      initialPairingCode: "123456",
+      initialExercise: "cycling-intervals-30",
+    }));
+    expect(html).toContain("Intervallpass med motstånd");
+    expect(html).toContain("30 min Intervallcykling");
+    expect(html).toContain("p100-cycling-interval-overlay");
+    expect(html).toContain("Lätt");
+    expect(html).not.toContain("p100-adaptive-camera");
+  });
+
+  it("opens the pushup test bench with instructions and copy report button", () => {
+    const html = renderToStaticMarkup(createElement(MotionLab, {
+      initialPairingCode: "123456",
+      initialExercise: "pushup",
+    }));
+    expect(html).toContain("Armhävningstest");
+    expect(html).toContain("p100-pushup-test-bench");
+    expect(html).toContain("Instruktioner för vinklar &amp; kameraplacering");
+    expect(html).toContain("Starta kamera &amp; armhävningstest");
+    expect(html).not.toContain("p100-adaptive-camera");
+  });
 });

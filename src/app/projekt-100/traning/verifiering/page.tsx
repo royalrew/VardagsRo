@@ -51,6 +51,54 @@ export default async function Project100TrainingVerificationPage() {
       </header>
 
       <main style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+        {/* Provbänk & Övningskalibrering */}
+        <section
+          style={{
+            background: "rgba(56, 189, 248, 0.05)",
+            border: "1px solid rgba(56, 189, 248, 0.25)",
+            borderRadius: "16px",
+            padding: "1.5rem",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "1rem",
+            }}
+          >
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#38bdf8", marginBottom: "0.25rem" }}>
+                <Flag size={18} />
+                <h3 style={{ margin: 0, fontSize: "1.1rem" }}>Fysisk Kalibrering & Provbänk</h3>
+              </div>
+              <p style={{ color: "#94a3b8", margin: 0, fontSize: "0.9rem" }}>
+                Provkör övningar en och en med vinkelmätning och kopiera .json-rapport till AI för intrimning.
+              </p>
+            </div>
+            <Link
+              href="/projekt-100/traning/motion?exercise=pushup"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                padding: "10px 18px",
+                borderRadius: "10px",
+                background: "#0284c7",
+                color: "#fff",
+                fontWeight: 700,
+                fontSize: "0.9rem",
+                textDecoration: "none",
+                boxShadow: "0 4px 14px rgba(2, 132, 199, 0.35)",
+              }}
+            >
+              Starta Armhävningstest →
+            </Link>
+          </div>
+        </section>
+
         {/* K8 Live-gate panel */}
         <TrainingLiveGatePanel assessment={liveGate} />
 

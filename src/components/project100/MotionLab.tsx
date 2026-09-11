@@ -126,6 +126,17 @@ import { MotionCameraControls, type Resolution } from "./motion/MotionCameraCont
 import { MotionWorkoutOverlay } from "./motion/MotionWorkoutOverlay";
 import { MotionWorkoutPanel, type RestPreset } from "./motion/MotionWorkoutPanel";
 import { MotionArenaOverlay } from "./motion/MotionArenaOverlay";
+import { CyclingIntervalOverlay } from "./motion/CyclingIntervalOverlay";
+import {
+  createCyclingIntervalSession,
+  advanceCyclingIntervalSession,
+  skipToNextCyclingInterval,
+  type CyclingIntervalSessionState,
+} from "@/lib/motion-cycling-intervals";
+import type { CyclingTrackerState } from "@/lib/motion-cycling";
+import { PushupTestBench } from "./motion/PushupTestBench";
+import { buildPushupTestReport } from "@/lib/motion-pushup-test";
+import type { PushupTrackerState } from "@/lib/motion-exercises";
 import { MotionDiagnosticsOverlay, type BaselineNoticeState } from "./motion/MotionDiagnosticsOverlay";
 import {
   MotionDiagnosticsPanel,
@@ -496,6 +507,9 @@ export function MotionLab({
         if (matched) return matched;
       }
     }
+    if (initialExercise === "cycling-intervals-30" || (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("exercise") === "cycling-intervals-30")) {
+      return "cycling-intervals-30";
+    }
     if (initialMissionLaunch?.exerciseId) return initialMissionLaunch.exerciseId;
     if (initialProgram && initialProgram in WORKOUT_PROGRAMS) return initialProgram as ProgramId;
     if (initialExercise && initialExercise in EXERCISE_LIBRARY) return initialExercise as TrackableExerciseId;
@@ -504,11 +518,15 @@ export function MotionLab({
 
   const [unifiedTracker, setUnifiedTracker] = useState<UnifiedExerciseState>(() => {
     const targetEx =
-      (activeWorkoutExercise in EXERCISE_LIBRARY || activeWorkoutExercise === "squat")
+      activeWorkoutExercise === "cycling-intervals-30"
+        ? "cycling"
+        : (activeWorkoutExercise in EXERCISE_LIBRARY || activeWorkoutExercise === "squat")
         ? (activeWorkoutExercise as TrackableExerciseId)
         : initialMissionLaunch?.exerciseId ??
           (initialProgram && initialProgram in WORKOUT_PROGRAMS
             ? WORKOUT_PROGRAMS[initialProgram as ProgramId].exercises[0].exerciseId
+            : initialExercise === "cycling-intervals-30"
+            ? "cycling"
             : initialExercise && initialExercise in EXERCISE_LIBRARY
             ? (initialExercise as TrackableExerciseId)
             : "squat");
@@ -522,6 +540,17 @@ export function MotionLab({
   const [isSavingToLog, setIsSavingToLog] = useState(false);
   const [isSavedToLog, setIsSavedToLog] = useState(false);
   const [saveLogError, setSaveLogError] = useState<string | null>(null);
+
+  const [cyclingIntervalSession, setCyclingIntervalSession] = useState<CyclingIntervalSessionState | null>(() => {
+    const isIntervalInit =
+      initialExercise === "cycling-intervals-30" ||
+      (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("exercise") === "cycling-intervals-30");
+    return isIntervalInit ? createCyclingIntervalSession() : null;
+  });
+  const cyclingIntervalSessionRef = useRef<CyclingIntervalSessionState | null>(cyclingIntervalSession);
+  cyclingIntervalSessionRef.current = cyclingIntervalSession;
+  const [cyclingVoiceEnabled, setCyclingVoiceEnabled] = useState(true);
+  const lastCyclingStepIdRef = useRef<string | null>(cyclingIntervalSession?.currentStep.id ?? null);
 
   useEffect(() => {
     if (activeWorkoutSnapshot && nextPendingExercise && matchedCameraExercise) {
@@ -624,6 +653,43 @@ export function MotionLab({
         payload = convertProgramSessionToApiPayload(programSessionRef.current);
       } else if (workoutSessionRef.current && workoutSessionRef.current.completedSets.length > 0) {
         payload = convertSquatSessionToApiPayload(workoutSessionRef.current);
+      } else if (cyclingIntervalSessionRef.current && cyclingIntervalSessionRef.current.elapsedSeconds > 10) {
+        const sess = cyclingIntervalSessionRef.current;
+        const totalSec = Math.max(60, Math.round(sess.elapsedSeconds));
+        const estimatedCalories = Math.round(sess.elapsedSeconds * (450 / 1800));
+        const revs = unifiedTrackerRef.current?.reps ?? 0;
+
+        const dateStr = new Date().toISOString().slice(0, 10);
+        payload = {
+          title: "30 min Intervallcykling",
+          activityType: "spinning",
+          status: "completed" as const,
+          sessionDate: dateStr,
+          templateId: null,
+          plannedStartAt: null,
+          plannedEndAt: null,
+          durationSeconds: totalSec,
+          location: "Hemma",
+          effort: 8,
+          bodyBefore: null,
+          bodyAfter: null,
+          notes: `Genomfört intervallpass på motionscykel: ${Math.round(sess.elapsedSeconds / 60)} min. Uppskattad förbränning: ~${estimatedCalories} kcal.${revs > 0 ? ` Trampvarv: ${revs}.` : ""}`,
+          exercises: [
+            {
+              name: "Motionscykel Intervaller",
+              notes: `30 min intervallpass med motståndsvariationer (Lätt, Medel, Tungt/Trögt). Genomförda intervallblock: ${sess.currentStepIndex + 1}/${sess.plan.steps.length}.${revs > 0 ? ` Trampvarv: ${revs}.` : ""}`,
+              sets: [
+                {
+                  reps: revs > 0 ? revs : null,
+                  weightKg: null,
+                  durationSeconds: totalSec,
+                  distanceMeters: null,
+                  rpe: 8,
+                },
+              ],
+            },
+          ],
+        };
       }
 
       if (!payload || payload.exercises.length === 0) {
@@ -648,6 +714,10 @@ export function MotionLab({
       clearWorkoutMemorySnapshot();
       setActiveWorkoutSnapshot(null);
       setSavedProgramSnapshot(null);
+      if (initialWarmupMissionId) {
+        markCyclingWarmupComplete(initialWarmupMissionId);
+      }
+      speakSquatInstruction("Bra kört! Passet har sparats i din träningslogg.", true);
     } catch (err) {
       setSaveLogError(err instanceof Error ? err.message : "Något gick fel vid sparandet.");
     } finally {
@@ -711,6 +781,7 @@ export function MotionLab({
       const exItem = EXERCISE_LIBRARY[programSession.activeExercise.exerciseId];
       return `${prog?.title ?? "Program"} · ${exItem?.name ?? programSession.activeExercise.exerciseId}`;
     }
+    if (activeWorkoutExercise === "cycling-intervals-30") return "30 min Intervallcykling";
     const libEx = EXERCISE_LIBRARY[activeWorkoutExercise as TrackableExerciseId];
     if (libEx) return libEx.name;
     const prog = WORKOUT_PROGRAMS[activeWorkoutExercise as ProgramId];
@@ -1236,6 +1307,60 @@ export function MotionLab({
     window.speechSynthesis.speak(utterance);
   }
 
+  const handleToggleCyclingPause = useCallback(() => {
+    setCyclingIntervalSession((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, isPaused: !prev.isPaused };
+      cyclingIntervalSessionRef.current = next;
+      if (next.isPaused) {
+        speakSquatInstruction("Intervallpasset är pausat.", true);
+      } else {
+        speakSquatInstruction("Återupptar passet.", true);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSkipCyclingStep = useCallback(() => {
+    setCyclingIntervalSession((prev) => {
+      if (!prev) return prev;
+      const next = skipToNextCyclingInterval(prev);
+      cyclingIntervalSessionRef.current = next;
+      lastCyclingStepIdRef.current = next.currentStep.id;
+      if (cyclingVoiceEnabled) {
+        speakSquatInstruction(next.currentStep.voiceCue, true);
+      }
+      return next;
+    });
+  }, [cyclingVoiceEnabled]);
+
+  const handleFinishCyclingSession = useCallback(() => {
+    void handleSaveSessionToLog();
+  }, []);
+
+  useEffect(() => {
+    if (activeWorkoutExercise !== "cycling-intervals-30") return;
+    if (!cyclingIntervalSession || cyclingIntervalSession.isPaused || cyclingIntervalSession.isCompleted) return;
+
+    const timer = setInterval(() => {
+      setCyclingIntervalSession((prev) => {
+        if (!prev || prev.isPaused || prev.isCompleted) return prev;
+        const next = advanceCyclingIntervalSession(prev, 1);
+        cyclingIntervalSessionRef.current = next;
+
+        if (next.currentStep.id !== lastCyclingStepIdRef.current) {
+          lastCyclingStepIdRef.current = next.currentStep.id;
+          if (cyclingVoiceEnabled) {
+            speakSquatInstruction(next.currentStep.voiceCue, true);
+          }
+        }
+        return next;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [activeWorkoutExercise, cyclingIntervalSession?.isPaused, cyclingIntervalSession?.isCompleted, cyclingVoiceEnabled]);
+
   function speakArenaInstruction(cue: MotionArenaCue) {
     if (!voiceGuidanceRef.current || !("speechSynthesis" in window)) return;
     const now = performance.now();
@@ -1481,6 +1606,13 @@ export function MotionLab({
       workoutSessionRef.current = createConfiguredWorkoutSession();
       setWorkoutSession(workoutSessionRef.current);
     }
+    if (activeWorkoutExercise in EXERCISE_LIBRARY) {
+      const nextUnified = createUnifiedExerciseTracker(activeWorkoutExercise as TrackableExerciseId);
+      unifiedTrackerRef.current = nextUnified;
+      setUnifiedTracker(nextUnified);
+      lastUnifiedRepRef.current = 0;
+      lastUnifiedHoldRef.current = 0;
+    }
   }
 
   function handleSkipRest() {
@@ -1578,7 +1710,10 @@ export function MotionLab({
 
   async function copySquatReport() {
     let reportJson: string;
-    if (squatProtocolRef.current === "workout-step-31") {
+    if (activeWorkoutExercise === "pushup" && unifiedTrackerRef.current.exerciseId === "pushup") {
+      const pState = unifiedTrackerRef.current.trackerState as PushupTrackerState;
+      reportJson = JSON.stringify(buildPushupTestReport(pState), null, 2);
+    } else if (squatProtocolRef.current === "workout-step-31") {
       reportJson = JSON.stringify(buildWorkoutSessionReport(workoutSessionRef.current), null, 2);
     } else {
       reportJson = JSON.stringify(
@@ -1603,11 +1738,24 @@ export function MotionLab({
       if (squatReportCopiedTimerRef.current !== null) clearTimeout(squatReportCopiedTimerRef.current);
       squatReportCopiedTimerRef.current = setTimeout(() => setSquatReportCopied(false), 2_000);
     } catch {
-      setError("Squat-rapporten kunde inte kopieras. Landmark-filen kan fortfarande laddas ned.");
+      setError("Provrapporten kunde inte kopieras. Landmark-filen kan fortfarande laddas ned.");
     }
   }
 
   function downloadSquatReport() {
+    if (activeWorkoutExercise === "pushup" && unifiedTrackerRef.current.exerciseId === "pushup") {
+      const pState = unifiedTrackerRef.current.trackerState as PushupTrackerState;
+      const report = buildPushupTestReport(pState);
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `armhavning-provrapport-${report.testedAt.slice(0, 19).replaceAll(":", "-")}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
     if (squatProtocolRef.current === "workout-step-31") {
       const report = buildWorkoutSessionReport(workoutSessionRef.current);
       const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
@@ -1662,6 +1810,16 @@ export function MotionLab({
           `Startar program: ${prog.title}. Första övningen är ${firstExName}. Set 1 av ${sess.activeExercise.sets}. Gör dig redo!`,
           true,
         );
+        return;
+      }
+
+      if (activeWorkoutExercise === "cycling-intervals-30") {
+        const initialTracker = createUnifiedExerciseTracker("cycling");
+        unifiedTrackerRef.current = initialTracker;
+        setUnifiedTracker(initialTracker);
+        lastUnifiedRepRef.current = 0;
+        lastUnifiedHoldRef.current = 0;
+        speakSquatInstruction("Kadens- och trampvarvmätning aktiv.", true);
         return;
       }
 
@@ -1721,6 +1879,8 @@ export function MotionLab({
       currentExId = currentProg.activeExercise.exerciseId;
     } else if (EXERCISE_LIBRARY[activeWorkoutExercise as TrackableExerciseId]) {
       currentExId = activeWorkoutExercise as TrackableExerciseId;
+    } else if (activeWorkoutExercise === "cycling-intervals-30") {
+      currentExId = "cycling";
     } else {
       return;
     }
@@ -2013,7 +2173,7 @@ export function MotionLab({
     const visible = snapshot.landmarks.length === 33;
     if (
       visible
-      && activeWorkoutExercise === "cycling"
+      && (activeWorkoutExercise === "cycling" || activeWorkoutExercise === "cycling-intervals-30")
       && !squatTrackingEnabledRef.current
       && !cyclingAutoStartedRef.current
     ) {
@@ -2025,7 +2185,11 @@ export function MotionLab({
       lastUnifiedHoldRef.current = 0;
       squatTrackingEnabledRef.current = true;
       setSquatTrackingEnabled(true);
-      speakSquatInstruction("Kroppen hittad. Spinninguppvärmningen har startat.", true);
+      if (activeWorkoutExercise === "cycling-intervals-30") {
+        speakSquatInstruction("Kroppen hittad. Optisk kadens- och trampvarvmätning aktiv.", true);
+      } else {
+        speakSquatInstruction("Kroppen hittad. Spinninguppvärmningen har startat.", true);
+      }
     }
     acceptSquatSnapshot(snapshot);
     acceptUnifiedExerciseSnapshot(snapshot);
@@ -2966,9 +3130,40 @@ export function MotionLab({
             )}
           </div>
         </section>
+      ) : activeWorkoutExercise === "cycling-intervals-30" ? (
+        <section className="p100-cycling-warmup-guide">
+          <div>
+            <span>Kondition · 30 minuter</span>
+            <h2>Motionscykel · Intervallpass med motstånd</h2>
+            <p>Följ motståndsinstruktionerna på skärmen (Lätt, Medel, Tungt / Trögt). Kameran är valfri – den mäter kadens och trampvarv om du startar den.</p>
+          </div>
+          <div>
+            {!isLive ? (
+              <button type="button" onClick={() => void startCamera()} disabled={isStarting}>Starta kamera (valfritt)</button>
+            ) : (
+              <span style={{ fontSize: "0.85rem", color: "#34d399", fontWeight: 600 }}>Kamera aktiv · Kadens mäts</span>
+            )}
+          </div>
+        </section>
       ) : null}
 
-      {activeTrackableExerciseId && activeTrackableExerciseId !== "cycling" ? (
+      {activeWorkoutExercise === "pushup" ? (
+        <PushupTestBench
+          pushupTracker={
+            unifiedTracker?.exerciseId === "pushup"
+              ? (unifiedTracker.trackerState as PushupTrackerState)
+              : null
+          }
+          isLive={isLive}
+          trackingEnabled={squatTrackingEnabled}
+          poseVisible={poseVisible}
+          onStartCamera={() => void startCamera()}
+          onToggleTracking={toggleSquatTracking}
+          onResetTracking={resetSquatTracking}
+        />
+      ) : null}
+
+      {activeTrackableExerciseId && activeTrackableExerciseId !== "cycling" && activeTrackableExerciseId !== "pushup" ? (
         <AdaptiveCameraSetupPanel
           key={`${activeTrackableExerciseId}-${initialMissionLaunch?.environment ?? "free"}`}
           exerciseId={activeTrackableExerciseId}
@@ -3137,13 +3332,37 @@ export function MotionLab({
               <p>Första modellstarten kan ta några sekunder. Inga videor laddas upp.</p>
             </div>
           ) : null}
-          {isLive && activeWorkoutExercise !== "cycling" && !isRecovering && (!poseVisible || !fullBodyVisible) && !replaying && !gameActive && !performanceProfileRunning ? (
+          {isLive && activeWorkoutExercise !== "cycling" && activeWorkoutExercise !== "cycling-intervals-30" && !isRecovering && (!poseVisible || !fullBodyVisible) && !replaying && !gameActive && !performanceProfileRunning ? (
             <div className="p100-motion-guide">
               <strong>{poseVisible ? "Hela kroppen behöver synas" : "Ingen kropp hittad ännu"}</strong>
               <span>Backa, centrera dig och se till att huvud, höfter, knän, anklar och båda fötterna ryms i bild.</span>
             </div>
           ) : null}
-          {squatTrackingEnabled && !gameActive && !baselineRunning && !performanceProfileRunning ? (
+          {activeWorkoutExercise === "cycling-intervals-30" && cyclingIntervalSession ? (
+            <CyclingIntervalOverlay
+              session={cyclingIntervalSession}
+              measuredCadenceRpm={
+                unifiedTracker?.exerciseId === "cycling"
+                  ? (unifiedTracker.trackerState as CyclingTrackerState).cadenceRpm
+                  : null
+              }
+              measuredRevolutions={
+                unifiedTracker?.exerciseId === "cycling"
+                  ? (unifiedTracker.trackerState as CyclingTrackerState).revolutions
+                  : unifiedTracker?.reps ?? 0
+              }
+              isLive={isLive}
+              onTogglePause={handleToggleCyclingPause}
+              onSkipStep={handleSkipCyclingStep}
+              onToggleVoice={() => setCyclingVoiceEnabled((prev) => !prev)}
+              voiceEnabled={cyclingVoiceEnabled}
+              onFinish={handleFinishCyclingSession}
+              onSaveToLog={handleSaveSessionToLog}
+              isSavedToLog={isSavedToLog}
+              isSavingToLog={isSavingToLog}
+              saveLogError={saveLogError}
+            />
+          ) : squatTrackingEnabled && !gameActive && !baselineRunning && !performanceProfileRunning ? (
             <MotionWorkoutOverlay
               workoutSession={workoutSession}
               squatView={squatView}
@@ -3239,7 +3458,7 @@ export function MotionLab({
         </div>
 
         <aside className="p100-motion-sidebar">
-          {activeWorkoutExercise !== "cycling" ? (
+          {activeWorkoutExercise !== "cycling" && activeWorkoutExercise !== "cycling-intervals-30" ? (
             <div className="p100-motion-session-control">
               <strong>{activeExerciseTitle}</strong>
               <button className="p100-button" type="button" onClick={toggleSquatTracking} disabled={!isLive || isRecovering || (!poseVisible && !squatTrackingEnabled) || gameActive || replaying || baselineRunning || performanceProfileRunning}>
@@ -3284,6 +3503,17 @@ export function MotionLab({
             onChangeExercise={(exercise) => {
               setCameraSetupProfile(null);
               setActiveWorkoutExercise(exercise);
+              if (exercise === "cycling-intervals-30") {
+                const newSess = createCyclingIntervalSession();
+                setCyclingIntervalSession(newSess);
+                cyclingIntervalSessionRef.current = newSess;
+                lastCyclingStepIdRef.current = newSess.currentStep.id;
+                const tracker = createUnifiedExerciseTracker("cycling");
+                unifiedTrackerRef.current = tracker;
+                setUnifiedTracker(tracker);
+                speakSquatInstruction("Startar 30 minuters intervallcykling. Första blocket: Uppvärmning med lätt motstånd i 3 minuter. Nu kör vi!", true);
+                return;
+              }
               const progItem = WORKOUT_PROGRAMS[exercise as ProgramId];
               const libraryExerciseId = exercise as TrackableExerciseId;
               const libItem = EXERCISE_LIBRARY[libraryExerciseId];

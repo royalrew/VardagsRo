@@ -12690,3 +12690,715 @@ button.event-row:hover {
   color: #9dd9af;
   background: rgba(157, 217, 175, 0.08);
 }
+
+/* -------------------------------------------------------------------------
+   30 min Cycling Interval Overlay & HUD
+   ------------------------------------------------------------------------- */
+.p100-cycling-interval-overlay {
+  position: absolute;
+  inset: 56px auto auto 50%;
+  z-index: 7;
+  width: min(640px, calc(100% - 24px));
+  max-height: calc(100% - 70px);
+  overflow-y: auto;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(10, 16, 13, 0.92);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45), 0 0 35px rgba(52, 211, 153, 0.08);
+  backdrop-filter: blur(16px);
+  color: #eef4ef;
+  pointer-events: auto;
+}
+
+.p100-cycling-hud-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.p100-cycling-resistance-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border: 1.5px solid;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  transition: all 0.3s ease;
+}
+
+.p100-cycling-resistance-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.p100-cycling-resistance-text small {
+  font-size: 0.52rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
+
+.p100-cycling-resistance-text strong {
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.p100-cycling-session-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.p100-cycling-session-clock-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.52rem;
+  font-weight: 800;
+  color: #8da195;
+  letter-spacing: 0.08em;
+}
+
+.p100-cycling-session-clock strong {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 1.3rem;
+  color: #efffd0;
+  letter-spacing: -0.03em;
+}
+
+.p100-cycling-session-clock strong small {
+  font-size: 0.85rem;
+  color: #798a80;
+}
+
+.p100-cycling-hud-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.p100-cycling-step-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.p100-cycling-step-number {
+  font-size: 0.54rem;
+  font-weight: 800;
+  color: var(--p100-accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.p100-cycling-step-name {
+  margin: 0;
+  font-size: clamp(1.1rem, 3.5vw, 1.45rem);
+  font-weight: 800;
+  color: #f7faf7;
+  letter-spacing: -0.02em;
+}
+
+.p100-cycling-step-advice {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #a7b5ac;
+}
+
+.p100-cycling-timer-display {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 20px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.p100-cycling-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 120px;
+  padding-right: 16px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.p100-cycling-countdown-val {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: clamp(2.4rem, 6vw, 3.4rem);
+  font-weight: 850;
+  color: #efffd0;
+  line-height: 1;
+  letter-spacing: -0.06em;
+  text-shadow: 0 0 24px rgba(200, 244, 93, 0.25);
+}
+
+.p100-cycling-countdown small {
+  margin-top: 4px;
+  font-size: 0.52rem;
+  font-weight: 750;
+  color: #8da195;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.p100-cycling-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 12px;
+}
+
+.p100-cycling-metric-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.p100-cycling-metric-box small {
+  font-size: 0.5rem;
+  font-weight: 800;
+  color: #798a80;
+  letter-spacing: 0.08em;
+}
+
+.p100-cycling-metric-box strong {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 1.05rem;
+  color: #e5ece6;
+}
+
+.p100-cycling-metric-box strong small {
+  font-family: inherit;
+  font-size: 0.62rem;
+  color: #8da195;
+}
+
+.p100-cycling-metric-searching {
+  font-size: 0.72rem;
+  color: #d9b16c;
+  font-style: italic;
+}
+
+.p100-cycling-metric-manual {
+  font-size: 0.72rem;
+  color: #798a80;
+}
+
+.p100-cycling-next-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(224, 172, 99, 0.08);
+  border: 1px solid rgba(224, 172, 99, 0.2);
+}
+
+.p100-cycling-next-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #e0ac63;
+  font-size: 0.56rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.p100-cycling-next-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.p100-cycling-next-info strong {
+  font-size: 0.78rem;
+  color: #f7e6cc;
+}
+
+.p100-cycling-next-info span {
+  font-size: 0.65rem;
+  color: #c9b397;
+}
+
+.p100-cycling-completed-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.p100-cycling-completed-banner strong {
+  font-size: 0.92rem;
+  color: #a7f3d0;
+}
+
+.p100-cycling-completed-banner p {
+  margin: 3px 0 0;
+  font-size: 0.72rem;
+  color: #86efac;
+}
+
+.p100-cycling-timeline-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.p100-cycling-timeline-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #34d399, #fbbf24, #f87171, #34d399);
+  transition: width 0.3s ease;
+}
+
+.p100-cycling-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.p100-cycling-controls-left,
+.p100-cycling-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.p100-cycling-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 8px;
+  font-size: 0.68rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.p100-cycling-btn-primary {
+  background: var(--p100-accent);
+  color: #11170f;
+}
+
+.p100-cycling-btn-primary:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.p100-cycling-btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #cbd5ce;
+}
+
+.p100-cycling-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.p100-cycling-btn-secondary.active {
+  background: rgba(200, 244, 93, 0.12);
+  border-color: rgba(200, 244, 93, 0.3);
+  color: var(--p100-accent);
+}
+
+.p100-cycling-btn-finish {
+  background: rgba(52, 211, 153, 0.15);
+  border-color: rgba(52, 211, 153, 0.35);
+  color: #34d399;
+}
+
+.p100-cycling-btn-finish:hover {
+  background: rgba(52, 211, 153, 0.28);
+  color: #fff;
+}
+
+@media (max-width: 600px) {
+  .p100-cycling-timer-display {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .p100-cycling-countdown {
+    border-right: none;
+    padding-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 10px;
+  }
+  .p100-cycling-controls-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .p100-cycling-controls-left,
+  .p100-cycling-controls-right {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .p100-cycling-controls-left button,
+  .p100-cycling-controls-right button {
+    flex: 1;
+  }
+}
+
+/* ==========================================================================
+   Pushup Calibration Test Bench
+   ========================================================================== */
+
+.p100-pushup-test-bench {
+  background: rgba(18, 22, 21, 0.88);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 20px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.p100-testbench-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.p100-testbench-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  width: fit-content;
+}
+
+.p100-testbench-header h2 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0;
+  color: #f1f5f9;
+}
+
+.p100-testbench-header p {
+  color: #94a3b8;
+  font-size: 0.92rem;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.p100-testbench-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.p100-testbench-big-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #ffffff;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  padding: 16px 28px;
+  border-radius: 14px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(2, 132, 199, 0.35);
+  transition: all 0.2s ease;
+}
+
+.p100-testbench-big-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(2, 132, 199, 0.45);
+}
+
+.p100-testbench-big-btn.ready {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.35);
+}
+
+.p100-testbench-running-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.p100-testbench-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  background: #10b981;
+  color: #042f1a;
+  border: none;
+  padding: 14px 24px;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+  transition: all 0.2s ease;
+}
+
+.p100-testbench-copy-btn:hover {
+  background: #34d399;
+  transform: translateY(-1px);
+}
+
+.p100-testbench-copy-btn.copied {
+  background: #059669;
+  color: #ffffff;
+}
+
+.p100-testbench-secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e2e8f0;
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.p100-testbench-secondary-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.p100-testbench-telemetry {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.p100-telemetry-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+.p100-telemetry-item .label {
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.p100-telemetry-item .value {
+  font-size: 1.7rem;
+  font-weight: 900;
+  color: #f8fafc;
+  line-height: 1.1;
+}
+
+.p100-telemetry-item .value-sm {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.p100-telemetry-item .sub {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.p100-telemetry-item.reps .value {
+  color: #38bdf8;
+}
+
+.p100-telemetry-item.elbow.good {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.08);
+}
+.p100-telemetry-item.elbow.good .value {
+  color: #34d399;
+}
+
+.p100-telemetry-item.elbow.top {
+  border-color: rgba(56, 189, 248, 0.3);
+}
+.p100-telemetry-item.elbow.top .value {
+  color: #38bdf8;
+}
+
+.p100-telemetry-item.body.good .value {
+  color: #34d399;
+}
+.p100-telemetry-item.body.warning {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.08);
+}
+.p100-telemetry-item.body.warning .value {
+  color: #f87171;
+}
+
+.p100-testbench-instructions-card {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.p100-instructions-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.p100-instructions-content {
+  padding: 14px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.p100-instruction-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.p100-instruction-row .step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  font-weight: 800;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.p100-instruction-row strong {
+  display: block;
+  font-size: 0.9rem;
+  color: #f1f5f9;
+  margin-bottom: 2px;
+}
+
+.p100-instruction-row p {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.p100-instruction-row ul {
+  margin: 4px 0 0 16px;
+  padding: 0;
+  font-size: 0.82rem;
+  color: #cbd5e1;
+}
+
+.p100-instruction-row li {
+  margin-bottom: 2px;
+}
+
+.p100-testbench-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.p100-testbench-history h4 {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.p100-testbench-reps-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.p100-testbench-rep-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  font-size: 0.8rem;
+}
+
+.p100-testbench-rep-pill .rep-no {
+  font-weight: 800;
+  color: #e2e8f0;
+}
+
+.p100-testbench-rep-pill .rep-deg {
+  color: #38bdf8;
+}
+
+.p100-testbench-rep-pill .rep-dur {
+  color: #64748b;
+}
+
+

@@ -258,6 +258,25 @@ export function advanceLungeTracker(
 
 export type PushupPhase = "plank-top" | "descending" | "bottom" | "ascending";
 
+export interface PushupRepSummary {
+  repNumber: number;
+  durationMs: number;
+  minElbowAngle: number;
+  lockoutElbowAngle: number;
+  minBodyAlignmentDeg: number;
+  isFormWarning: boolean;
+  formMessage: string | null;
+  startedAtMs: number;
+  completedAtMs: number;
+}
+
+export interface PushupTrajectorySample {
+  timestampMs: number;
+  elbowAngle: number;
+  bodyLineDeg: number;
+  phase: PushupPhase;
+}
+
 export interface PushupTrackerState {
   phase: PushupPhase;
   reps: number;
@@ -265,6 +284,13 @@ export interface PushupTrackerState {
   bodyAlignmentDeg: number;
   isFormWarning: boolean;
   formMessage: string | null;
+  side: "left" | "right";
+  currentRepMinElbow?: number;
+  currentRepStartedAtMs?: number;
+  currentRepMinBodyDeg?: number;
+  repsHistory: PushupRepSummary[];
+  trajectorySamples: PushupTrajectorySample[];
+  lastSampleAtMs?: number;
 }
 
 export function createPushupTrackerState(): PushupTrackerState {
@@ -275,19 +301,27 @@ export function createPushupTrackerState(): PushupTrackerState {
     bodyAlignmentDeg: 180,
     isFormWarning: false,
     formMessage: null,
+    side: "left",
+    repsHistory: [],
+    trajectorySamples: [],
   };
 }
 
 export function advancePushupTracker(
   state: PushupTrackerState,
   landmarks: readonly MotionLandmark[],
-  _nowMs: number,
+  nowMs: number = performance.now(),
 ): PushupTrackerState {
-  const shoulder = landmarks[11];
-  const elbow = landmarks[13];
-  const wrist = landmarks[15];
-  const hip = landmarks[23];
-  const ankle = landmarks[27];
+  const leftVis = ((landmarks[11]?.visibility ?? 0) + (landmarks[13]?.visibility ?? 0) + (landmarks[15]?.visibility ?? 0)) / 3;
+  const rightVis = ((landmarks[12]?.visibility ?? 0) + (landmarks[14]?.visibility ?? 0) + (landmarks[16]?.visibility ?? 0)) / 3;
+  const useLeft = leftVis >= rightVis;
+  const side: "left" | "right" = useLeft ? "left" : "right";
+
+  const shoulder = useLeft ? landmarks[11] : landmarks[12];
+  const elbow = useLeft ? landmarks[13] : landmarks[14];
+  const wrist = useLeft ? landmarks[15] : landmarks[16];
+  const hip = useLeft ? landmarks[23] : landmarks[24];
+  const ankle = useLeft ? landmarks[27] : landmarks[28];
 
   if (!shoulder || !elbow || !wrist || !hip || !ankle) {
     return state;
@@ -301,6 +335,20 @@ export function advancePushupTracker(
 
   let nextPhase = state.phase;
   let nextReps = state.reps;
+  let currentRepMinElbow = state.currentRepMinElbow ?? elbowAngle;
+  let currentRepStartedAtMs = state.currentRepStartedAtMs;
+  let currentRepMinBodyDeg = state.currentRepMinBodyDeg ?? bodyLine;
+  const repsHistory = [...state.repsHistory];
+
+  // Track min/max during active rep
+  if (state.phase === "plank-top" && (elbowAngle < 140 || elbowAngle <= 95)) {
+    currentRepStartedAtMs = nowMs;
+    currentRepMinElbow = elbowAngle;
+    currentRepMinBodyDeg = bodyLine;
+  } else {
+    currentRepMinElbow = Math.min(currentRepMinElbow, elbowAngle);
+    currentRepMinBodyDeg = Math.min(currentRepMinBodyDeg, bodyLine);
+  }
 
   if (state.phase === "plank-top") {
     if (elbowAngle <= 95) {
@@ -319,6 +367,19 @@ export function advancePushupTracker(
       nextPhase = "plank-top";
       if (!isFormWarning) {
         nextReps += 1;
+        repsHistory.push({
+          repNumber: nextReps,
+          durationMs: currentRepStartedAtMs ? Math.round(nowMs - currentRepStartedAtMs) : 1500,
+          minElbowAngle: Math.round(currentRepMinElbow),
+          lockoutElbowAngle: Math.round(elbowAngle),
+          minBodyAlignmentDeg: Math.round(currentRepMinBodyDeg),
+          isFormWarning: false,
+          formMessage: null,
+          startedAtMs: currentRepStartedAtMs ?? (nowMs - 1500),
+          completedAtMs: nowMs,
+        });
+        currentRepMinElbow = 180;
+        currentRepStartedAtMs = undefined;
       }
     } else if (elbowAngle > 105) {
       nextPhase = "ascending";
@@ -328,10 +389,36 @@ export function advancePushupTracker(
       nextPhase = "plank-top";
       if (!isFormWarning) {
         nextReps += 1;
+        repsHistory.push({
+          repNumber: nextReps,
+          durationMs: currentRepStartedAtMs ? Math.round(nowMs - currentRepStartedAtMs) : 1500,
+          minElbowAngle: Math.round(currentRepMinElbow),
+          lockoutElbowAngle: Math.round(elbowAngle),
+          minBodyAlignmentDeg: Math.round(currentRepMinBodyDeg),
+          isFormWarning: false,
+          formMessage: null,
+          startedAtMs: currentRepStartedAtMs ?? (nowMs - 1500),
+          completedAtMs: nowMs,
+        });
+        currentRepMinElbow = 180;
+        currentRepStartedAtMs = undefined;
       }
     } else if (elbowAngle <= 95) {
       nextPhase = "bottom";
     }
+  }
+
+  // Record downsampled trajectory samples (~15 Hz)
+  let trajectorySamples = state.trajectorySamples;
+  const lastSampleAt = state.lastSampleAtMs ?? 0;
+  if (nowMs - lastSampleAt >= 65) {
+    const newSample: PushupTrajectorySample = {
+      timestampMs: Math.round(nowMs),
+      elbowAngle: Math.round(elbowAngle),
+      bodyLineDeg: Math.round(bodyLine),
+      phase: nextPhase,
+    };
+    trajectorySamples = [...trajectorySamples.slice(-299), newSample];
   }
 
   return {
@@ -342,6 +429,13 @@ export function advancePushupTracker(
     bodyAlignmentDeg: Math.round(bodyLine),
     isFormWarning,
     formMessage,
+    side,
+    currentRepMinElbow,
+    currentRepStartedAtMs,
+    currentRepMinBodyDeg,
+    repsHistory,
+    trajectorySamples,
+    lastSampleAtMs: nowMs,
   };
 }
 

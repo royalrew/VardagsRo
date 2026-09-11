@@ -40,7 +40,7 @@ import type { ExerciseFramingFeedback } from "@/lib/motion-camera-coach";
 import { angleDegrees } from "./motion-formatting";
 
 export type RestPreset = "30" | "45" | "60" | "dynamic";
-export type WorkoutPanelSelection = ExerciseType | TrackableExerciseId | "circuit" | ProgramId;
+export type WorkoutPanelSelection = ExerciseType | TrackableExerciseId | "circuit" | ProgramId | "cycling-intervals-30";
 
 export interface MotionWorkoutPanelProps {
   workoutSession: WorkoutSessionState;
@@ -179,6 +179,30 @@ export function MotionWorkoutPanel({
       {onChangeExercise && (
         <div className="p100-motion-exercise-picker">
           <label>Övningsbibliotek & Muskelprogram</label>
+          <div style={{ marginBottom: "8px" }}>
+            <button
+              type="button"
+              onClick={() => onChangeExercise("pushup")}
+              disabled={squatTrackingEnabled}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                borderRadius: "10px",
+                background: activeExercise === "pushup" ? "rgba(56, 189, 248, 0.25)" : "rgba(56, 189, 248, 0.12)",
+                border: "1px solid rgba(56, 189, 248, 0.35)",
+                color: "#38bdf8",
+                fontWeight: 700,
+                fontSize: "0.85rem",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.5rem",
+                cursor: "pointer",
+              }}
+            >
+              🧪 Provbänk: Starta Armhävningstest
+            </button>
+          </div>
           <div className="p100-motion-category-tabs" style={{ display: "flex", gap: 4, marginBottom: 8 }}>
             <button
               type="button"
@@ -232,14 +256,24 @@ export function MotionWorkoutPanel({
 
           <div className="p100-motion-exercise-buttons">
             {(filterCategory === "cardio" || filterCategory === "all") && (
-              <button
-                type="button"
-                className={activeExercise === "cycling" ? "active" : ""}
-                onClick={() => onChangeExercise("cycling")}
-                disabled={squatTrackingEnabled}
-              >
-                🚲 Spinninguppvärmning
-              </button>
+              <>
+                <button
+                  type="button"
+                  className={activeExercise === "cycling" ? "active" : ""}
+                  onClick={() => onChangeExercise("cycling")}
+                  disabled={squatTrackingEnabled}
+                >
+                  🚲 5 min Uppvärmning
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "cycling-intervals-30" ? "active" : ""}
+                  onClick={() => onChangeExercise("cycling-intervals-30")}
+                  disabled={squatTrackingEnabled}
+                >
+                  🚴‍♂️ 30 min Intervallpass (Motstånd)
+                </button>
+              </>
             )}
 
             {/* Programs view */}
@@ -292,6 +326,14 @@ export function MotionWorkoutPanel({
                   disabled={squatTrackingEnabled}
                 >
                   ⚡ 15m Cirkel
+                </button>
+                <button
+                  type="button"
+                  className={activeExercise === "cycling-intervals-30" ? "active" : ""}
+                  onClick={() => onChangeExercise("cycling-intervals-30")}
+                  disabled={squatTrackingEnabled}
+                >
+                  🚴‍♂️ 30 min Intervallcykling
                 </button>
               </>
             )}
