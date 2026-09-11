@@ -13401,4 +13401,14 @@ button.event-row:hover {
   color: #64748b;
 }
 
+.p100-cycling-test-bench {
+  border-color: rgba(52, 211, 153, 0.32);
+}
 
+.p100-cycling-test-bench:hover {
+  border-color: rgba(52, 211, 153, 0.45);
+}
+
+.p100-telemetry-item.cadence .value {
+  color: #34d399;
+}

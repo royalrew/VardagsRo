@@ -18,13 +18,16 @@ describe("Motion Lab focused training view", () => {
     expect(html).toContain("Starta mätning");
   });
 
-  it("opens the cycling flow without the strength calibration panel", () => {
+  it("opens the cycling test bench with calibration report and proceed to workout button", () => {
     const html = renderToStaticMarkup(createElement(MotionLab, {
       initialPairingCode: "123456",
       initialExercise: "cycling",
       initialWarmupMissionId: "mission-1",
     }));
-    expect(html).toContain("Spinning framför kameran");
+    expect(html).toContain("Test &amp; Kalibrering av Motionscykel");
+    expect(html).toContain("p100-cycling-test-bench");
+    expect(html).toContain("Starta kamera &amp; cykeltest");
+    expect(html).toContain("Starta 30 min Intervallpass");
     expect(html).not.toContain("p100-adaptive-camera");
     expect(html).not.toContain("p100-motion-session-control");
   });

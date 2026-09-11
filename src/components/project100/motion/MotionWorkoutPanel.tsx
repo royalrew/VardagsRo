@@ -109,7 +109,11 @@ export function MotionWorkoutPanel({
 }: MotionWorkoutPanelProps): React.JSX.Element {
   const [filterCategory, setFilterCategory] = React.useState<
     "all" | "cardio" | "bodyweight" | "dumbbell" | "kettlebell" | "programs"
-  >("all");
+  >(() => {
+    if (activeExercise === "cycling" || activeExercise === "cycling-intervals-30") return "cardio";
+    if (activeExercise === "pushup") return "bodyweight";
+    return "cardio";
+  });
 
   const libraryExerciseId = activeExercise as TrackableExerciseId;
   const libraryItem = EXERCISE_LIBRARY[libraryExerciseId];
@@ -179,29 +183,63 @@ export function MotionWorkoutPanel({
       {onChangeExercise && (
         <div className="p100-motion-exercise-picker">
           <label>Övningsbibliotek & Muskelprogram</label>
-          <div style={{ marginBottom: "8px" }}>
-            <button
-              type="button"
-              onClick={() => onChangeExercise("pushup")}
-              disabled={squatTrackingEnabled}
-              style={{
-                width: "100%",
-                padding: "8px 12px",
-                borderRadius: "10px",
-                background: activeExercise === "pushup" ? "rgba(56, 189, 248, 0.25)" : "rgba(56, 189, 248, 0.12)",
-                border: "1px solid rgba(56, 189, 248, 0.35)",
-                color: "#38bdf8",
-                fontWeight: 700,
-                fontSize: "0.85rem",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.5rem",
-                cursor: "pointer",
-              }}
-            >
-              🧪 Provbänk: Starta Armhävningstest
-            </button>
+          <div style={{ marginBottom: "12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+            <span style={{ fontSize: "0.68rem", color: "#94a3b8", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              🧪 Snabbval: Fysisk Kalibrering & Provbänkar
+            </span>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+              <button
+                type="button"
+                onClick={() => onChangeExercise("cycling")}
+                disabled={squatTrackingEnabled}
+                style={{
+                  padding: "10px 8px",
+                  borderRadius: "10px",
+                  background: activeExercise === "cycling" ? "rgba(52, 211, 153, 0.28)" : "rgba(52, 211, 153, 0.12)",
+                  border: activeExercise === "cycling" ? "1.5px solid #34d399" : "1px solid rgba(52, 211, 153, 0.35)",
+                  color: "#34d399",
+                  fontWeight: 700,
+                  fontSize: "0.78rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "2px",
+                  cursor: "pointer",
+                  textAlign: "center",
+                  boxShadow: activeExercise === "cycling" ? "0 0 12px rgba(52, 211, 153, 0.35)" : "none",
+                }}
+              >
+                <span style={{ fontSize: "0.95rem" }}>🚲 Motionscykel</span>
+                <span style={{ fontSize: "0.65rem", opacity: 0.85 }}>Provbänk & .json</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onChangeExercise("pushup")}
+                disabled={squatTrackingEnabled}
+                style={{
+                  padding: "10px 8px",
+                  borderRadius: "10px",
+                  background: activeExercise === "pushup" ? "rgba(56, 189, 248, 0.28)" : "rgba(56, 189, 248, 0.12)",
+                  border: activeExercise === "pushup" ? "1.5px solid #38bdf8" : "1px solid rgba(56, 189, 248, 0.35)",
+                  color: "#38bdf8",
+                  fontWeight: 700,
+                  fontSize: "0.78rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "2px",
+                  cursor: "pointer",
+                  textAlign: "center",
+                  boxShadow: activeExercise === "pushup" ? "0 0 12px rgba(56, 189, 248, 0.35)" : "none",
+                }}
+              >
+                <span style={{ fontSize: "0.95rem" }}>💪 Armhävningar</span>
+                <span style={{ fontSize: "0.65rem", opacity: 0.85 }}>Provbänk & .json</span>
+              </button>
+            </div>
           </div>
           <div className="p100-motion-category-tabs" style={{ display: "flex", gap: 4, marginBottom: 8 }}>
             <button
@@ -257,6 +295,20 @@ export function MotionWorkoutPanel({
           <div className="p100-motion-exercise-buttons">
             {(filterCategory === "cardio" || filterCategory === "all") && (
               <>
+                {filterCategory === "all" && (
+                  <div style={{ width: "100%", fontSize: "0.68rem", fontWeight: 800, color: "#34d399", letterSpacing: "0.06em", textTransform: "uppercase", marginTop: "4px" }}>
+                    🚲 Kondition & Cykel
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className={activeExercise === "cycling" ? "active" : ""}
+                  onClick={() => onChangeExercise("cycling")}
+                  disabled={squatTrackingEnabled}
+                  style={{ borderColor: "rgba(52, 211, 153, 0.4)", color: "#34d399" }}
+                >
+                  🧪 Testa motionscykel (Provbänk)
+                </button>
                 <button
                   type="button"
                   className={activeExercise === "cycling" ? "active" : ""}
@@ -271,7 +323,7 @@ export function MotionWorkoutPanel({
                   onClick={() => onChangeExercise("cycling-intervals-30")}
                   disabled={squatTrackingEnabled}
                 >
-                  🚴‍♂️ 30 min Intervallpass (Motstånd)
+                  🚴‍♂️ 30 min Intervallcykling (Motstånd)
                 </button>
               </>
             )}
@@ -279,6 +331,11 @@ export function MotionWorkoutPanel({
             {/* Programs view */}
             {(filterCategory === "programs" || filterCategory === "all") && (
               <>
+                {filterCategory === "all" && (
+                  <div style={{ width: "100%", fontSize: "0.68rem", fontWeight: 800, color: "#38bdf8", letterSpacing: "0.06em", textTransform: "uppercase", marginTop: "8px" }}>
+                    ⚡ Träningsprogram
+                  </div>
+                )}
                 <button
                   type="button"
                   className={activeExercise === "push-power" ? "active" : ""}
@@ -341,6 +398,11 @@ export function MotionWorkoutPanel({
             {/* Dumbbells view */}
             {(filterCategory === "dumbbell" || filterCategory === "all") && (
               <>
+                {filterCategory === "all" && (
+                  <div style={{ width: "100%", fontSize: "0.68rem", fontWeight: 800, color: "#a78bfa", letterSpacing: "0.06em", textTransform: "uppercase", marginTop: "8px" }}>
+                    🏋️ Hantlar
+                  </div>
+                )}
                 <button
                   type="button"
                   className={activeExercise === "bicep-curl" ? "active" : ""}
@@ -387,6 +449,11 @@ export function MotionWorkoutPanel({
             {/* Kettlebells view */}
             {(filterCategory === "kettlebell" || filterCategory === "all") && (
               <>
+                {filterCategory === "all" && (
+                  <div style={{ width: "100%", fontSize: "0.68rem", fontWeight: 800, color: "#f59e0b", letterSpacing: "0.06em", textTransform: "uppercase", marginTop: "8px" }}>
+                    🔔 Kettlebell
+                  </div>
+                )}
                 <button
                   type="button"
                   className={activeExercise === "kettlebell-swing" ? "active" : ""}
@@ -409,6 +476,20 @@ export function MotionWorkoutPanel({
             {/* Bodyweight / Calisthenics view */}
             {(filterCategory === "bodyweight" || filterCategory === "all") && (
               <>
+                {filterCategory === "all" && (
+                  <div style={{ width: "100%", fontSize: "0.68rem", fontWeight: 800, color: "#ec4899", letterSpacing: "0.06em", textTransform: "uppercase", marginTop: "8px" }}>
+                    🤸 Kroppsvikt
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className={activeExercise === "pushup" ? "active" : ""}
+                  onClick={() => onChangeExercise("pushup")}
+                  disabled={squatTrackingEnabled}
+                  style={{ borderColor: "rgba(56, 189, 248, 0.4)", color: "#38bdf8" }}
+                >
+                  🧪 Testa Armhävningar (Provbänk)
+                </button>
                 <button
                   type="button"
                   className={activeExercise === "squat" ? "active" : ""}

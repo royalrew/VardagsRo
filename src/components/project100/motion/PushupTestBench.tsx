@@ -27,6 +27,7 @@ export interface PushupTestBenchProps {
   onStartCamera: () => void | Promise<void>;
   onToggleTracking: () => void;
   onResetTracking: () => void;
+  onCloseTest?: () => void;
 }
 
 export function PushupTestBench({
@@ -37,6 +38,7 @@ export function PushupTestBench({
   onStartCamera,
   onToggleTracking,
   onResetTracking,
+  onCloseTest,
 }: PushupTestBenchProps) {
   const [copied, setCopied] = useState(false);
   const [showInstructions, setShowInstructions] = useState(true);
@@ -99,7 +101,31 @@ export function PushupTestBench({
   return (
     <section className="p100-pushup-test-bench" aria-label="Armhävnings Provbänk">
       {/* 1. Header & Main Trigger */}
-      <div className="p100-testbench-header">
+      <div className="p100-testbench-header" style={{ position: "relative" }}>
+        {onCloseTest ? (
+          <button
+            type="button"
+            onClick={onCloseTest}
+            title="Stäng provbänk"
+            aria-label="Stäng provbänk"
+            style={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: "8px",
+              color: "#94a3b8",
+              cursor: "pointer",
+              padding: "6px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            ✕
+          </button>
+        ) : null}
         <div className="p100-testbench-badge">
           <Sparkles size={14} />
           <span>PROVBÄNK · FYSISK KALIBRERING</span>

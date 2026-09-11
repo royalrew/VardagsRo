@@ -134,6 +134,7 @@ import {
   type CyclingIntervalSessionState,
 } from "@/lib/motion-cycling-intervals";
 import type { CyclingTrackerState } from "@/lib/motion-cycling";
+import { CyclingTestBench } from "./motion/CyclingTestBench";
 import { PushupTestBench } from "./motion/PushupTestBench";
 import { buildPushupTestReport } from "@/lib/motion-pushup-test";
 import type { PushupTrackerState } from "@/lib/motion-exercises";
@@ -3104,32 +3105,38 @@ export function MotionLab({
       </header>
 
       {activeWorkoutExercise === "cycling" ? (
-        <section className="p100-cycling-warmup-guide">
-          <div>
-            <span>Steg 1 · Uppvärmning</span>
-            <h2>Spinning framför kameran</h2>
-            <p>Ställ cykeln i profil. Kameran uppskattar pedalvarv, kadens och aktiv tid utan att bedöma din teknik.</p>
-          </div>
-          <div>
-            {!isLive ? (
-              <button type="button" onClick={() => void startCamera()} disabled={isStarting}>Starta kamera och uppvärmning</button>
-            ) : !squatTrackingEnabled ? (
-              <button type="button" onClick={toggleSquatTracking} disabled={!poseVisible}>
-                {poseVisible ? "Starta mätning" : "Sätt dig på cykeln · startar automatiskt"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  if (initialWarmupMissionId) {
-                    markCyclingWarmupComplete(initialWarmupMissionId);
-                  }
-                  router.push("/projekt-100/traning");
-                }}
-              >Avsluta uppvärmningen · {Math.round(unifiedTracker.holdSeconds)} sek</button>
-            )}
-          </div>
-        </section>
+        <CyclingTestBench
+          cyclingTracker={
+            unifiedTracker?.exerciseId === "cycling"
+              ? (unifiedTracker.trackerState as CyclingTrackerState)
+              : null
+          }
+          isLive={isLive}
+          trackingEnabled={squatTrackingEnabled}
+          poseVisible={poseVisible}
+          onStartCamera={() => void startCamera()}
+          onToggleTracking={toggleSquatTracking}
+          onResetTracking={resetSquatTracking}
+          onProceedToIntervals={() => {
+            setActiveWorkoutExercise("cycling-intervals-30");
+            const newSess = createCyclingIntervalSession();
+            setCyclingIntervalSession(newSess);
+            cyclingIntervalSessionRef.current = newSess;
+            lastCyclingStepIdRef.current = newSess.currentStep.id;
+            const tracker = createUnifiedExerciseTracker("cycling");
+            unifiedTrackerRef.current = tracker;
+            setUnifiedTracker(tracker);
+            speakSquatInstruction("Startar 30 minuters intervallcykling. Första blocket: Uppvärmning med lätt motstånd i 3 minuter. Nu kör vi!", true);
+          }}
+          onCloseTest={() => {
+            if (initialWarmupMissionId) {
+              markCyclingWarmupComplete(initialWarmupMissionId);
+              router.push("/projekt-100/traning");
+            } else {
+              setActiveWorkoutExercise("squat");
+            }
+          }}
+        />
       ) : activeWorkoutExercise === "cycling-intervals-30" ? (
         <section className="p100-cycling-warmup-guide">
           <div>
@@ -3160,6 +3167,7 @@ export function MotionLab({
           onStartCamera={() => void startCamera()}
           onToggleTracking={toggleSquatTracking}
           onResetTracking={resetSquatTracking}
+          onCloseTest={() => setActiveWorkoutExercise("squat")}
         />
       ) : null}
 
