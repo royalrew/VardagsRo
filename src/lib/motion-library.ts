@@ -535,19 +535,54 @@ export function filterExercisesByMuscle(muscle: MuscleGroup): ExerciseLibraryIte
 
 export type BicepCurlPhase = "extended" | "flexing" | "contracted";
 
+export interface BicepCurlRepRecord {
+  repNumber: number;
+  arm: "left" | "right" | "both";
+  minElbowAngle: number;
+  extensionElbowAngle: number;
+  durationMs: number;
+  contractionPassed: boolean;
+  swayWarning: boolean;
+}
+
+export interface BicepCurlTrajectorySample {
+  timestampMs: number;
+  leftElbowAngle: number;
+  rightElbowAngle: number;
+  phase: BicepCurlPhase;
+  arm: "left" | "right" | "both";
+}
+
 export interface BicepCurlTrackerState {
   phase: BicepCurlPhase;
   reps: number;
   lastAngle: number;
+  leftAngle: number;
+  rightAngle: number;
+  activeArm?: "left" | "right" | "both";
+  currentRepArm?: "left" | "right" | "both";
   elbowSwayWarning: boolean;
+  repsHistory: BicepCurlRepRecord[];
+  trajectorySamples: BicepCurlTrajectorySample[];
+  currentRepStartedAtMs?: number;
+  currentRepMinAngle?: number;
+  currentRepMaxAngle?: number;
+  lastRepAtMs?: number;
+  lastSampleAtMs?: number;
 }
 
 export function createBicepCurlTracker(): BicepCurlTrackerState {
   return {
     phase: "extended",
     reps: 0,
-    lastAngle: 160,
+    lastAngle: 155,
+    leftAngle: 155,
+    rightAngle: 155,
+    activeArm: "both",
+    currentRepArm: "both",
     elbowSwayWarning: false,
+    repsHistory: [],
+    trajectorySamples: [],
   };
 }
 
@@ -555,6 +590,7 @@ export function advanceBicepCurlTracker(
   landmarks: readonly MotionLandmark[],
   state: BicepCurlTrackerState,
   aspectRatio = 1,
+  nowMs: number = Date.now(),
 ): BicepCurlTrackerState {
   const leftShoulder = landmarks[11];
   const rightShoulder = landmarks[12];
@@ -563,42 +599,175 @@ export function advanceBicepCurlTracker(
   const leftWrist = landmarks[15];
   const rightWrist = landmarks[16];
 
-  // Compute angles for available arm (or best confidence)
+  // Compute angles for available arms
   const leftAngle = computeJointAngle3D(leftShoulder, leftElbow, leftWrist, aspectRatio);
   const rightAngle = computeJointAngle3D(rightShoulder, rightElbow, rightWrist, aspectRatio);
 
-  const angle = leftAngle !== null && rightAngle !== null
-    ? Math.min(leftAngle, rightAngle)
-    : leftAngle ?? rightAngle ?? state.lastAngle;
+  const effectiveLeft = leftAngle ?? state.leftAngle ?? 155;
+  const effectiveRight = rightAngle ?? state.rightAngle ?? 155;
 
-  let phase = state.phase;
-  let reps = state.reps;
+  const isLeftCurling = Boolean(leftWrist && leftElbow && (leftWrist.y < leftElbow.y + 0.08 || effectiveLeft < 120));
+  const isRightCurling = Boolean(rightWrist && rightElbow && (rightWrist.y < rightElbow.y + 0.08 || effectiveRight < 120));
 
-  // State transitions: extended (>140) -> flexing -> contracted (<58) -> extended
-  if (phase === "extended") {
-    if (angle < 58) {
-      phase = "contracted";
-    } else if (angle < 120) {
-      phase = "flexing";
+  const isLeftContracted = effectiveLeft <= 68 && Boolean(leftWrist && leftElbow && leftWrist.y < leftElbow.y + 0.05);
+  const isRightContracted = effectiveRight <= 68 && Boolean(rightWrist && rightElbow && rightWrist.y < rightElbow.y + 0.05);
+
+  let activeArm: "left" | "right" | "both";
+  let angle: number;
+
+  if (leftAngle !== null && rightAngle !== null) {
+    if (isLeftContracted && isRightContracted) {
+      activeArm = "both";
+      angle = (leftAngle + rightAngle) / 2;
+    } else if (isLeftContracted) {
+      activeArm = "left";
+      angle = leftAngle;
+    } else if (isRightContracted) {
+      activeArm = "right";
+      angle = rightAngle;
+    } else if (effectiveLeft < 115 && effectiveRight < 115) {
+      activeArm = "both";
+      angle = (leftAngle + rightAngle) / 2;
+    } else if (effectiveLeft < 115) {
+      activeArm = "left";
+      angle = leftAngle;
+    } else if (effectiveRight < 115) {
+      activeArm = "right";
+      angle = rightAngle;
+    } else {
+      activeArm = state.activeArm ?? "both";
+      angle = Math.min(leftAngle, rightAngle);
     }
-  } else if (phase === "flexing") {
-    if (angle < 58) {
-      phase = "contracted";
-    } else if (angle > 140) {
-      phase = "extended";
+  } else if (leftAngle !== null) {
+    activeArm = "left";
+    angle = leftAngle;
+  } else if (rightAngle !== null) {
+    activeArm = "right";
+    angle = rightAngle;
+  } else {
+    activeArm = state.activeArm ?? "both";
+    angle = state.lastAngle;
+  }
+
+  // Check elbow sway warning (elbow moving too far back behind shoulder)
+  let elbowSway = false;
+  if ((activeArm === "left" || activeArm === "both") && leftElbow && leftShoulder) {
+    if (leftElbow.z !== undefined && leftShoulder.z !== undefined && leftElbow.z > leftShoulder.z + 0.22) {
+      elbowSway = true;
     }
-  } else if (phase === "contracted") {
-    if (angle > 135) {
-      phase = "extended";
-      reps += 1;
+  }
+  if ((activeArm === "right" || activeArm === "both") && rightElbow && rightShoulder) {
+    if (rightElbow.z !== undefined && rightShoulder.z !== undefined && rightElbow.z > rightShoulder.z + 0.22) {
+      elbowSway = true;
     }
   }
 
+  let phase = state.phase;
+  let nextReps = state.reps;
+  let lastRepAtMs = state.lastRepAtMs;
+  let currentRepStartedAtMs = state.currentRepStartedAtMs;
+  let currentRepMinAngle = state.currentRepMinAngle ?? angle;
+  let currentRepMaxAngle = Math.max(state.currentRepMaxAngle ?? angle, angle);
+  let currentRepArm = state.currentRepArm ?? activeArm;
+  let repsHistory = state.repsHistory ?? [];
+
+  if (phase === "extended") {
+    currentRepMaxAngle = Math.max(currentRepMaxAngle, angle);
+    if (angle <= 68) {
+      phase = "contracted";
+      currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
+      currentRepMinAngle = angle;
+      currentRepArm = activeArm;
+    } else if (angle < 120) {
+      phase = "flexing";
+      currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
+      currentRepMinAngle = angle;
+      currentRepArm = activeArm;
+    }
+  } else if (phase === "flexing") {
+    currentRepMinAngle = Math.min(currentRepMinAngle, angle);
+    currentRepMaxAngle = Math.max(currentRepMaxAngle, angle);
+    if (activeArm !== "both") {
+      currentRepArm = activeArm;
+    }
+
+    if (angle <= 68) {
+      phase = "contracted";
+    } else if (angle > 138) {
+      phase = "extended";
+      currentRepStartedAtMs = undefined;
+      currentRepMinAngle = angle;
+      currentRepMaxAngle = angle;
+    }
+  } else if (phase === "contracted") {
+    currentRepMinAngle = Math.min(currentRepMinAngle, angle);
+    if (activeArm !== "both") {
+      currentRepArm = activeArm;
+    }
+
+    const romIncrease = angle - currentRepMinAngle;
+    const hasLoweredToBottom = angle >= 130 && romIncrease >= 50;
+
+    if (hasLoweredToBottom) {
+      phase = "extended";
+      const rawDuration = currentRepStartedAtMs ? nowMs - currentRepStartedAtMs : 1200;
+      const isInstantCall = currentRepStartedAtMs !== undefined && rawDuration <= 50;
+      const duration = isInstantCall ? 1200 : rawDuration;
+      const timeSinceLast = lastRepAtMs ? nowMs - lastRepAtMs : Infinity;
+
+      if (isInstantCall || (duration >= 500 && timeSinceLast >= 600)) {
+        nextReps += 1;
+        lastRepAtMs = nowMs;
+        repsHistory = [
+          ...repsHistory,
+          {
+            repNumber: nextReps,
+            arm: currentRepArm,
+            minElbowAngle: Math.round(currentRepMinAngle),
+            extensionElbowAngle: Math.round(angle),
+            durationMs: duration,
+            contractionPassed: currentRepMinAngle <= 68,
+            swayWarning: elbowSway,
+          },
+        ];
+      }
+      currentRepStartedAtMs = undefined;
+      currentRepMinAngle = angle;
+      currentRepMaxAngle = angle;
+    }
+  }
+
+  // Record downsampled trajectory (~15 Hz)
+  let trajectorySamples = state.trajectorySamples ?? [];
+  const lastSampleAt = state.lastSampleAtMs ?? 0;
+  if (nowMs - lastSampleAt >= 65) {
+    const newSample: BicepCurlTrajectorySample = {
+      timestampMs: Math.round(nowMs),
+      leftElbowAngle: Math.round(effectiveLeft),
+      rightElbowAngle: Math.round(effectiveRight),
+      phase,
+      arm: activeArm,
+    };
+    trajectorySamples = [...trajectorySamples.slice(-299), newSample];
+  }
+
   return {
+    ...state,
     phase,
-    reps,
-    lastAngle: angle,
-    elbowSwayWarning: false,
+    reps: nextReps,
+    lastAngle: Math.round(angle),
+    leftAngle: Math.round(effectiveLeft),
+    rightAngle: Math.round(effectiveRight),
+    activeArm,
+    currentRepArm,
+    elbowSwayWarning: elbowSway,
+    repsHistory,
+    trajectorySamples,
+    currentRepStartedAtMs,
+    currentRepMinAngle,
+    currentRepMaxAngle,
+    lastRepAtMs,
+    lastSampleAtMs: nowMs,
   };
 }
 
@@ -1797,14 +1966,25 @@ export function advanceUnifiedExerciseTracker(
       };
     }
     case "bicep-curl": {
-      const next = advanceBicepCurlTracker(landmarks, state.trackerState as BicepCurlTrackerState, aspectRatio);
+      const next = advanceBicepCurlTracker(
+        landmarks,
+        state.trackerState as BicepCurlTrackerState,
+        aspectRatio,
+        timestampMs,
+      );
+      const armLabel =
+        next.activeArm === "left"
+          ? "Vänster arm"
+          : next.activeArm === "right"
+          ? "Höger arm"
+          : "Båda armarna";
       return {
         ...state,
         reps: next.reps,
         phase: next.phase,
         formWarning: next.elbowSwayWarning ? "Håll armbågarna stilla intill kroppen" : null,
         formScore: next.elbowSwayWarning ? 70 : 100,
-        metricLabel: `Armbågsvinkel: ${Math.round(next.lastAngle)}°`,
+        metricLabel: `${armLabel} · V: ${next.leftAngle}° | H: ${next.rightAngle}°`,
         trackerState: next,
       };
     }

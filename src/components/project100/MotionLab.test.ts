@@ -66,15 +66,24 @@ describe("Motion Lab focused training view", () => {
     expect(html).not.toContain("p100-adaptive-camera");
   });
 
-  it("opens the overhead press test bench with instructions and copy report button", () => {
+  it("renders overhead press in clean production mode with adaptive camera setup", () => {
     const html = renderToStaticMarkup(createElement(MotionLab, {
       initialPairingCode: "123456",
       initialExercise: "overhead-press",
     }));
-    expect(html).toContain("Axelpress");
-    expect(html).toContain("p100-overhead-test-bench");
-    expect(html).toContain("Instruktioner &amp; kamerahöjd");
-    expect(html).toContain("Starta kamera &amp; axelpresstest");
+    expect(html).toContain("Hantel-axelpress");
+    expect(html).toContain("p100-adaptive-camera");
+    expect(html).not.toContain("p100-overhead-test-bench");
+  });
+
+  it("opens the bicep curl test bench with instructions and copy report button", () => {
+    const html = renderToStaticMarkup(createElement(MotionLab, {
+      initialPairingCode: "123456",
+      initialExercise: "bicep-curl",
+    }));
+    expect(html).toContain("Bicepscurl");
+    expect(html).toContain("Bicepscurl – Kalibrering");
+    expect(html).toContain("Starta kamera &amp; bicepscurltest");
     expect(html).not.toContain("p100-adaptive-camera");
   });
 });

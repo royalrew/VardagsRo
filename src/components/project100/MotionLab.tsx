@@ -137,11 +137,13 @@ import type { CyclingTrackerState } from "@/lib/motion-cycling";
 import { CyclingTestBench } from "./motion/CyclingTestBench";
 import { LungeTestBench } from "./motion/LungeTestBench";
 import { OverheadPressTestBench } from "./motion/OverheadPressTestBench";
+import { BicepCurlTestBench } from "./motion/BicepCurlTestBench";
 import { buildPushupTestReport } from "@/lib/motion-pushup-test";
 import { buildLungeTestReport } from "@/lib/motion-lunge-test";
 import { buildOverheadPressTestReport } from "@/lib/motion-overhead-press-test";
+import { buildBicepCurlTestReport } from "@/lib/motion-bicep-curl-test";
 import type { PushupTrackerState, LungeTrackerState } from "@/lib/motion-exercises";
-import type { OverheadPressTrackerState } from "@/lib/motion-library";
+import type { OverheadPressTrackerState, BicepCurlTrackerState } from "@/lib/motion-library";
 import { MotionDiagnosticsOverlay, type BaselineNoticeState } from "./motion/MotionDiagnosticsOverlay";
 import {
   MotionDiagnosticsPanel,
@@ -1721,6 +1723,9 @@ export function MotionLab({
     } else if (activeWorkoutExercise === "lunge" && unifiedTrackerRef.current.exerciseId === "lunge") {
       const lState = unifiedTrackerRef.current.trackerState as LungeTrackerState;
       reportJson = JSON.stringify(buildLungeTestReport(lState), null, 2);
+    } else if (activeWorkoutExercise === "bicep-curl" && unifiedTrackerRef.current.exerciseId === "bicep-curl") {
+      const bcState = unifiedTrackerRef.current.trackerState as BicepCurlTrackerState;
+      reportJson = JSON.stringify(buildBicepCurlTestReport(bcState), null, 2);
     } else if (activeWorkoutExercise === "overhead-press" && unifiedTrackerRef.current.exerciseId === "overhead-press") {
       const opState = unifiedTrackerRef.current.trackerState as OverheadPressTrackerState;
       reportJson = JSON.stringify(buildOverheadPressTestReport(opState), null, 2);
@@ -1775,6 +1780,19 @@ export function MotionLab({
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = `utfall-provrapport-${report.testedAt.slice(0, 19).replaceAll(":", "-")}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    if (activeWorkoutExercise === "bicep-curl" && unifiedTrackerRef.current.exerciseId === "bicep-curl") {
+      const bcState = unifiedTrackerRef.current.trackerState as BicepCurlTrackerState;
+      const report = buildBicepCurlTestReport(bcState);
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `bicepscurl-provrapport-${report.testedAt.slice(0, 19).replaceAll(":", "-")}.json`;
       anchor.click();
       URL.revokeObjectURL(url);
       return;
@@ -3207,11 +3225,11 @@ export function MotionLab({
         />
       ) : null}
 
-      {activeWorkoutExercise === "overhead-press" ? (
-        <OverheadPressTestBench
-          pressTracker={
-            unifiedTracker?.exerciseId === "overhead-press"
-              ? (unifiedTracker.trackerState as OverheadPressTrackerState)
+      {activeWorkoutExercise === "bicep-curl" ? (
+        <BicepCurlTestBench
+          curlTracker={
+            unifiedTracker?.exerciseId === "bicep-curl"
+              ? (unifiedTracker.trackerState as BicepCurlTrackerState)
               : null
           }
           isLive={isLive}
@@ -3227,7 +3245,7 @@ export function MotionLab({
       {activeTrackableExerciseId &&
       activeTrackableExerciseId !== "cycling" &&
       activeTrackableExerciseId !== "lunge" &&
-      activeTrackableExerciseId !== "overhead-press" ? (
+      activeTrackableExerciseId !== "bicep-curl" ? (
         <AdaptiveCameraSetupPanel
           key={`${activeTrackableExerciseId}-${initialMissionLaunch?.environment ?? "free"}`}
           exerciseId={activeTrackableExerciseId}
