@@ -135,8 +135,10 @@ import {
 } from "@/lib/motion-cycling-intervals";
 import type { CyclingTrackerState } from "@/lib/motion-cycling";
 import { CyclingTestBench } from "./motion/CyclingTestBench";
+import { LungeTestBench } from "./motion/LungeTestBench";
 import { buildPushupTestReport } from "@/lib/motion-pushup-test";
-import type { PushupTrackerState } from "@/lib/motion-exercises";
+import { buildLungeTestReport } from "@/lib/motion-lunge-test";
+import type { PushupTrackerState, LungeTrackerState } from "@/lib/motion-exercises";
 import { MotionDiagnosticsOverlay, type BaselineNoticeState } from "./motion/MotionDiagnosticsOverlay";
 import {
   MotionDiagnosticsPanel,
@@ -1713,6 +1715,9 @@ export function MotionLab({
     if (activeWorkoutExercise === "pushup" && unifiedTrackerRef.current.exerciseId === "pushup") {
       const pState = unifiedTrackerRef.current.trackerState as PushupTrackerState;
       reportJson = JSON.stringify(buildPushupTestReport(pState), null, 2);
+    } else if (activeWorkoutExercise === "lunge" && unifiedTrackerRef.current.exerciseId === "lunge") {
+      const lState = unifiedTrackerRef.current.trackerState as LungeTrackerState;
+      reportJson = JSON.stringify(buildLungeTestReport(lState), null, 2);
     } else if (squatProtocolRef.current === "workout-step-31") {
       reportJson = JSON.stringify(buildWorkoutSessionReport(workoutSessionRef.current), null, 2);
     } else {
@@ -1751,6 +1756,19 @@ export function MotionLab({
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = `armhavning-provrapport-${report.testedAt.slice(0, 19).replaceAll(":", "-")}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    if (activeWorkoutExercise === "lunge" && unifiedTrackerRef.current.exerciseId === "lunge") {
+      const lState = unifiedTrackerRef.current.trackerState as LungeTrackerState;
+      const report = buildLungeTestReport(lState);
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `utfall-provrapport-${report.testedAt.slice(0, 19).replaceAll(":", "-")}.json`;
       anchor.click();
       URL.revokeObjectURL(url);
       return;
@@ -3153,7 +3171,24 @@ export function MotionLab({
         </section>
       ) : null}
 
-      {activeTrackableExerciseId && activeTrackableExerciseId !== "cycling" ? (
+      {activeWorkoutExercise === "lunge" ? (
+        <LungeTestBench
+          lungeTracker={
+            unifiedTracker?.exerciseId === "lunge"
+              ? (unifiedTracker.trackerState as LungeTrackerState)
+              : null
+          }
+          isLive={isLive}
+          trackingEnabled={squatTrackingEnabled}
+          poseVisible={poseVisible}
+          onStartCamera={() => void startCamera()}
+          onToggleTracking={toggleSquatTracking}
+          onResetTracking={resetSquatTracking}
+          onCloseTest={() => setActiveWorkoutExercise("squat")}
+        />
+      ) : null}
+
+      {activeTrackableExerciseId && activeTrackableExerciseId !== "cycling" && activeTrackableExerciseId !== "lunge" ? (
         <AdaptiveCameraSetupPanel
           key={`${activeTrackableExerciseId}-${initialMissionLaunch?.environment ?? "free"}`}
           exerciseId={activeTrackableExerciseId}

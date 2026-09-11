@@ -165,12 +165,34 @@ export function computeJointAngle(
 
 export type LungePhase = "standing" | "descending" | "bottom" | "ascending";
 
+export interface LungeRepRecord {
+  repNumber: number;
+  leadLeg: "left" | "right";
+  minKneeAngle: number;
+  lockoutKneeAngle: number;
+  durationMs: number;
+  depthPassed: boolean;
+  lockoutPassed: boolean;
+}
+
+export interface LungeTrajectorySample {
+  timestampMs: number;
+  kneeAngle: number;
+  phase: LungePhase;
+  leadLeg: "left" | "right" | null;
+}
+
 export interface LungeTrackerState {
   phase: LungePhase;
   reps: number;
   leadLeg: "left" | "right" | null;
   kneeAngle: number;
   lastRepAtMs: number | null;
+  repsHistory: LungeRepRecord[];
+  trajectorySamples: LungeTrajectorySample[];
+  currentRepMinKnee?: number;
+  currentRepStartedAtMs?: number;
+  lastSampleAtMs?: number;
 }
 
 export function createLungeTrackerState(): LungeTrackerState {
@@ -180,8 +202,16 @@ export function createLungeTrackerState(): LungeTrackerState {
     leadLeg: null,
     kneeAngle: 180,
     lastRepAtMs: null,
+    repsHistory: [],
+    trajectorySamples: [],
   };
 }
+
+const MIN_LUNGE_REP_DURATION_MS = 600;
+const MIN_LUNGE_REP_INTERVAL_MS = 500;
+const LUNGE_BOTTOM_THRESHOLD = 100;
+const LUNGE_DESCENDING_THRESHOLD = 148;
+const LUNGE_STANDING_THRESHOLD = 155;
 
 export function advanceLungeTracker(
   state: LungeTrackerState,
@@ -196,59 +226,143 @@ export function advanceLungeTracker(
   const rightKnee = landmarks[26];
   const rightAnkle = landmarks[28];
 
-  if (!leftHip || !leftKnee || !leftAnkle || !rightHip || !rightKnee || !rightAnkle) {
+  const leftKneeAngle =
+    leftHip && leftKnee && leftAnkle
+      ? computeJointAngle(leftHip, leftKnee, leftAnkle)
+      : null;
+  const rightKneeAngle =
+    rightHip && rightKnee && rightAnkle
+      ? computeJointAngle(rightHip, rightKnee, rightAnkle)
+      : null;
+
+  if (leftKneeAngle === null && rightKneeAngle === null) {
     return state;
   }
 
-  const leftKneeAngle = computeJointAngle(leftHip, leftKnee, leftAnkle) ?? 180;
-  const rightKneeAngle = computeJointAngle(rightHip, rightKnee, rightAnkle) ?? 180;
+  // Active leg is the one bending deepest, or the only visible one
+  let isLeftLead: boolean;
+  let activeKneeAngle: number;
 
-  // Lead leg is the one bending forward/deepest
-  const isLeftLead = leftKneeAngle <= rightKneeAngle;
-  const activeKneeAngle = isLeftLead ? leftKneeAngle : rightKneeAngle;
-  const leadLeg = isLeftLead ? "left" : "right";
+  if (leftKneeAngle !== null && rightKneeAngle !== null) {
+    isLeftLead = leftKneeAngle <= rightKneeAngle;
+    activeKneeAngle = isLeftLead ? leftKneeAngle : rightKneeAngle;
+  } else if (leftKneeAngle !== null) {
+    isLeftLead = true;
+    activeKneeAngle = leftKneeAngle;
+  } else {
+    isLeftLead = false;
+    activeKneeAngle = rightKneeAngle!;
+  }
+
+  const detectedLeadLeg: "left" | "right" = isLeftLead ? "left" : "right";
 
   let nextPhase = state.phase;
   let nextReps = state.reps;
   let lastRepAtMs = state.lastRepAtMs;
+  let currentRepMinKnee = state.currentRepMinKnee ?? activeKneeAngle;
+  let currentRepStartedAtMs = state.currentRepStartedAtMs;
+  let repsHistory = state.repsHistory ?? [];
 
   if (state.phase === "standing") {
-    if (activeKneeAngle <= 95) {
+    if (activeKneeAngle <= LUNGE_BOTTOM_THRESHOLD) {
       nextPhase = "bottom";
-    } else if (activeKneeAngle < 150) {
+      currentRepMinKnee = activeKneeAngle;
+      currentRepStartedAtMs = nowMs;
+    } else if (activeKneeAngle < LUNGE_DESCENDING_THRESHOLD) {
       nextPhase = "descending";
+      currentRepMinKnee = activeKneeAngle;
+      currentRepStartedAtMs = nowMs;
     }
   } else if (state.phase === "descending") {
-    if (activeKneeAngle <= 95) {
+    currentRepMinKnee = Math.min(currentRepMinKnee, activeKneeAngle);
+    if (activeKneeAngle <= LUNGE_BOTTOM_THRESHOLD) {
       nextPhase = "bottom";
-    } else if (activeKneeAngle > 155) {
+    } else if (activeKneeAngle > LUNGE_STANDING_THRESHOLD) {
       nextPhase = "standing";
+      currentRepMinKnee = 180;
+      currentRepStartedAtMs = undefined;
     }
   } else if (state.phase === "bottom") {
-    if (activeKneeAngle >= 150) {
+    currentRepMinKnee = Math.min(currentRepMinKnee, activeKneeAngle);
+    if (activeKneeAngle >= LUNGE_STANDING_THRESHOLD) {
+      const duration = currentRepStartedAtMs ? nowMs - currentRepStartedAtMs : 1000;
+      const timeSinceLast = lastRepAtMs ? nowMs - lastRepAtMs : Infinity;
+      if (duration >= MIN_LUNGE_REP_DURATION_MS && timeSinceLast >= MIN_LUNGE_REP_INTERVAL_MS) {
+        nextReps += 1;
+        lastRepAtMs = nowMs;
+        repsHistory = [
+          ...repsHistory,
+          {
+            repNumber: nextReps,
+            leadLeg: detectedLeadLeg,
+            minKneeAngle: Math.round(currentRepMinKnee),
+            lockoutKneeAngle: Math.round(activeKneeAngle),
+            durationMs: duration,
+            depthPassed: currentRepMinKnee <= 105,
+            lockoutPassed: activeKneeAngle >= 150,
+          },
+        ];
+      }
       nextPhase = "standing";
-      nextReps += 1;
-      lastRepAtMs = nowMs;
+      currentRepMinKnee = 180;
+      currentRepStartedAtMs = undefined;
     } else if (activeKneeAngle > 105) {
       nextPhase = "ascending";
     }
   } else if (state.phase === "ascending") {
-    if (activeKneeAngle >= 155) {
+    if (activeKneeAngle >= LUNGE_STANDING_THRESHOLD) {
+      const duration = currentRepStartedAtMs ? nowMs - currentRepStartedAtMs : 1000;
+      const timeSinceLast = lastRepAtMs ? nowMs - lastRepAtMs : Infinity;
+      if (duration >= MIN_LUNGE_REP_DURATION_MS && timeSinceLast >= MIN_LUNGE_REP_INTERVAL_MS) {
+        nextReps += 1;
+        lastRepAtMs = nowMs;
+        repsHistory = [
+          ...repsHistory,
+          {
+            repNumber: nextReps,
+            leadLeg: detectedLeadLeg,
+            minKneeAngle: Math.round(currentRepMinKnee),
+            lockoutKneeAngle: Math.round(activeKneeAngle),
+            durationMs: duration,
+            depthPassed: currentRepMinKnee <= 105,
+            lockoutPassed: activeKneeAngle >= 150,
+          },
+        ];
+      }
       nextPhase = "standing";
-      nextReps += 1;
-      lastRepAtMs = nowMs;
-    } else if (activeKneeAngle <= 95) {
+      currentRepMinKnee = 180;
+      currentRepStartedAtMs = undefined;
+    } else if (activeKneeAngle <= LUNGE_BOTTOM_THRESHOLD) {
       nextPhase = "bottom";
+      currentRepMinKnee = Math.min(currentRepMinKnee, activeKneeAngle);
     }
+  }
+
+  // Downsample trajectory samples to ~15 Hz
+  let trajectorySamples = state.trajectorySamples ?? [];
+  const lastSampleAt = state.lastSampleAtMs ?? 0;
+  if (nowMs - lastSampleAt >= 65) {
+    const newSample: LungeTrajectorySample = {
+      timestampMs: Math.round(nowMs),
+      kneeAngle: Math.round(activeKneeAngle),
+      phase: nextPhase,
+      leadLeg: detectedLeadLeg,
+    };
+    trajectorySamples = [...trajectorySamples.slice(-299), newSample];
   }
 
   return {
     ...state,
     phase: nextPhase,
     reps: nextReps,
-    leadLeg: nextPhase === "standing" && state.phase !== "ascending" ? state.leadLeg : leadLeg,
+    leadLeg: nextPhase === "standing" && state.phase !== "ascending" ? state.leadLeg : detectedLeadLeg,
     kneeAngle: Math.round(activeKneeAngle),
     lastRepAtMs,
+    currentRepMinKnee,
+    currentRepStartedAtMs,
+    repsHistory,
+    trajectorySamples,
+    lastSampleAtMs: nowMs,
   };
 }
 

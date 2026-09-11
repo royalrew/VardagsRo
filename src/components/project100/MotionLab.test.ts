@@ -53,4 +53,16 @@ describe("Motion Lab focused training view", () => {
     expect(html).toContain("p100-adaptive-camera");
     expect(html).not.toContain("p100-pushup-test-bench");
   });
+
+  it("opens the lunge test bench with instructions and copy report button", () => {
+    const html = renderToStaticMarkup(createElement(MotionLab, {
+      initialPairingCode: "123456",
+      initialExercise: "lunge",
+    }));
+    expect(html).toContain("Utfallstest");
+    expect(html).toContain("p100-lunge-test-bench");
+    expect(html).toContain("Instruktioner för vinklar &amp; kameraplacering");
+    expect(html).toContain("Starta kamera &amp; utfallstest");
+    expect(html).not.toContain("p100-adaptive-camera");
+  });
 });

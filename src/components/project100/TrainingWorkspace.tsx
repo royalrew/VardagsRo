@@ -1405,6 +1405,14 @@ export function TrainingWorkspace({
           </Link>
           <Link
             className="p100-button-secondary"
+            href="/projekt-100/traning/motion?exercise=lunge"
+            title="Starta utfallstest (snett mot TV:n 30°–45°) med live knävinkel och 1-klicks JSON-rapport"
+            style={{ borderColor: "rgba(56, 189, 248, 0.55)", color: "#38bdf8", fontWeight: 700 }}
+          >
+            <Sparkles size={16} /> 🦵 Testa utfall
+          </Link>
+          <Link
+            className="p100-button-secondary"
             href="/projekt-100/traning/motion?exercise=cycling-intervals-30"
             title="Starta 30 minuters intervallpass på motionscykel med motståndsguidning"
           >
