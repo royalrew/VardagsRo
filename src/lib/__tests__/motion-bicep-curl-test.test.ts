@@ -192,12 +192,14 @@ describe("Bicep Curl Engine & Test Report", () => {
     const lm = createBaseBodyLandmarks();
 
     // User starts tracker while already holding arms bent at 90 deg
+    lm[15] = createMockLandmark(0.38, 0.48, 0);
     lm[16] = createMockLandmark(0.62, 0.48, 0);
     state = advanceBicepCurlTracker(lm, state, 1, 1000);
     expect(state.reps).toBe(0);
     expect(state.phase).toBe("extended"); // Won't transition to contracted because no starting extension
 
     // Now user lowers dumbbells to sides (establishing bottom position)
+    lm[15] = createMockLandmark(0.38, 0.75, 0);
     lm[16] = createMockLandmark(0.62, 0.75, 0);
     state = advanceBicepCurlTracker(lm, state, 1, 2000);
     expect(state.hasEstablishedStartingExtension).toBe(true);

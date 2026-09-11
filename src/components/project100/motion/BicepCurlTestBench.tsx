@@ -121,7 +121,7 @@ export function BicepCurlTestBench({
   const elbowSwayWarning = curlTracker?.elbowSwayWarning ?? false;
 
   const isContracted = phase === "contracted" || lastAngle <= 106;
-  const isExtended = phase === "extended" || lastAngle >= 126;
+  const isExtended = phase === "extended" || lastAngle >= 118;
 
   const phaseLabel =
     phase === "extended"
@@ -361,16 +361,16 @@ export function BicepCurlTestBench({
         <div className="p100-testbench-metric-card">
           <span className="label">Vinkel Vänster / Höger</span>
           <div style={{ display: "flex", gap: "12px", alignItems: "baseline", marginTop: "4px" }}>
-            <span style={{ fontSize: "1.3rem", fontWeight: 700, color: leftAngle <= 106 ? "#34d399" : leftAngle >= 126 ? "#38bdf8" : "#fbbf24" }}>
+            <span style={{ fontSize: "1.3rem", fontWeight: 700, color: leftAngle <= 106 ? "#34d399" : leftAngle >= 118 ? "#38bdf8" : "#fbbf24" }}>
               V: {leftAngle}°
             </span>
             <span style={{ color: "#64748b" }}>|</span>
-            <span style={{ fontSize: "1.3rem", fontWeight: 700, color: rightAngle <= 106 ? "#34d399" : rightAngle >= 126 ? "#38bdf8" : "#fbbf24" }}>
+            <span style={{ fontSize: "1.3rem", fontWeight: 700, color: rightAngle <= 106 ? "#34d399" : rightAngle >= 118 ? "#38bdf8" : "#fbbf24" }}>
               H: {rightAngle}°
             </span>
           </div>
           <span className="sub">
-            {isContracted ? "🟢 Toppkontraktion (<= 106°)" : isExtended ? "Bottenläge (>= 126°)" : "Curlar..."}
+            {isContracted ? "🟢 Toppkontraktion (<= 106°)" : isExtended ? "Bottenläge (>= 118°)" : "Curlar..."}
           </span>
         </div>
 

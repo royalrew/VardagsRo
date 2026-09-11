@@ -634,42 +634,33 @@ export function advanceBicepCurlTracker(
   const isLeftContracted = effectiveLeft <= 106;
   const isRightContracted = effectiveRight <= 106;
 
+  // 1. Identify which arm(s) are actively moving or contracting
   let activeArm: "left" | "right" | "both";
-  let angle: number;
-
-  if (leftAngle !== null && rightAngle !== null) {
-    if (isLeftContracted && isRightContracted) {
-      activeArm = "both";
-      angle = (leftAngle + rightAngle) / 2;
-    } else if (isLeftContracted && effectiveRight > effectiveLeft + 15) {
-      activeArm = "left";
-      angle = leftAngle;
-    } else if (isRightContracted && effectiveLeft > effectiveRight + 15) {
-      activeArm = "right";
-      angle = rightAngle;
-    } else if (effectiveLeft < 118 && effectiveRight < 118 && Math.abs(effectiveLeft - effectiveRight) <= 18) {
-      activeArm = "both";
-      angle = (leftAngle + rightAngle) / 2;
-    } else if (effectiveLeft < effectiveRight - 12) {
-      activeArm = "left";
-      angle = leftAngle;
-    } else if (effectiveRight < effectiveLeft - 12) {
-      activeArm = "right";
-      angle = rightAngle;
-    } else {
-      activeArm = state.activeArm ?? "both";
-      angle = Math.min(leftAngle, rightAngle);
-    }
-  } else if (leftAngle !== null) {
+  if (isLeftContracted && isRightContracted) {
+    activeArm = "both";
+  } else if (isLeftContracted && effectiveRight > effectiveLeft + 12) {
     activeArm = "left";
-    angle = leftAngle;
-  } else if (rightAngle !== null) {
+  } else if (isRightContracted && effectiveLeft > effectiveRight + 12) {
     activeArm = "right";
-    angle = rightAngle;
+  } else if (effectiveLeft < 118 && effectiveRight < 118 && Math.abs(effectiveLeft - effectiveRight) <= 18) {
+    activeArm = "both";
+  } else if (effectiveLeft < effectiveRight - 10) {
+    activeArm = "left";
+  } else if (effectiveRight < effectiveLeft - 10) {
+    activeArm = "right";
   } else {
-    activeArm = state.activeArm ?? "both";
-    angle = state.lastAngle;
+    activeArm = state.currentRepArm ?? state.activeArm ?? "both";
   }
+
+  // 2. Select governing angle for this frame:
+  // If in a rep, track the arm being curled. If waiting in extended, track candidate active arm.
+  const currentRepArmCandidate = state.phase !== "extended" ? (state.currentRepArm ?? activeArm) : activeArm;
+  const angle =
+    currentRepArmCandidate === "left"
+      ? effectiveLeft
+      : currentRepArmCandidate === "right"
+      ? effectiveRight
+      : (effectiveLeft + effectiveRight) / 2;
 
   // Check elbow sway warning (elbow moving too far back behind shoulder)
   let elbowSway = false;
@@ -694,7 +685,7 @@ export function advanceBicepCurlTracker(
   let repsHistory = state.repsHistory ?? [];
 
   let hasEstablishedStartingExtension = state.hasEstablishedStartingExtension ?? false;
-  if (angle >= 126) {
+  if (effectiveLeft >= 118 || effectiveRight >= 118) {
     hasEstablishedStartingExtension = true;
   }
 
@@ -705,7 +696,7 @@ export function advanceBicepCurlTracker(
       currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
       currentRepMinAngle = angle;
       currentRepArm = activeArm;
-    } else if (hasEstablishedStartingExtension && angle < 124) {
+    } else if (hasEstablishedStartingExtension && angle < 118) {
       phase = "flexing";
       currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
       currentRepMinAngle = angle;
@@ -714,13 +705,10 @@ export function advanceBicepCurlTracker(
   } else if (phase === "flexing") {
     currentRepMinAngle = Math.min(currentRepMinAngle, angle);
     currentRepMaxAngle = Math.max(currentRepMaxAngle, angle);
-    if (activeArm !== "both") {
-      currentRepArm = activeArm;
-    }
 
     if (angle <= 106) {
       phase = "contracted";
-    } else if (angle >= 135 && (currentRepMaxAngle - currentRepMinAngle < 15)) {
+    } else if (angle >= 122 && (currentRepMaxAngle - currentRepMinAngle < 12)) {
       phase = "extended";
       currentRepStartedAtMs = undefined;
       currentRepMinAngle = angle;
@@ -728,13 +716,10 @@ export function advanceBicepCurlTracker(
     }
   } else if (phase === "contracted") {
     currentRepMinAngle = Math.min(currentRepMinAngle, angle);
-    if (activeArm !== "both") {
-      currentRepArm = activeArm;
-    }
 
     const romIncrease = angle - currentRepMinAngle;
     const hasLoweredToBottom =
-      (angle >= 126 && romIncrease >= 18) || (angle >= 134 && romIncrease >= 15);
+      (angle >= 118 && romIncrease >= 15) || (angle >= 126 && romIncrease >= 12);
 
     if (hasLoweredToBottom) {
       phase = "extended";

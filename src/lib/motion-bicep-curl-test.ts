@@ -138,7 +138,7 @@ export function buildBicepCurlTestReport(
       recommendedHeight: "Höft- till brösthöjd (0.9 - 1.2 m)",
       recommendedDistance: "2.0 - 2.5 m (överkropp och armar fullt synliga)",
       targetContractionDeg: "<= 106° i toppläget vid axeln/bröstet",
-      targetExtensionDeg: ">= 126° i bottenläget längs kroppen",
+      targetExtensionDeg: ">= 118° i bottenläget längs kroppen",
     },
     evaluationNotes: notes,
   };
