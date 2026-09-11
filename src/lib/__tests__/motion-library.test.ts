@@ -375,6 +375,72 @@ describe("motion-library: Dumbbell Overhead Shoulder Press", () => {
     expect(state.repsHistory.filter((r) => r.arm === "left").length).toBe(5);
     expect(state.repsHistory.filter((r) => r.arm === "both").length).toBe(5);
   });
+
+  it("does not count false reps when resting kettlebell against the chest between reps", () => {
+    let state = createOverheadPressTracker();
+    let time = 1000;
+
+    const lm = createBaseBodyLandmarks();
+
+    // 1. Perform 1 legitimate kettlebell press to lockout
+    // Rack at chest
+    lm[13] = createMockLandmark(0.40, 0.40);
+    lm[14] = createMockLandmark(0.60, 0.40);
+    lm[15] = createMockLandmark(0.48, 0.32);
+    lm[16] = createMockLandmark(0.52, 0.32);
+    time += 500;
+    state = advanceOverheadPressTracker(lm, state, 1, time);
+
+    // Lockout overhead
+    lm[13] = createMockLandmark(0.42, 0.18);
+    lm[14] = createMockLandmark(0.58, 0.18);
+    lm[15] = createMockLandmark(0.46, 0.08);
+    lm[16] = createMockLandmark(0.54, 0.08);
+    time += 800;
+    state = advanceOverheadPressTracker(lm, state, 1, time);
+    expect(state.phase).toBe("lockout");
+
+    // Lower back to chest
+    lm[13] = createMockLandmark(0.40, 0.40);
+    lm[14] = createMockLandmark(0.60, 0.40);
+    lm[15] = createMockLandmark(0.48, 0.32);
+    lm[16] = createMockLandmark(0.52, 0.32);
+    time += 800;
+    state = advanceOverheadPressTracker(lm, state, 1, time);
+    expect(state.phase).toBe("rack");
+    expect(state.reps).toBe(1);
+
+    // 2. User rests against chest for multiple seconds, shifting arms and body
+    // Even if elbows straighten slightly or hands adjust around chest height
+    for (let t = 0; t < 10; t++) {
+      time += 300;
+      // Hands resting on chest, elbows down
+      lm[13] = createMockLandmark(0.40, 0.42);
+      lm[14] = createMockLandmark(0.60, 0.42);
+      lm[15] = createMockLandmark(0.47, 0.30);
+      lm[16] = createMockLandmark(0.53, 0.30);
+      state = advanceOverheadPressTracker(lm, state, 1, time);
+      expect(state.reps).toBe(1);
+      expect(state.phase).toBe("rack");
+    }
+
+    // 3. User performs second legitimate rep
+    lm[13] = createMockLandmark(0.42, 0.18);
+    lm[14] = createMockLandmark(0.58, 0.18);
+    lm[15] = createMockLandmark(0.46, 0.08);
+    lm[16] = createMockLandmark(0.54, 0.08);
+    time += 800;
+    state = advanceOverheadPressTracker(lm, state, 1, time);
+    expect(state.phase).toBe("lockout");
+
+    lm[13] = createMockLandmark(0.40, 0.40);
+    lm[14] = createMockLandmark(0.60, 0.40);
+    lm[15] = createMockLandmark(0.48, 0.32);
+    lm[16] = createMockLandmark(0.52, 0.32);
+    time += 800;
+    state = advanceOverheadPressTracker(lm, state, 1, time);
+    expect(state.reps).toBe(2);
+  });
 });
 
 describe("motion-library: Dumbbell Lateral Raise Tracker", () => {

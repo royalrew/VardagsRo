@@ -677,9 +677,26 @@ export function advanceOverheadPressTracker(
       ? computeJointAngle3D(rightShoulder, rightElbow, rightWrist, aspectRatio)
       : null;
 
-  // Determine overhead extension per arm: wrist is at or above shoulder
-  const isLeftOverhead = Boolean(leftWrist && leftWrist.y < leftShoulder.y);
-  const isRightOverhead = Boolean(rightWrist && rightWrist.y < rightShoulder.y);
+  const nose = landmarks[0];
+  const shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
+  // Head level: at or above nose height (significantly above shoulders)
+  const headY = nose ? Math.min(nose.y + 0.04, shoulderY - 0.06) : shoulderY - 0.10;
+
+  // True overhead extension per arm:
+  // 1. Wrist must be at or above head height (not resting at chest, chin or waist)
+  // 2. Elbow must be raised above shoulder level (not resting against ribs/waist)
+  const isLeftOverhead = Boolean(
+    leftWrist &&
+    leftWrist.y < headY &&
+    leftElbow &&
+    leftElbow.y < leftShoulder.y + 0.06,
+  );
+  const isRightOverhead = Boolean(
+    rightWrist &&
+    rightWrist.y < headY &&
+    rightElbow &&
+    rightElbow.y < rightShoulder.y + 0.06,
+  );
 
   // Determine active pressing arm:
   // When pressing with 1 arm, the active arm extends high while the inactive arm stays bent at rack
@@ -766,7 +783,7 @@ export function advanceOverheadPressTracker(
 
     if (angle >= 145 && isOverhead) {
       phase = "lockout";
-    } else if (angle < 95 && !isOverhead) {
+    } else if (!isOverhead && angle <= 130) {
       phase = "rack";
       currentRepStartedAtMs = undefined;
       currentRepMinAngle = angle;
