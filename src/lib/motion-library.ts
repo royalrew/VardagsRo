@@ -631,13 +631,8 @@ export function advanceBicepCurlTracker(
   const effectiveLeft = leftAngle ?? state.leftAngle ?? 155;
   const effectiveRight = rightAngle ?? state.rightAngle ?? 155;
 
-  // Hand elevation check: In a real curl, wrist elevates up towards the chest/shoulder (wrist.y <= elbow.y + 0.04)
-  // When walking, hands dangle down near hips (wrist.y > elbow.y + 0.12)
-  const isLeftWristElevated = Boolean(leftWrist && leftElbow && leftWrist.y <= leftElbow.y + 0.04);
-  const isRightWristElevated = Boolean(rightWrist && rightElbow && rightWrist.y <= rightElbow.y + 0.04);
-
-  const isLeftContracted = effectiveLeft <= 106 && isLeftWristElevated;
-  const isRightContracted = effectiveRight <= 106 && isRightWristElevated;
+  const isLeftContracted = effectiveLeft <= 106;
+  const isRightContracted = effectiveRight <= 106;
 
   let activeArm: "left" | "right" | "both";
   let angle: number;
@@ -676,13 +671,6 @@ export function advanceBicepCurlTracker(
     angle = state.lastAngle;
   }
 
-  const isCurlingWristElevated =
-    activeArm === "left"
-      ? isLeftWristElevated
-      : activeArm === "right"
-      ? isRightWristElevated
-      : (isLeftWristElevated || isRightWristElevated);
-
   // Check elbow sway warning (elbow moving too far back behind shoulder)
   let elbowSway = false;
   if ((activeArm === "left" || activeArm === "both") && leftElbow && leftShoulder) {
@@ -706,18 +694,18 @@ export function advanceBicepCurlTracker(
   let repsHistory = state.repsHistory ?? [];
 
   let hasEstablishedStartingExtension = state.hasEstablishedStartingExtension ?? false;
-  if (angle >= 126 && !isCurlingWristElevated) {
+  if (angle >= 126) {
     hasEstablishedStartingExtension = true;
   }
 
   if (phase === "extended") {
     currentRepMaxAngle = Math.max(currentRepMaxAngle, angle);
-    if (hasEstablishedStartingExtension && angle <= 106 && isCurlingWristElevated) {
+    if (hasEstablishedStartingExtension && angle <= 106) {
       phase = "contracted";
       currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
       currentRepMinAngle = angle;
       currentRepArm = activeArm;
-    } else if (hasEstablishedStartingExtension && angle < 124 && (isLeftWristElevated || isRightWristElevated)) {
+    } else if (hasEstablishedStartingExtension && angle < 124) {
       phase = "flexing";
       currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
       currentRepMinAngle = angle;
@@ -730,7 +718,7 @@ export function advanceBicepCurlTracker(
       currentRepArm = activeArm;
     }
 
-    if (angle <= 106 && isCurlingWristElevated) {
+    if (angle <= 106) {
       phase = "contracted";
     } else if (angle >= 135 && (currentRepMaxAngle - currentRepMinAngle < 15)) {
       phase = "extended";
@@ -746,8 +734,7 @@ export function advanceBicepCurlTracker(
 
     const romIncrease = angle - currentRepMinAngle;
     const hasLoweredToBottom =
-      ((angle >= 126 && romIncrease >= 22) || (angle >= 134 && romIncrease >= 18)) &&
-      !isCurlingWristElevated;
+      (angle >= 126 && romIncrease >= 18) || (angle >= 134 && romIncrease >= 15);
 
     if (hasLoweredToBottom) {
       phase = "extended";
