@@ -312,25 +312,103 @@ export function advancePushupTracker(
   landmarks: readonly MotionLandmark[],
   nowMs: number = performance.now(),
 ): PushupTrackerState {
-  const leftVis = ((landmarks[11]?.visibility ?? 0) + (landmarks[13]?.visibility ?? 0) + (landmarks[15]?.visibility ?? 0)) / 3;
-  const rightVis = ((landmarks[12]?.visibility ?? 0) + (landmarks[14]?.visibility ?? 0) + (landmarks[16]?.visibility ?? 0)) / 3;
-  const useLeft = leftVis >= rightVis;
-  const side: "left" | "right" = useLeft ? "left" : "right";
-
-  const shoulder = useLeft ? landmarks[11] : landmarks[12];
-  const elbow = useLeft ? landmarks[13] : landmarks[14];
-  const wrist = useLeft ? landmarks[15] : landmarks[16];
-  const hip = useLeft ? landmarks[23] : landmarks[24];
-  const ankle = useLeft ? landmarks[27] : landmarks[28];
-
-  if (!shoulder || !elbow || !wrist || !hip || !ankle) {
+  if (!landmarks || landmarks.length < 17) {
     return state;
   }
 
-  const elbowAngle = computeJointAngle(shoulder, elbow, wrist) ?? 180;
-  const bodyLine = computeJointAngle(shoulder, hip, ankle) ?? 180;
+  // Calculate arm visibility:
+  // Left arm: 11 (shoulder), 13 (elbow), 15 (wrist)
+  // Right arm: 12 (shoulder), 14 (elbow), 16 (wrist)
+  const leftVis =
+    ((landmarks[11]?.visibility ?? 0) +
+      (landmarks[13]?.visibility ?? 0) +
+      (landmarks[15]?.visibility ?? 0)) /
+    3;
+  const rightVis =
+    ((landmarks[12]?.visibility ?? 0) +
+      (landmarks[14]?.visibility ?? 0) +
+      (landmarks[16]?.visibility ?? 0)) /
+    3;
 
-  const isFormWarning = bodyLine < 145;
+  // Hysteresis to stay locked to the primary arm unless the other arm is clearly more visible
+  let side: "left" | "right" = state.side ?? (leftVis >= rightVis ? "left" : "right");
+  if (side === "left" && rightVis > leftVis + 0.35) {
+    side = "right";
+  } else if (side === "right" && leftVis > rightVis + 0.35) {
+    side = "left";
+  } else if (side === "left" && leftVis < 0.25 && rightVis >= 0.25) {
+    side = "right";
+  } else if (side === "right" && rightVis < 0.25 && leftVis >= 0.25) {
+    side = "left";
+  }
+
+  const primaryShoulder = side === "left" ? landmarks[11] : landmarks[12];
+  const primaryElbow = side === "left" ? landmarks[13] : landmarks[14];
+  const primaryWrist = side === "left" ? landmarks[15] : landmarks[16];
+
+  let shoulder = primaryShoulder;
+  let elbow = primaryElbow;
+  let wrist = primaryWrist;
+
+  if (
+    !shoulder ||
+    !elbow ||
+    !wrist ||
+    (shoulder.visibility ?? 0) < 0.25 ||
+    (elbow.visibility ?? 0) < 0.25
+  ) {
+    const altShoulder = side === "left" ? landmarks[12] : landmarks[11];
+    const altElbow = side === "left" ? landmarks[14] : landmarks[13];
+    const altWrist = side === "left" ? landmarks[16] : landmarks[15];
+    if (
+      altShoulder &&
+      altElbow &&
+      altWrist &&
+      (altShoulder.visibility ?? 0) >= 0.25 &&
+      (altElbow.visibility ?? 0) >= 0.25
+    ) {
+      shoulder = altShoulder;
+      elbow = altElbow;
+      wrist = altWrist;
+    } else {
+      return state;
+    }
+  }
+
+  // Compute elbow angle:
+  // In front or diagonal view, both arms might be clearly visible.
+  let elbowAngle = computeJointAngle(shoulder, elbow, wrist) ?? 180;
+  const otherSide = side === "left" ? "right" : "left";
+  const otherShoulder = otherSide === "left" ? landmarks[11] : landmarks[12];
+  const otherElbow = otherSide === "left" ? landmarks[13] : landmarks[14];
+  const otherWrist = otherSide === "left" ? landmarks[15] : landmarks[16];
+  if (
+    otherShoulder &&
+    otherElbow &&
+    otherWrist &&
+    (otherShoulder.visibility ?? 0) >= 0.4 &&
+    (otherElbow.visibility ?? 0) >= 0.4
+  ) {
+    const altAngle = computeJointAngle(otherShoulder, otherElbow, otherWrist);
+    if (altAngle !== null && altAngle >= 30 && altAngle <= 180) {
+      elbowAngle = Math.min(elbowAngle, altAngle);
+    }
+  }
+
+  // Body line (only when hips and ankles are visible, e.g. in diagonal or profile view)
+  const hip = side === "left" ? (landmarks[23] ?? landmarks[24]) : (landmarks[24] ?? landmarks[23]);
+  const ankle = side === "left" ? (landmarks[27] ?? landmarks[28]) : (landmarks[28] ?? landmarks[27]);
+  const hasBodyLandmarks =
+    hip &&
+    ankle &&
+    (hip.visibility ?? 0) >= 0.3 &&
+    (ankle.visibility ?? 0) >= 0.25;
+
+  const bodyLine = hasBodyLandmarks
+    ? (computeJointAngle(shoulder, hip, ankle) ?? 180)
+    : 180;
+
+  const isFormWarning = hasBodyLandmarks && bodyLine < 140;
   const formMessage = isFormWarning ? "Håll kroppen spänd och lyft höften" : null;
 
   let nextPhase = state.phase;
@@ -340,8 +418,17 @@ export function advancePushupTracker(
   let currentRepMinBodyDeg = state.currentRepMinBodyDeg ?? bodyLine;
   const repsHistory = [...state.repsHistory];
 
+  // Natural pushup thresholds for front and diagonal views
+  const BOTTOM_THRESHOLD = 100;
+  const LOCKOUT_THRESHOLD = 145;
+  const DESCENDING_THRESHOLD = 135;
+  const ASCENDING_THRESHOLD = 108;
+
   // Track min/max during active rep
-  if (state.phase === "plank-top" && (elbowAngle < 140 || elbowAngle <= 95)) {
+  if (
+    state.phase === "plank-top" &&
+    (elbowAngle < DESCENDING_THRESHOLD || elbowAngle <= BOTTOM_THRESHOLD)
+  ) {
     currentRepStartedAtMs = nowMs;
     currentRepMinElbow = elbowAngle;
     currentRepMinBodyDeg = bodyLine;
@@ -351,59 +438,55 @@ export function advancePushupTracker(
   }
 
   if (state.phase === "plank-top") {
-    if (elbowAngle <= 95) {
+    if (elbowAngle <= BOTTOM_THRESHOLD) {
       nextPhase = "bottom";
-    } else if (elbowAngle < 140) {
+    } else if (elbowAngle < DESCENDING_THRESHOLD) {
       nextPhase = "descending";
     }
   } else if (state.phase === "descending") {
-    if (elbowAngle <= 95) {
+    if (elbowAngle <= BOTTOM_THRESHOLD) {
       nextPhase = "bottom";
-    } else if (elbowAngle > 155) {
+    } else if (elbowAngle > LOCKOUT_THRESHOLD + 5) {
       nextPhase = "plank-top";
     }
   } else if (state.phase === "bottom") {
-    if (elbowAngle >= 150) {
+    if (elbowAngle >= LOCKOUT_THRESHOLD) {
       nextPhase = "plank-top";
-      if (!isFormWarning) {
-        nextReps += 1;
-        repsHistory.push({
-          repNumber: nextReps,
-          durationMs: currentRepStartedAtMs ? Math.round(nowMs - currentRepStartedAtMs) : 1500,
-          minElbowAngle: Math.round(currentRepMinElbow),
-          lockoutElbowAngle: Math.round(elbowAngle),
-          minBodyAlignmentDeg: Math.round(currentRepMinBodyDeg),
-          isFormWarning: false,
-          formMessage: null,
-          startedAtMs: currentRepStartedAtMs ?? (nowMs - 1500),
-          completedAtMs: nowMs,
-        });
-        currentRepMinElbow = 180;
-        currentRepStartedAtMs = undefined;
-      }
-    } else if (elbowAngle > 105) {
+      nextReps += 1;
+      repsHistory.push({
+        repNumber: nextReps,
+        durationMs: currentRepStartedAtMs ? Math.round(nowMs - currentRepStartedAtMs) : 1500,
+        minElbowAngle: Math.round(currentRepMinElbow),
+        lockoutElbowAngle: Math.round(elbowAngle),
+        minBodyAlignmentDeg: Math.round(currentRepMinBodyDeg),
+        isFormWarning,
+        formMessage,
+        startedAtMs: currentRepStartedAtMs ?? (nowMs - 1500),
+        completedAtMs: nowMs,
+      });
+      currentRepMinElbow = 180;
+      currentRepStartedAtMs = undefined;
+    } else if (elbowAngle > ASCENDING_THRESHOLD) {
       nextPhase = "ascending";
     }
   } else if (state.phase === "ascending") {
-    if (elbowAngle >= 155) {
+    if (elbowAngle >= LOCKOUT_THRESHOLD) {
       nextPhase = "plank-top";
-      if (!isFormWarning) {
-        nextReps += 1;
-        repsHistory.push({
-          repNumber: nextReps,
-          durationMs: currentRepStartedAtMs ? Math.round(nowMs - currentRepStartedAtMs) : 1500,
-          minElbowAngle: Math.round(currentRepMinElbow),
-          lockoutElbowAngle: Math.round(elbowAngle),
-          minBodyAlignmentDeg: Math.round(currentRepMinBodyDeg),
-          isFormWarning: false,
-          formMessage: null,
-          startedAtMs: currentRepStartedAtMs ?? (nowMs - 1500),
-          completedAtMs: nowMs,
-        });
-        currentRepMinElbow = 180;
-        currentRepStartedAtMs = undefined;
-      }
-    } else if (elbowAngle <= 95) {
+      nextReps += 1;
+      repsHistory.push({
+        repNumber: nextReps,
+        durationMs: currentRepStartedAtMs ? Math.round(nowMs - currentRepStartedAtMs) : 1500,
+        minElbowAngle: Math.round(currentRepMinElbow),
+        lockoutElbowAngle: Math.round(elbowAngle),
+        minBodyAlignmentDeg: Math.round(currentRepMinBodyDeg),
+        isFormWarning,
+        formMessage,
+        startedAtMs: currentRepStartedAtMs ?? (nowMs - 1500),
+        completedAtMs: nowMs,
+      });
+      currentRepMinElbow = 180;
+      currentRepStartedAtMs = undefined;
+    } else if (elbowAngle <= BOTTOM_THRESHOLD) {
       nextPhase = "bottom";
     }
   }

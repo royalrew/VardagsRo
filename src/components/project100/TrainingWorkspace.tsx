@@ -1405,11 +1405,11 @@ export function TrainingWorkspace({
           </Link>
           <Link
             className="p100-button-secondary"
-            href="/projekt-100/traning/motion?exercise=cycling"
-            title="Starta provbänk för motionscykel med live kadens (RPM), trampvarv och JSON-rapport"
-            style={{ borderColor: "rgba(52, 211, 153, 0.45)", color: "#34d399", fontWeight: 700 }}
+            href="/projekt-100/traning/motion?exercise=pushup"
+            title="Starta armhävningstest (framifrån eller snett) med live vinklar och 1-klicks JSON-rapport"
+            style={{ borderColor: "rgba(56, 189, 248, 0.55)", color: "#38bdf8", fontWeight: 700 }}
           >
-            <Bike size={16} /> Testa motionscykel
+            <Sparkles size={16} /> 💪 Testa armhävningar
           </Link>
           <Link
             className="p100-button-secondary"
@@ -1417,14 +1417,6 @@ export function TrainingWorkspace({
             title="Starta 30 minuters intervallpass på motionscykel med motståndsguidning"
           >
             <Bike size={16} /> 30m Intervallcykel
-          </Link>
-          <Link
-            className="p100-button-secondary"
-            href="/projekt-100/traning/motion?exercise=pushup"
-            title="Starta armhävningstest med live vinklar och JSON-rapport"
-            style={{ borderColor: "rgba(56, 189, 248, 0.4)", color: "#38bdf8" }}
-          >
-            <Sparkles size={16} /> Armhävningstest
           </Link>
           <button
             type="button"

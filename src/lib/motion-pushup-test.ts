@@ -33,12 +33,12 @@ export interface PushupTestReport {
   trajectorySampleCount: number;
   trajectorySamples: PushupTrajectorySample[];
   guidance: {
-    cameraAngle: "side (profil)";
-    recommendedHeight: "40–70 cm från golvet";
-    recommendedDistance: "2.0–2.5 meter";
-    targetBottomElbowDeg: "<= 95°";
-    targetTopElbowDeg: ">= 150°";
-    targetBodyLineDeg: ">= 145°";
+    cameraAngle: string;
+    recommendedHeight: string;
+    recommendedDistance: string;
+    targetBottomElbowDeg: string;
+    targetTopElbowDeg: string;
+    targetBodyLineDeg: string;
   };
   evaluationNotes: string[];
 }
@@ -48,9 +48,9 @@ export function buildPushupTestReport(
   testedAt: string = new Date().toISOString(),
 ): PushupTestReport {
   const reps = state.repsHistory.map((rep) => {
-    const depthTargetPassed = rep.minElbowAngle <= 95;
-    const lockoutPassed = rep.lockoutElbowAngle >= 150;
-    const bodyAlignmentPassed = rep.minBodyAlignmentDeg >= 145;
+    const depthTargetPassed = rep.minElbowAngle <= 100;
+    const lockoutPassed = rep.lockoutElbowAngle >= 145;
+    const bodyAlignmentPassed = rep.minBodyAlignmentDeg >= 140;
 
     return {
       repNumber: rep.repNumber,
@@ -61,14 +61,12 @@ export function buildPushupTestReport(
       depthTargetPassed,
       lockoutPassed,
       bodyAlignmentPassed,
-      isFormWarning: rep.isFormWarning || !bodyAlignmentPassed,
+      isFormWarning: rep.isFormWarning,
       formMessage: rep.formMessage,
     };
   });
 
-  const passedRepsCount = reps.filter(
-    (r) => r.depthTargetPassed && r.lockoutPassed && r.bodyAlignmentPassed,
-  ).length;
+  const passedRepsCount = reps.filter((r) => r.depthTargetPassed && r.lockoutPassed).length;
 
   const totalReps = reps.length;
   const averageDurationSeconds =
@@ -88,18 +86,24 @@ export function buildPushupTestReport(
 
   const evaluationNotes: string[] = [];
   if (totalReps === 0) {
-    evaluationNotes.push("Inga repetitioner registrerades ännu. Kontrollera att armbågarna böjs under 95° och rätas ut över 150°.");
+    evaluationNotes.push(
+      "Inga repetitioner registrerades ännu. Kontrollera att armbågarna böjs under 100° i botten och rätas ut över 145° i toppen.",
+    );
   } else {
     if (depthSuccessRatePercent >= 80) {
-      evaluationNotes.push("Utmärkt djup: över 80% av repetitionerna nådde under 95° armbågsvinkel.");
+      evaluationNotes.push(
+        "Utmärkt djup: över 80% av repetitionerna nådde under 100° armbågsvinkel.",
+      );
     } else {
-      evaluationNotes.push(`Djup kan förbättras: ${depthSuccessRatePercent}% av repsen nådde under 95°. Snittminsta vinkel var ${averageMinElbowAngle}°.`);
+      evaluationNotes.push(
+        `Djup kan förbättras: ${depthSuccessRatePercent}% av repsen nådde under 100°. Snittminsta vinkel var ${averageMinElbowAngle}°.`,
+      );
     }
 
     if (averageBodyAlignment >= 155) {
       evaluationNotes.push("Stark och stabil planklinje genom rörelsen.");
-    } else if (averageBodyAlignment < 145) {
-      evaluationNotes.push("Bållinjen vek sig bitvis (höftlyft eller hängande rygg under 145°).");
+    } else if (averageBodyAlignment < 140) {
+      evaluationNotes.push("Bållinjen vek sig bitvis (tänk på rak rygg om fötterna syns).");
     }
   }
 
@@ -122,12 +126,12 @@ export function buildPushupTestReport(
     trajectorySampleCount: state.trajectorySamples.length,
     trajectorySamples: state.trajectorySamples,
     guidance: {
-      cameraAngle: "side (profil)",
-      recommendedHeight: "40–70 cm från golvet",
-      recommendedDistance: "2.0–2.5 meter",
-      targetBottomElbowDeg: "<= 95°",
-      targetTopElbowDeg: ">= 150°",
-      targetBodyLineDeg: ">= 145°",
+      cameraAngle: "framifrån eller snett (30°–45°)",
+      recommendedHeight: "30–60 cm från golvet (vinklad mot träningsmattan)",
+      recommendedDistance: "1.8–2.5 meter",
+      targetBottomElbowDeg: "<= 100°",
+      targetTopElbowDeg: ">= 145°",
+      targetBodyLineDeg: ">= 140° (om fötterna syns)",
     },
     evaluationNotes,
   };

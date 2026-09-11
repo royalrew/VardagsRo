@@ -128,12 +128,12 @@ export function PushupTestBench({
         ) : null}
         <div className="p100-testbench-badge">
           <Sparkles size={14} />
-          <span>PROVBÄNK · FYSISK KALIBRERING</span>
+          <span>PROVBÄNK · FRAMIFRÅN & SNETT</span>
         </div>
-        <h2>Armhävningstest</h2>
+        <h2>Armhävningstest – Kalibrering (Framifrån & Snett)</h2>
         <p>
-          Gör 5–10 repetitioner framför kameran. Klicka sedan på den stora knappen{" "}
-          <strong>&quot;Kopiera provrapport&quot;</strong> och klistra in i chatten så justerar vi algoritmen!
+          Testa <strong>framifrån eller snett (30°–45°) mot skärmen/TV:n</strong> – titta rakt mot skärmen så att du slipper stirra in i väggen! Gör 5–10 repetitioner, klicka sedan på{" "}
+          <strong>&quot;Kopiera provrapport&quot;</strong> och klistra in i chatten.
         </p>
       </div>
 
@@ -192,6 +192,18 @@ export function PushupTestBench({
               <Download size={16} />
               <span>Ladda ned .json</span>
             </button>
+
+            {onCloseTest ? (
+              <button
+                type="button"
+                className="p100-testbench-secondary-btn"
+                onClick={onCloseTest}
+                title="Avsluta testet och återgå till övningslistan"
+                style={{ borderColor: "rgba(248, 113, 113, 0.4)", color: "#fca5a5" }}
+              >
+                <span>Avsluta test</span>
+              </button>
+            ) : null}
           </div>
         )}
       </div>
@@ -208,7 +220,7 @@ export function PushupTestBench({
           <div className={`p100-telemetry-item elbow ${isBottom ? "good" : isTop ? "top" : "mid"}`}>
             <span className="label">ARMBÅGSVINKEL</span>
             <span className="value">{elbowAngle}°</span>
-            <span className="sub">{isBottom ? "Godkänt bottenläge (≤ 95°)" : isTop ? "Lockout (≥ 150°)" : "Böj under 95°"}</span>
+            <span className="sub">{isBottom ? "Godkänt bottenläge (≤ 100°)" : isTop ? "Lockout (≥ 145°)" : "Böj under 100°"}</span>
           </div>
 
           <div className={`p100-telemetry-item body ${isBodyGood ? "good" : "warning"}`}>
@@ -218,9 +230,9 @@ export function PushupTestBench({
           </div>
 
           <div className="p100-telemetry-item phase">
-            <span className="label">FAS & KAMERASIDA</span>
+            <span className="label">FAS & KAMERAVINKEL</span>
             <span className="value-sm">{phaseLabel}</span>
-            <span className="sub">Kamera ser: {side === "left" ? "Vänster sida" : "Höger sida"}</span>
+            <span className="sub">Kamera ser: {side === "left" ? "Vänster arm" : "Höger arm"} (Framifrån / Snett)</span>
           </div>
         </div>
       ) : null}
@@ -234,7 +246,7 @@ export function PushupTestBench({
         >
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <Info size={16} style={{ color: "#38bdf8" }} />
-            <strong>Instruktioner för vinklar & kameraplacering</strong>
+            <strong>Instruktioner för vinklar & kameraplacering (Framifrån & Snett)</strong>
           </div>
           {showInstructions ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
@@ -244,10 +256,10 @@ export function PushupTestBench({
             <div className="p100-instruction-row">
               <div className="step-num">1</div>
               <div>
-                <strong>📐 Kameravinkel & Höjd (Profil)</strong>
+                <strong>📐 Vinkel mot TV/skärm (Framifrån eller snett 30°–45°)</strong>
                 <p>
-                  Placera mobilen eller datorn <strong>från sidan (profil)</strong> ca 40–70 cm från golvet
-                  (t.ex. på en stol eller en hög böcker). Undvik att ha kameran platt på golvet pekande uppåt.
+                  Lägg träningsmattan <strong>framför skärmen/TV:n</strong>. Vänd dig rakt eller i 30°–45° vinkel
+                  så att du bekvämt kan se din räknare och skärmen framför dig utan att behöva stirra in i en sidovägg!
                 </p>
               </div>
             </div>
@@ -257,10 +269,10 @@ export function PushupTestBench({
             <div className="p100-instruction-row">
               <div className="step-num">2</div>
               <div>
-                <strong>📏 Avstånd (Helkropp)</strong>
+                <strong>📏 Kamerahöjd & Avstånd</strong>
                 <p>
-                  Backa <strong>2.0 till 2.5 meter</strong> så att hela kroppen (från huvud och armbågar till höft och fötter)
-                  syns i bild genom hela rörelsen.
+                  Placera kameran ca <strong>30–60 cm från golvet</strong> (t.ex. på en stol eller ett soffbord) vinklad
+                  mot träningsmattan. Backa ca <strong>1.8 till 2.5 meter</strong> så att bröstkorg, axlar och armar syns i bild.
                 </p>
               </div>
             </div>
@@ -272,9 +284,9 @@ export function PushupTestBench({
               <div>
                 <strong>🎯 Vinkelkrav & Repetition</strong>
                 <ul>
-                  <li><strong>Bottenläge:</strong> Bröstet sänks tills armbågen böjs under <strong>95°</strong>.</li>
-                  <li><strong>Toppläge:</strong> Pressa upp hela vägen till rak arm (<strong>≥ 150°</strong>).</li>
-                  <li><strong>Bål:</strong> Håll kroppen rak som en planka (<strong>≥ 145°</strong>).</li>
+                  <li><strong>Bottenläge:</strong> Bröstet sänks mot golvet tills armbågen böjs under <strong>100°</strong>.</li>
+                  <li><strong>Toppläge:</strong> Pressa upp hela vägen till sträckta armar (<strong>≥ 145°</strong>).</li>
+                  <li><strong>Fötter / Bål:</strong> Om fötterna syns bedöms rak bållinje (≥ 140°), annars fokuserar mätningen på armar och överkropp!</li>
                 </ul>
               </div>
             </div>
