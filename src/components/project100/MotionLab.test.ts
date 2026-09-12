@@ -54,16 +54,14 @@ describe("Motion Lab focused training view", () => {
     expect(html).not.toContain("p100-pushup-test-bench");
   });
 
-  it("opens the lunge test bench with instructions and copy report button", () => {
+  it("renders approved lunges in clean production mode", () => {
     const html = renderToStaticMarkup(createElement(MotionLab, {
       initialPairingCode: "123456",
       initialExercise: "lunge",
     }));
-    expect(html).toContain("Utfallstest");
-    expect(html).toContain("p100-lunge-test-bench");
-    expect(html).toContain("Instruktioner för vinklar &amp; kameraplacering");
-    expect(html).toContain("Starta kamera &amp; utfallstest");
-    expect(html).not.toContain("p100-adaptive-camera");
+    expect(html).toContain("Utfall");
+    expect(html).toContain("p100-adaptive-camera");
+    expect(html).not.toContain("p100-lunge-test-bench");
   });
 
   it("renders overhead press in clean production mode with adaptive camera setup", () => {
@@ -76,14 +74,35 @@ describe("Motion Lab focused training view", () => {
     expect(html).not.toContain("p100-overhead-test-bench");
   });
 
-  it("opens the bicep curl test bench with instructions and copy report button", () => {
+  it("renders approved bicep curls in clean production mode", () => {
     const html = renderToStaticMarkup(createElement(MotionLab, {
       initialPairingCode: "123456",
       initialExercise: "bicep-curl",
     }));
-    expect(html).toContain("Bicepscurl");
-    expect(html).toContain("Bicepscurl – Kalibrering");
-    expect(html).toContain("Starta kamera &amp; bicepscurltest");
+    expect(html).toContain("Hantel-bicepscurl");
+    expect(html).toContain("p100-adaptive-camera");
+    expect(html).not.toContain("Bicepscurl – Kalibrering");
+    expect(html).not.toContain("p100-bicep-test-bench");
+  });
+
+  it("renders approved lateral raises in clean production mode", () => {
+    const html = renderToStaticMarkup(createElement(MotionLab, {
+      initialPairingCode: "123456",
+      initialExercise: "lateral-raise",
+    }));
+    expect(html).toContain("Hantel-sidolyft");
+    expect(html).toContain("p100-adaptive-camera");
+    expect(html).not.toContain("p100-lateral-raise-test-bench");
+  });
+
+  it("opens the bent-over row test bench with countdown and JSON report", () => {
+    const html = renderToStaticMarkup(createElement(MotionLab, {
+      initialPairingCode: "123456",
+      initialExercise: "bent-over-row",
+    }));
+    expect(html).toContain("Framåtlutad hantelrodd – livekalibrering");
+    expect(html).toContain("p100-bent-over-row-test-bench");
+    expect(html).toContain("Starta kamera &amp; hantelroddstest");
     expect(html).not.toContain("p100-adaptive-camera");
   });
 });

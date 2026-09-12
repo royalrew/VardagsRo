@@ -8,13 +8,12 @@ import {
   ChevronUp,
   Copy,
   Download,
-  Dumbbell,
   Info,
   RotateCcw,
   Sparkles,
   Zap,
 } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import type { BicepCurlTrackerState } from "@/lib/motion-library";
 import { buildBicepCurlTestReport } from "@/lib/motion-bicep-curl-test";
@@ -43,27 +42,41 @@ export function BicepCurlTestBench({
   const [copied, setCopied] = useState(false);
   const [showInstructions, setShowInstructions] = useState(true);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownActionsRef = useRef({
+    onResetTracking,
+    onToggleTracking,
+    trackingEnabled,
+  });
+
+  useEffect(() => {
+    countdownActionsRef.current = {
+      onResetTracking,
+      onToggleTracking,
+      trackingEnabled,
+    };
+  });
 
   useEffect(() => {
     if (countdown === null) return;
-    if (countdown <= 0) {
-      setCountdown(null);
-      onResetTracking();
-      if (!trackingEnabled) {
-        onToggleTracking();
-      }
-      try {
-        if (typeof window !== "undefined" && "speechSynthesis" in window) {
-          const utterance = new SpeechSynthesisUtterance("Kör!");
-          utterance.lang = "sv-SE";
-          window.speechSynthesis.speak(utterance);
-        }
-      } catch {
-        // ignore
-      }
-      return;
-    }
     const timer = setTimeout(() => {
+      if (countdown <= 1) {
+        setCountdown(null);
+        const actions = countdownActionsRef.current;
+        actions.onResetTracking();
+        if (!actions.trackingEnabled) {
+          actions.onToggleTracking();
+        }
+        try {
+          if (typeof window !== "undefined" && "speechSynthesis" in window) {
+            const utterance = new SpeechSynthesisUtterance("Kör!");
+            utterance.lang = "sv-SE";
+            window.speechSynthesis.speak(utterance);
+          }
+        } catch {
+          // ignore
+        }
+        return;
+      }
       setCountdown(countdown - 1);
       try {
         if (typeof window !== "undefined" && "speechSynthesis" in window && countdown > 1) {
@@ -76,7 +89,7 @@ export function BicepCurlTestBench({
       }
     }, 1000);
     return () => clearTimeout(timer);
-  }, [countdown, onResetTracking, onToggleTracking, trackingEnabled]);
+  }, [countdown]);
 
   function handleStartCountdown() {
     setCountdown(5);
@@ -119,12 +132,24 @@ export function BicepCurlTestBench({
   const activeArm = curlTracker?.activeArm ?? "both";
   const repsHistory = curlTracker?.repsHistory ?? [];
   const elbowSwayWarning = curlTracker?.elbowSwayWarning ?? false;
+  const trackingStatus = curlTracker?.trackingStatus ?? "seeking-extension";
+  const trackingIssue = curlTracker?.trackingIssue;
 
   const isContracted = phase === "contracted" || lastAngle <= 106;
-  const isExtended = phase === "extended" || lastAngle >= 118;
+  const isExtended = phase === "extended" || lastAngle >= 130;
 
   const phaseLabel =
-    phase === "extended"
+    trackingStatus === "tracking-lost"
+      ? trackingIssue === "too-close"
+        ? "Backa från kameran och inta bottenläget igen"
+        : trackingIssue === "too-far"
+          ? "Gå närmare kameran och inta bottenläget igen"
+          : trackingIssue === "body-moved"
+            ? "Stå stilla och inta bottenläget igen"
+            : "Armarna syns inte säkert – inta bottenläget igen"
+      : trackingStatus === "seeking-extension"
+        ? "Håll båda armarna raka längs sidorna en kort stund"
+        : phase === "extended"
       ? "Bottenläge (Sträckt arm)"
       : phase === "flexing"
       ? "Curlar uppåt..."
@@ -244,7 +269,7 @@ export function BicepCurlTestBench({
               {countdown}
             </div>
             <div style={{ fontSize: "0.88rem", color: "#94a3b8" }}>
-              Ställ dig 2–2.5 meter från kameran och låt armarna hänga rakt ned längs sidan.
+              Ha hantlarna i händerna, ställ dig 2–2.5 meter från kameran och låt båda armarna hänga rakt ned längs sidan.
             </div>
             <div style={{ display: "flex", gap: "10px", marginTop: "6px" }}>
               <button
@@ -370,7 +395,15 @@ export function BicepCurlTestBench({
             </span>
           </div>
           <span className="sub">
-            {isContracted ? "🟢 Toppkontraktion (<= 106°)" : isExtended ? "Bottenläge (>= 118°)" : "Curlar..."}
+            {trackingStatus === "tracking-lost"
+              ? "⚠️ Spårningen pausad – inga reps räknas"
+              : trackingStatus === "seeking-extension"
+                ? "⏳ Beväpnar räknaren i stabilt bottenläge"
+                : isContracted
+                  ? "🟢 Toppläge registrerat"
+                  : isExtended
+                    ? "Bottenläge – handleden under armbågen"
+                    : "Curlar..."}
           </span>
         </div>
 
@@ -502,13 +535,13 @@ export function BicepCurlTestBench({
           <div className="instruction-step">
             <span className="step-badge">2</span>
             <div>
-              <strong>5 Reps Höger arm:</strong> Håll vänster arm stilla längs sidan. Curla hanteln med höger arm upp mot axeln (&lt;= 106°), sträck sedan ut armen kontrollerat i botten (&gt;= 126°).
+              <strong>5 Reps Höger arm:</strong> Håll vänster arm stilla längs sidan. Curla hanteln med höger arm upp mot axeln och sänk tills handleden åter är tydligt under armbågen.
             </div>
           </div>
           <div className="instruction-step">
             <span className="step-badge">3</span>
             <div>
-              <strong>5 Reps Vänster arm:</strong> Håll höger arm stilla längs sidan. Curla hanteln med vänster arm upp mot axeln (&lt;= 106°) och sträck ut hela vägen (&gt;= 126°).
+              <strong>5 Reps Vänster arm:</strong> Håll höger arm stilla längs sidan. Curla hanteln med vänster arm upp mot axeln och sänk tills handleden åter är tydligt under armbågen.
             </div>
           </div>
           <div className="instruction-step">

@@ -79,7 +79,7 @@ export default async function Project100TrainingVerificationPage() {
               </p>
             </div>
             <Link
-              href="/projekt-100/traning/motion?exercise=bicep-curl"
+              href="/projekt-100/traning/motion?exercise=bent-over-row"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -94,7 +94,7 @@ export default async function Project100TrainingVerificationPage() {
                 boxShadow: "0 4px 14px rgba(124, 58, 237, 0.35)",
               }}
             >
-              Starta Bicepscurltest →
+              Starta hantelroddstest →
             </Link>
           </div>
         </section>

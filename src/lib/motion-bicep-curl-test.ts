@@ -5,7 +5,7 @@ import type {
 
 export interface BicepCurlTestReport {
   exercise: "bicep-curl";
-  testVersion: "1.0-calibration";
+  testVersion: "1.5-approach-guard";
   testedAt: string;
   totalReps: number;
   activeArm: "left" | "right" | "both" | null;
@@ -35,6 +35,14 @@ export interface BicepCurlTestReport {
   };
   trajectorySampleCount: number;
   trajectorySamples: BicepCurlTrajectorySample[];
+  trackingDiagnostics: {
+    status: BicepCurlTrackerState["trackingStatus"];
+    ready: boolean;
+    rejectedFrameCount: number;
+    trackingLossEvents: number;
+    lastIssue: BicepCurlTrackerState["trackingIssue"] | null;
+    rejectedFrameReasons: BicepCurlTrackerState["rejectedFrameReasons"];
+  };
   guidance: {
     cameraAngle: string;
     recommendedHeight: string;
@@ -112,10 +120,18 @@ export function buildBicepCurlTestReport(
       );
     }
   }
+  if ((state.rejectedFrameCount ?? 0) > 0) {
+    notes.push(
+      `${state.rejectedFrameCount} osäkra bildrutor ignorerades vid ${state.trackingLossEvents ?? 0} spårningsavbrott.`,
+    );
+  }
+  if (!(state.hasEstablishedStartingExtension ?? false)) {
+    notes.push("Räknaren väntar på ett stabilt bottenläge med båda armarna längs sidorna.");
+  }
 
   return {
     exercise: "bicep-curl",
-    testVersion: "1.0-calibration",
+    testVersion: "1.5-approach-guard",
     testedAt,
     totalReps,
     activeArm: state.activeArm ?? null,
@@ -133,12 +149,25 @@ export function buildBicepCurlTestReport(
     },
     trajectorySampleCount: (state.trajectorySamples ?? []).length,
     trajectorySamples: state.trajectorySamples ?? [],
+    trackingDiagnostics: {
+      status: state.trackingStatus ?? "seeking-extension",
+      ready: state.hasEstablishedStartingExtension ?? false,
+      rejectedFrameCount: state.rejectedFrameCount ?? 0,
+      trackingLossEvents: state.trackingLossEvents ?? 0,
+      lastIssue: state.trackingIssue ?? null,
+      rejectedFrameReasons: state.rejectedFrameReasons ?? {
+        "landmarks-unreliable": 0,
+        "too-close": 0,
+        "too-far": 0,
+        "body-moved": 0,
+      },
+    },
     guidance: {
       cameraAngle: "Framifrån (rekommenderas) eller 45° diagonal",
       recommendedHeight: "Höft- till brösthöjd (0.9 - 1.2 m)",
       recommendedDistance: "2.0 - 2.5 m (överkropp och armar fullt synliga)",
-      targetContractionDeg: "<= 106° i toppläget vid axeln/bröstet",
-      targetExtensionDeg: ">= 118° i bottenläget längs kroppen",
+      targetContractionDeg: "Repetition upptäcks vid <= 125° med handleden vid armbågen; full kontraktion bedöms vid <= 106°",
+      targetExtensionDeg: ">= 130° vid start; därefter känns bottenläget även igen när handleden återvänder under armbågen",
     },
     evaluationNotes: notes,
   };

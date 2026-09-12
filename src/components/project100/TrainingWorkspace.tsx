@@ -1405,11 +1405,11 @@ export function TrainingWorkspace({
           </Link>
           <Link
             className="p100-button-secondary"
-            href="/projekt-100/traning/motion?exercise=bicep-curl"
-            title="Starta bicepscurltest (höger, vänster, båda armarna) med live vinkel och 1-klicks JSON-rapport"
+            href="/projekt-100/traning/motion?exercise=bent-over-row"
+            title="Starta test av framåtlutad hantelrodd med 1-klicks JSON-rapport"
             style={{ borderColor: "rgba(168, 85, 247, 0.55)", color: "#c084fc", fontWeight: 700 }}
           >
-            <Sparkles size={16} /> 💪 Testa bicepscurl
+            <Sparkles size={16} /> Testa hantelrodd
           </Link>
           <Link
             className="p100-button-secondary"

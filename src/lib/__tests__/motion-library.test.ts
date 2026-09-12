@@ -141,23 +141,24 @@ describe("motion-library: Dumbbell Bicep Curl Tracker", () => {
     // 1. Bottom extended: elbow straight (~160 deg)
     lm[13] = createMockLandmark(0.40, 0.45);
     lm[15] = createMockLandmark(0.40, 0.65);
-    state = advanceBicepCurlTracker(lm, state);
+    state = advanceBicepCurlTracker(lm, state, 1, 1_000);
+    state = advanceBicepCurlTracker(lm, state, 1, 1_350);
     expect(state.phase).toBe("extended");
     expect(state.reps).toBe(0);
 
     // 2. Flexing: wrist moving up, elbow angle ~90 deg
-    lm[15] = createMockLandmark(0.40, 0.45);
-    state = advanceBicepCurlTracker(lm, state);
+    lm[15] = createMockLandmark(0.48, 0.44);
+    state = advanceBicepCurlTracker(lm, state, 1, 1_600);
     expect(state.phase === "flexing" || state.phase === "extended").toBe(true);
 
     // 3. Peak contraction: elbow bent tightly (< 55 deg)
     lm[15] = createMockLandmark(0.40, 0.32);
-    state = advanceBicepCurlTracker(lm, state);
+    state = advanceBicepCurlTracker(lm, state, 1, 1_800);
     expect(state.phase).toBe("contracted");
 
     // 4. Return down: extended again (> 140 deg)
     lm[15] = createMockLandmark(0.40, 0.65);
-    state = advanceBicepCurlTracker(lm, state);
+    state = advanceBicepCurlTracker(lm, state, 1, 2_500);
     expect(state.phase).toBe("extended");
     expect(state.reps).toBe(1);
   });
@@ -171,17 +172,19 @@ describe("motion-library: Dumbbell Bicep Curl Tracker", () => {
     lm[11] = createMockLandmark(0.40, 0.25, 0.0);
     lm[13] = createMockLandmark(0.40, 0.45, 0.0);
     lm[15] = createMockLandmark(0.40, 0.65, 0.0);
-    state = advanceBicepCurlTracker(lm, state);
+    state = advanceBicepCurlTracker(lm, state, 1, 1_000);
+    state = advanceBicepCurlTracker(lm, state, 1, 1_350);
     expect(state.phase).toBe("extended");
 
     // 2. Peak contraction with depth forward
     lm[15] = createMockLandmark(0.40, 0.30, -0.10);
-    state = advanceBicepCurlTracker(lm, state);
+    state = advanceBicepCurlTracker(lm, state, 1, 1_700);
+    state = advanceBicepCurlTracker(lm, state, 1, 1_850);
     expect(state.phase).toBe("contracted");
 
     // 3. Extended back down
     lm[15] = createMockLandmark(0.40, 0.65, 0.0);
-    state = advanceBicepCurlTracker(lm, state);
+    state = advanceBicepCurlTracker(lm, state, 1, 2_500);
     expect(state.phase).toBe("extended");
     expect(state.reps).toBe(1);
   });
@@ -510,15 +513,17 @@ describe("motion-library: Dumbbell Lateral Raise Tracker", () => {
     lm[15] = createMockLandmark(0.44, 0.60);
     lm[14] = createMockLandmark(0.57, 0.45);
     lm[16] = createMockLandmark(0.56, 0.60);
-    state = advanceLateralRaiseTracker(lm, state);
+    state = advanceLateralRaiseTracker(lm, state, 1, 1_000);
+    state = advanceLateralRaiseTracker(lm, state, 1, 1_350);
     expect(state.phase).toBe("bottom");
+    expect(state.hasEstablishedBottom).toBe(true);
 
     // 2. Lateral raise to shoulder height: arms abducted ~90 degrees
     lm[13] = createMockLandmark(0.25, 0.28);
     lm[15] = createMockLandmark(0.12, 0.28);
     lm[14] = createMockLandmark(0.75, 0.28);
     lm[16] = createMockLandmark(0.88, 0.28);
-    state = advanceLateralRaiseTracker(lm, state);
+    state = advanceLateralRaiseTracker(lm, state, 1, 1_900);
     expect(state.phase).toBe("peak");
 
     // 3. Lower down to sides
@@ -526,9 +531,10 @@ describe("motion-library: Dumbbell Lateral Raise Tracker", () => {
     lm[15] = createMockLandmark(0.44, 0.60);
     lm[14] = createMockLandmark(0.57, 0.45);
     lm[16] = createMockLandmark(0.56, 0.60);
-    state = advanceLateralRaiseTracker(lm, state);
+    state = advanceLateralRaiseTracker(lm, state, 1, 2_700);
     expect(state.phase).toBe("bottom");
     expect(state.reps).toBe(1);
+    expect(state.repsHistory[0].arm).toBe("both");
   });
 });
 
@@ -614,15 +620,18 @@ describe("motion-library: Bent-over Row Tracker", () => {
     lm[14] = createMockLandmark(0.60, 0.55);
     lm[15] = createMockLandmark(0.40, 0.70);
     lm[16] = createMockLandmark(0.60, 0.70);
-    state = advanceBentOverRowTracker(lm, state);
+    state = advanceBentOverRowTracker(lm, state, 1, 1_000);
+    state = advanceBentOverRowTracker(lm, state, 1, 1_350);
     expect(state.phase).toBe("bottom");
+    expect(state.hasEstablishedBottom).toBe(true);
 
     // 2. Rowing up: elbows flex to < 85 deg
     lm[13] = createMockLandmark(0.35, 0.38);
     lm[14] = createMockLandmark(0.65, 0.38);
     lm[15] = createMockLandmark(0.38, 0.45);
     lm[16] = createMockLandmark(0.62, 0.45);
-    state = advanceBentOverRowTracker(lm, state);
+    state = advanceBentOverRowTracker(lm, state, 1, 1_900);
+    state = advanceBentOverRowTracker(lm, state, 1, 2_050);
     expect(state.phase).toBe("contracted");
 
     // 3. Return to bottom
@@ -630,7 +639,7 @@ describe("motion-library: Bent-over Row Tracker", () => {
     lm[14] = createMockLandmark(0.60, 0.55);
     lm[15] = createMockLandmark(0.40, 0.70);
     lm[16] = createMockLandmark(0.60, 0.70);
-    state = advanceBentOverRowTracker(lm, state);
+    state = advanceBentOverRowTracker(lm, state, 1, 2_900);
     expect(state.phase).toBe("bottom");
     expect(state.reps).toBe(1);
   });

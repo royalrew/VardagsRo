@@ -216,13 +216,13 @@ export function MotionWorkoutPanel({
 
               <button
                 type="button"
-                onClick={() => onChangeExercise("pushup")}
+                onClick={() => onChangeExercise("bent-over-row")}
                 disabled={squatTrackingEnabled}
                 style={{
                   padding: "10px 8px",
                   borderRadius: "10px",
-                  background: activeExercise === "pushup" ? "rgba(56, 189, 248, 0.28)" : "rgba(56, 189, 248, 0.12)",
-                  border: activeExercise === "pushup" ? "1.5px solid #38bdf8" : "1px solid rgba(56, 189, 248, 0.35)",
+                  background: activeExercise === "bent-over-row" ? "rgba(56, 189, 248, 0.28)" : "rgba(56, 189, 248, 0.12)",
+                  border: activeExercise === "bent-over-row" ? "1.5px solid #38bdf8" : "1px solid rgba(56, 189, 248, 0.35)",
                   color: "#38bdf8",
                   fontWeight: 700,
                   fontSize: "0.78rem",
@@ -233,10 +233,10 @@ export function MotionWorkoutPanel({
                   gap: "2px",
                   cursor: "pointer",
                   textAlign: "center",
-                  boxShadow: activeExercise === "pushup" ? "0 0 12px rgba(56, 189, 248, 0.35)" : "none",
+                  boxShadow: activeExercise === "bent-over-row" ? "0 0 12px rgba(56, 189, 248, 0.35)" : "none",
                 }}
               >
-                <span style={{ fontSize: "0.95rem" }}>💪 Armhävningar</span>
+                <span style={{ fontSize: "0.95rem" }}>🏋️ Hantelrodd</span>
                 <span style={{ fontSize: "0.65rem", opacity: 0.85 }}>Provbänk & .json</span>
               </button>
             </div>

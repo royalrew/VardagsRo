@@ -549,9 +549,26 @@ export interface BicepCurlTrajectorySample {
   timestampMs: number;
   leftElbowAngle: number;
   rightElbowAngle: number;
+  leftWristToElbowY: number;
+  rightWristToElbowY: number;
+  shoulderWidth: number;
   phase: BicepCurlPhase;
   arm: "left" | "right" | "both";
+  trackingStatus: BicepCurlTrackingStatus;
+  trackingIssue?: BicepCurlTrackingIssue;
 }
+
+export type BicepCurlTrackingStatus =
+  | "seeking-extension"
+  | "ready"
+  | "curling"
+  | "tracking-lost";
+
+export type BicepCurlTrackingIssue =
+  | "landmarks-unreliable"
+  | "too-close"
+  | "too-far"
+  | "body-moved";
 
 export interface BicepCurlTrackerState {
   phase: BicepCurlPhase;
@@ -570,6 +587,19 @@ export interface BicepCurlTrackerState {
   lastRepAtMs?: number;
   lastSampleAtMs?: number;
   hasEstablishedStartingExtension?: boolean;
+  trackingStatus: BicepCurlTrackingStatus;
+  trackingIssue?: BicepCurlTrackingIssue;
+  rejectedFrameCount: number;
+  trackingLossEvents: number;
+  extensionStableSinceMs?: number;
+  baselineLeftAngle?: number;
+  baselineRightAngle?: number;
+  baselineLeftWristToElbowY?: number;
+  baselineRightWristToElbowY?: number;
+  baselineShoulderWidth?: number;
+  currentRepMaxWristLift?: number;
+  trackingLostSinceMs?: number;
+  rejectedFrameReasons: Record<BicepCurlTrackingIssue, number>;
 }
 
 export function createBicepCurlTracker(): BicepCurlTrackerState {
@@ -585,6 +615,94 @@ export function createBicepCurlTracker(): BicepCurlTrackerState {
     repsHistory: [],
     trajectorySamples: [],
     hasEstablishedStartingExtension: false,
+    trackingStatus: "seeking-extension",
+    rejectedFrameCount: 0,
+    trackingLossEvents: 0,
+    rejectedFrameReasons: {
+      "landmarks-unreliable": 0,
+      "too-close": 0,
+      "too-far": 0,
+      "body-moved": 0,
+    },
+  };
+}
+
+const BICEP_MIN_VISIBILITY = 0.3;
+const BICEP_MIN_SHOULDER_WIDTH = 0.075;
+const BICEP_MAX_SHOULDER_WIDTH = 0.4;
+const BICEP_START_EXTENSION_ANGLE = 130;
+const BICEP_START_EXTENSION_HOLD_MS = 300;
+const BICEP_CURL_START_DELTA = 12;
+const BICEP_CURL_PEAK_ANGLE = 125;
+const BICEP_CURL_QUALITY_ANGLE = 106;
+const BICEP_MIN_REP_WRIST_LIFT_SHOULDER_RATIO = 0.75;
+const BICEP_MIN_REP_DURATION_MS = 450;
+const BICEP_MAX_REP_DURATION_MS = 8_000;
+const BICEP_TRACKING_LOSS_GRACE_MS = 900;
+
+function isReliableBicepLandmark(landmark: MotionLandmark | undefined): landmark is MotionLandmark {
+  return Boolean(
+    landmark
+    && Number.isFinite(landmark.x)
+    && Number.isFinite(landmark.y)
+    && Number.isFinite(landmark.z)
+    && landmark.x >= -0.02
+    && landmark.x <= 1.02
+    && landmark.y >= -0.02
+    && landmark.y <= 1.02
+    && (landmark.visibility ?? 1) >= BICEP_MIN_VISIBILITY,
+  );
+}
+
+function rejectBicepFrame(
+  state: BicepCurlTrackerState,
+  issue: BicepCurlTrackingIssue,
+  nowMs: number,
+  allowBriefPause = false,
+  forceRearm = false,
+): BicepCurlTrackerState {
+  const trackingLostSinceMs = state.trackingLostSinceMs ?? nowMs;
+  const shared: BicepCurlTrackerState = {
+    ...state,
+    trackingStatus: "tracking-lost",
+    trackingIssue: issue,
+    rejectedFrameCount: (state.rejectedFrameCount ?? 0) + 1,
+    trackingLossEvents:
+      (state.trackingLossEvents ?? 0) + (state.trackingStatus === "tracking-lost" ? 0 : 1),
+    trackingLostSinceMs,
+    rejectedFrameReasons: {
+      ...state.rejectedFrameReasons,
+      [issue]: (state.rejectedFrameReasons?.[issue] ?? 0) + 1,
+    },
+  };
+  if (forceRearm) {
+    return {
+      ...shared,
+      phase: "extended",
+      currentRepStartedAtMs: undefined,
+      currentRepMinAngle: undefined,
+      currentRepMaxAngle: undefined,
+      currentRepMaxWristLift: undefined,
+      hasEstablishedStartingExtension: false,
+      extensionStableSinceMs: undefined,
+      baselineLeftAngle: undefined,
+      baselineRightAngle: undefined,
+      baselineLeftWristToElbowY: undefined,
+      baselineRightWristToElbowY: undefined,
+      baselineShoulderWidth: undefined,
+    };
+  }
+  if (allowBriefPause && state.hasEstablishedStartingExtension) {
+    return shared;
+  }
+  return {
+    ...shared,
+    phase: "extended",
+    currentRepStartedAtMs: undefined,
+    currentRepMinAngle: undefined,
+    currentRepMaxAngle: undefined,
+    currentRepMaxWristLift: undefined,
+    hasEstablishedStartingExtension: state.hasEstablishedStartingExtension,
   };
 }
 
@@ -601,20 +719,43 @@ export function advanceBicepCurlTracker(
   const leftWrist = landmarks[15];
   const rightWrist = landmarks[16];
 
-  // 1. Proximity guard: if person is right up against the camera (e.g. clicking start or turning off), ignore
-  const shoulderWidth =
-    leftShoulder && rightShoulder
-      ? Math.hypot(leftShoulder.x - rightShoulder.x, leftShoulder.y - rightShoulder.y)
-      : 0.15;
-  const isTooCloseToCamera = shoulderWidth > 0.38;
+  const requiredLandmarks = [
+    leftShoulder,
+    rightShoulder,
+    leftElbow,
+    rightElbow,
+    leftWrist,
+    rightWrist,
+  ];
+  if (!requiredLandmarks.every(isReliableBicepLandmark)) {
+    return rejectBicepFrame(state, "landmarks-unreliable", nowMs, true);
+  }
 
-  if (isTooCloseToCamera) {
-    return {
-      ...state,
-      phase: "extended",
-      currentRepStartedAtMs: undefined,
-      currentRepMinAngle: undefined,
-    };
+  const shoulderWidth = Math.hypot(
+    (leftShoulder.x - rightShoulder.x) * aspectRatio,
+    leftShoulder.y - rightShoulder.y,
+  );
+  if (shoulderWidth > BICEP_MAX_SHOULDER_WIDTH) {
+    return rejectBicepFrame(state, "too-close", nowMs, true);
+  }
+  if (shoulderWidth < BICEP_MIN_SHOULDER_WIDTH) {
+    return rejectBicepFrame(state, "too-far", nowMs, true);
+  }
+
+  const baselineShoulderWidth = state.baselineShoulderWidth;
+  const distanceChangedAfterReady = Boolean(
+    state.hasEstablishedStartingExtension
+    && baselineShoulderWidth
+    && (
+      shoulderWidth < baselineShoulderWidth * 0.72
+      || shoulderWidth > baselineShoulderWidth * 1.3
+    ),
+  );
+  if (distanceChangedAfterReady) {
+    // A substantial scale change means the person moved toward or away from
+    // the camera. Cancel any partial rep, then allow a fresh bottom calibration
+    // at the new position instead of permanently locking to the old framing.
+    return rejectBicepFrame(state, "body-moved", nowMs, false, true);
   }
 
   // 2. Validate anatomical elbow angle (0 to 185 deg)
@@ -628,37 +769,73 @@ export function advanceBicepCurlTracker(
   const leftAngle = isValidElbowAngle(rawLeftAngle) ? rawLeftAngle : null;
   const rightAngle = isValidElbowAngle(rawRightAngle) ? rawRightAngle : null;
 
-  const effectiveLeft = leftAngle ?? state.leftAngle ?? 155;
-  const effectiveRight = rightAngle ?? state.rightAngle ?? 155;
-
-  const isLeftContracted = effectiveLeft <= 106;
-  const isRightContracted = effectiveRight <= 106;
-
-  // 1. Identify which arm(s) are actively moving or contracting
-  let activeArm: "left" | "right" | "both";
-  if (isLeftContracted && isRightContracted) {
-    activeArm = "both";
-  } else if (isLeftContracted && effectiveRight > effectiveLeft + 12) {
-    activeArm = "left";
-  } else if (isRightContracted && effectiveLeft > effectiveRight + 12) {
-    activeArm = "right";
-  } else if (effectiveLeft < 118 && effectiveRight < 118 && Math.abs(effectiveLeft - effectiveRight) <= 18) {
-    activeArm = "both";
-  } else if (effectiveLeft < effectiveRight - 10) {
-    activeArm = "left";
-  } else if (effectiveRight < effectiveLeft - 10) {
-    activeArm = "right";
-  } else {
-    activeArm = state.currentRepArm ?? state.activeArm ?? "both";
+  if (leftAngle === null || rightAngle === null) {
+    return rejectBicepFrame(state, "landmarks-unreliable", nowMs, true);
   }
 
-  // 2. Select governing angle for this frame:
-  // If in a rep, track the arm being curled. If waiting in extended, track candidate active arm.
-  const currentRepArmCandidate = state.phase !== "extended" ? (state.currentRepArm ?? activeArm) : activeArm;
-  const angle =
-    currentRepArmCandidate === "left"
-      ? effectiveLeft
-      : currentRepArmCandidate === "right"
+  const effectiveLeft = leftAngle;
+  const effectiveRight = rightAngle;
+  const abandonStalePartialRep = Boolean(
+    state.trackingLostSinceMs !== undefined
+    && nowMs - state.trackingLostSinceMs >= BICEP_TRACKING_LOSS_GRACE_MS,
+  );
+  const previousPhase: BicepCurlPhase = abandonStalePartialRep ? "extended" : state.phase;
+  const leftWristToElbowY = leftWrist.y - leftElbow.y;
+  const rightWristToElbowY = rightWrist.y - rightElbow.y;
+  const leftExtended = effectiveLeft >= BICEP_START_EXTENSION_ANGLE && leftWristToElbowY >= 0.04;
+  const rightExtended = effectiveRight >= BICEP_START_EXTENSION_ANGLE && rightWristToElbowY >= 0.04;
+  const bothExtended = leftExtended && rightExtended;
+
+  let extensionStableSinceMs = state.extensionStableSinceMs;
+  let hasEstablishedStartingExtension = state.hasEstablishedStartingExtension ?? false;
+  let baselineLeftAngle = state.baselineLeftAngle;
+  let baselineRightAngle = state.baselineRightAngle;
+  let baselineLeftWristToElbowY = state.baselineLeftWristToElbowY;
+  let baselineRightWristToElbowY = state.baselineRightWristToElbowY;
+  let nextBaselineShoulderWidth = state.baselineShoulderWidth;
+
+  if (!hasEstablishedStartingExtension) {
+    if (bothExtended) {
+      extensionStableSinceMs ??= nowMs;
+      if (nowMs - extensionStableSinceMs >= BICEP_START_EXTENSION_HOLD_MS) {
+        hasEstablishedStartingExtension = true;
+        baselineLeftAngle = effectiveLeft;
+        baselineRightAngle = effectiveRight;
+        baselineLeftWristToElbowY = leftWristToElbowY;
+        baselineRightWristToElbowY = rightWristToElbowY;
+        nextBaselineShoulderWidth = shoulderWidth;
+      }
+    } else {
+      extensionStableSinceMs = undefined;
+    }
+  }
+
+  const leftDelta = (baselineLeftAngle ?? effectiveLeft) - effectiveLeft;
+  const rightDelta = (baselineRightAngle ?? effectiveRight) - effectiveRight;
+  // Measure the hand relative to its elbow. Unlike absolute image coordinates,
+  // this remains stable when the person shifts position inside the frame.
+  const leftWristLift = (baselineLeftWristToElbowY ?? leftWristToElbowY) - leftWristToElbowY;
+  const rightWristLift = (baselineRightWristToElbowY ?? rightWristToElbowY) - rightWristToElbowY;
+  const leftCurlCandidate =
+    leftWristLift >= 0.035 && (leftDelta >= BICEP_CURL_START_DELTA || leftWristLift >= 0.07);
+  const rightCurlCandidate =
+    rightWristLift >= 0.035 && (rightDelta >= BICEP_CURL_START_DELTA || rightWristLift >= 0.07);
+
+  let activeArm: "left" | "right" | "both" = state.currentRepArm ?? state.activeArm ?? "both";
+  if (previousPhase === "extended") {
+    if (leftCurlCandidate && rightCurlCandidate && Math.abs(leftDelta - rightDelta) <= 24) {
+      activeArm = "both";
+    } else if (leftCurlCandidate && (!rightCurlCandidate || leftDelta > rightDelta + 8)) {
+      activeArm = "left";
+    } else if (rightCurlCandidate && (!leftCurlCandidate || rightDelta > leftDelta + 8)) {
+      activeArm = "right";
+    }
+  }
+
+  const currentRepArmCandidate = previousPhase === "extended" ? activeArm : (state.currentRepArm ?? activeArm);
+  const angle = currentRepArmCandidate === "left"
+    ? effectiveLeft
+    : currentRepArmCandidate === "right"
       ? effectiveRight
       : (effectiveLeft + effectiveRight) / 2;
 
@@ -675,51 +852,74 @@ export function advanceBicepCurlTracker(
     }
   }
 
-  let phase = state.phase;
+  let phase = previousPhase;
   let nextReps = state.reps;
   let lastRepAtMs = state.lastRepAtMs;
-  let currentRepStartedAtMs = state.currentRepStartedAtMs;
-  let currentRepMinAngle = state.currentRepMinAngle ?? angle;
-  let currentRepMaxAngle = Math.max(state.currentRepMaxAngle ?? angle, angle);
+  let currentRepStartedAtMs = abandonStalePartialRep ? undefined : state.currentRepStartedAtMs;
+  let currentRepMinAngle = abandonStalePartialRep ? angle : (state.currentRepMinAngle ?? angle);
+  let currentRepMaxAngle = abandonStalePartialRep
+    ? angle
+    : Math.max(state.currentRepMaxAngle ?? angle, angle);
   let currentRepArm = state.currentRepArm ?? activeArm;
+  const wristLiftForArm = (arm: "left" | "right" | "both") =>
+    arm === "left"
+      ? leftWristLift
+      : arm === "right"
+        ? rightWristLift
+        : (leftWristLift + rightWristLift) / 2;
+  let currentRepMaxWristLift = Math.max(
+    abandonStalePartialRep ? 0 : (state.currentRepMaxWristLift ?? 0),
+    wristLiftForArm(currentRepArm),
+  );
   let repsHistory = state.repsHistory ?? [];
-
-  let hasEstablishedStartingExtension = state.hasEstablishedStartingExtension ?? false;
-  if (effectiveLeft >= 118 || effectiveRight >= 118) {
-    hasEstablishedStartingExtension = true;
-  }
 
   if (phase === "extended") {
     currentRepMaxAngle = Math.max(currentRepMaxAngle, angle);
-    if (hasEstablishedStartingExtension && angle <= 106) {
-      phase = "contracted";
-      currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
-      currentRepMinAngle = angle;
-      currentRepArm = activeArm;
-    } else if (hasEstablishedStartingExtension && angle < 118) {
+    if (hasEstablishedStartingExtension && (leftCurlCandidate || rightCurlCandidate)) {
       phase = "flexing";
       currentRepStartedAtMs = currentRepStartedAtMs ?? nowMs;
       currentRepMinAngle = angle;
       currentRepArm = activeArm;
+      currentRepMaxWristLift = wristLiftForArm(activeArm);
     }
   } else if (phase === "flexing") {
     currentRepMinAngle = Math.min(currentRepMinAngle, angle);
     currentRepMaxAngle = Math.max(currentRepMaxAngle, angle);
+    currentRepMaxWristLift = Math.max(currentRepMaxWristLift, wristLiftForArm(currentRepArm));
 
-    if (angle <= 106) {
+    const activeWristAtPeak = currentRepArm === "left"
+      ? leftWristToElbowY <= -0.02
+      : currentRepArm === "right"
+        ? rightWristToElbowY <= -0.02
+        : leftWristToElbowY <= -0.02 && rightWristToElbowY <= -0.02;
+    if (angle <= BICEP_CURL_PEAK_ANGLE && activeWristAtPeak) {
       phase = "contracted";
-    } else if (angle >= 122 && (currentRepMaxAngle - currentRepMinAngle < 12)) {
-      phase = "extended";
-      currentRepStartedAtMs = undefined;
-      currentRepMinAngle = angle;
-      currentRepMaxAngle = angle;
+    } else {
+      const activeArmReturned = currentRepArm === "left"
+        ? leftWristToElbowY >= Math.max(0.04, (baselineLeftWristToElbowY ?? 0.04) - 0.065)
+        : currentRepArm === "right"
+          ? rightWristToElbowY >= Math.max(0.04, (baselineRightWristToElbowY ?? 0.04) - 0.065)
+          : leftWristToElbowY >= Math.max(0.04, (baselineLeftWristToElbowY ?? 0.04) - 0.065)
+            && rightWristToElbowY >= Math.max(0.04, (baselineRightWristToElbowY ?? 0.04) - 0.065);
+      if (activeArmReturned) {
+        phase = "extended";
+        currentRepStartedAtMs = undefined;
+        currentRepMinAngle = angle;
+        currentRepMaxAngle = angle;
+        currentRepMaxWristLift = 0;
+      }
     }
   } else if (phase === "contracted") {
     currentRepMinAngle = Math.min(currentRepMinAngle, angle);
+    currentRepMaxAngle = Math.max(currentRepMaxAngle, angle);
+    currentRepMaxWristLift = Math.max(currentRepMaxWristLift, wristLiftForArm(currentRepArm));
 
-    const romIncrease = angle - currentRepMinAngle;
-    const hasLoweredToBottom =
-      (angle >= 118 && romIncrease >= 15) || (angle >= 126 && romIncrease >= 12);
+    const hasLoweredToBottom = currentRepArm === "left"
+      ? leftWristToElbowY >= Math.max(0.04, (baselineLeftWristToElbowY ?? 0.04) - 0.065)
+      : currentRepArm === "right"
+        ? rightWristToElbowY >= Math.max(0.04, (baselineRightWristToElbowY ?? 0.04) - 0.065)
+        : leftWristToElbowY >= Math.max(0.04, (baselineLeftWristToElbowY ?? 0.04) - 0.065)
+          && rightWristToElbowY >= Math.max(0.04, (baselineRightWristToElbowY ?? 0.04) - 0.065);
 
     if (hasLoweredToBottom) {
       phase = "extended";
@@ -727,8 +927,19 @@ export function advanceBicepCurlTracker(
       const isInstantCall = currentRepStartedAtMs !== undefined && rawDuration <= 50;
       const duration = isInstantCall ? 1200 : rawDuration;
       const timeSinceLast = lastRepAtMs ? nowMs - lastRepAtMs : Infinity;
+      const wristLiftShoulderRatio = currentRepMaxWristLift / Math.max(
+        nextBaselineShoulderWidth ?? shoulderWidth,
+        0.001,
+      );
 
-      if (isInstantCall || (duration >= 450 && timeSinceLast >= 550)) {
+      if (
+        wristLiftShoulderRatio >= BICEP_MIN_REP_WRIST_LIFT_SHOULDER_RATIO
+        && (isInstantCall || (
+          duration >= BICEP_MIN_REP_DURATION_MS
+          && duration <= BICEP_MAX_REP_DURATION_MS
+          && timeSinceLast >= 550
+        ))
+      ) {
         nextReps += 1;
         lastRepAtMs = nowMs;
         repsHistory = [
@@ -739,7 +950,7 @@ export function advanceBicepCurlTracker(
             minElbowAngle: Math.round(currentRepMinAngle),
             extensionElbowAngle: Math.round(angle),
             durationMs: duration,
-            contractionPassed: currentRepMinAngle <= 106,
+            contractionPassed: currentRepMinAngle <= BICEP_CURL_QUALITY_ANGLE,
             swayWarning: elbowSway,
           },
         ];
@@ -747,21 +958,32 @@ export function advanceBicepCurlTracker(
       currentRepStartedAtMs = undefined;
       currentRepMinAngle = angle;
       currentRepMaxAngle = angle;
+      currentRepMaxWristLift = 0;
     }
   }
 
   // Record downsampled trajectory (~15 Hz)
   let trajectorySamples = state.trajectorySamples ?? [];
   const lastSampleAt = state.lastSampleAtMs ?? 0;
+  let lastSampleAtMs = state.lastSampleAtMs;
   if (nowMs - lastSampleAt >= 65) {
     const newSample: BicepCurlTrajectorySample = {
       timestampMs: Math.round(nowMs),
       leftElbowAngle: Math.round(effectiveLeft),
       rightElbowAngle: Math.round(effectiveRight),
+      leftWristToElbowY: Math.round(leftWristToElbowY * 1_000) / 1_000,
+      rightWristToElbowY: Math.round(rightWristToElbowY * 1_000) / 1_000,
+      shoulderWidth: Math.round(shoulderWidth * 1_000) / 1_000,
       phase,
       arm: activeArm,
+      trackingStatus: !hasEstablishedStartingExtension
+        ? "seeking-extension"
+        : phase === "extended"
+          ? "ready"
+          : "curling",
     };
     trajectorySamples = [...trajectorySamples.slice(-299), newSample];
+    lastSampleAtMs = nowMs;
   }
 
   return {
@@ -779,9 +1001,22 @@ export function advanceBicepCurlTracker(
     currentRepStartedAtMs,
     currentRepMinAngle,
     currentRepMaxAngle,
+    currentRepMaxWristLift,
     lastRepAtMs,
-    lastSampleAtMs: nowMs,
+    lastSampleAtMs,
     hasEstablishedStartingExtension,
+    trackingStatus: !hasEstablishedStartingExtension
+      ? "seeking-extension"
+      : phase === "extended"
+        ? "ready"
+        : "curling",
+    extensionStableSinceMs,
+    baselineLeftAngle,
+    baselineRightAngle,
+    baselineLeftWristToElbowY,
+    baselineRightWristToElbowY,
+    baselineShoulderWidth: nextBaselineShoulderWidth,
+    trackingLostSinceMs: undefined,
   };
 }
 
@@ -1062,10 +1297,67 @@ export function advanceOverheadPressTracker(
 
 export type LateralRaisePhase = "bottom" | "raising" | "peak";
 
+export type LateralRaiseTrackingStatus =
+  | "seeking-bottom"
+  | "ready"
+  | "raising"
+  | "tracking-lost";
+
+export type LateralRaiseTrackingIssue =
+  | "landmarks-unreliable"
+  | "too-close"
+  | "too-far"
+  | "distance-changed";
+
+export interface LateralRaiseRepRecord {
+  repNumber: number;
+  arm: "left" | "right" | "both";
+  peakAngle: number;
+  bottomAngle: number;
+  durationMs: number;
+  heightPassed: boolean;
+  overshootWarning: boolean;
+}
+
+export interface LateralRaiseTrajectorySample {
+  timestampMs: number;
+  leftAbductionAngle: number;
+  rightAbductionAngle: number;
+  leftWristToShoulderY: number;
+  rightWristToShoulderY: number;
+  shoulderWidth: number;
+  phase: LateralRaisePhase;
+  arm: "left" | "right" | "both";
+  trackingStatus: LateralRaiseTrackingStatus;
+}
+
 export interface LateralRaiseTrackerState {
   phase: LateralRaisePhase;
   reps: number;
   lastAbductionAngle: number;
+  leftAbductionAngle: number;
+  rightAbductionAngle: number;
+  activeArm: "left" | "right" | "both";
+  currentRepArm?: "left" | "right" | "both";
+  repsHistory: LateralRaiseRepRecord[];
+  trajectorySamples: LateralRaiseTrajectorySample[];
+  trackingStatus: LateralRaiseTrackingStatus;
+  trackingIssue?: LateralRaiseTrackingIssue;
+  rejectedFrameCount: number;
+  trackingLossEvents: number;
+  rejectedFrameReasons: Record<LateralRaiseTrackingIssue, number>;
+  hasEstablishedBottom: boolean;
+  bottomStableSinceMs?: number;
+  baselineLeftAngle?: number;
+  baselineRightAngle?: number;
+  baselineLeftWristToShoulderY?: number;
+  baselineRightWristToShoulderY?: number;
+  baselineShoulderWidth?: number;
+  currentRepStartedAtMs?: number;
+  currentRepPeakAngle?: number;
+  lastRepAtMs?: number;
+  lastSampleAtMs?: number;
+  trackingLostSinceMs?: number;
 }
 
 export function createLateralRaiseTracker(): LateralRaiseTrackerState {
@@ -1073,6 +1365,87 @@ export function createLateralRaiseTracker(): LateralRaiseTrackerState {
     phase: "bottom",
     reps: 0,
     lastAbductionAngle: 15,
+    leftAbductionAngle: 15,
+    rightAbductionAngle: 15,
+    activeArm: "both",
+    currentRepArm: "both",
+    repsHistory: [],
+    trajectorySamples: [],
+    trackingStatus: "seeking-bottom",
+    rejectedFrameCount: 0,
+    trackingLossEvents: 0,
+    rejectedFrameReasons: {
+      "landmarks-unreliable": 0,
+      "too-close": 0,
+      "too-far": 0,
+      "distance-changed": 0,
+    },
+    hasEstablishedBottom: false,
+  };
+}
+
+const LATERAL_RAISE_MIN_SHOULDER_WIDTH = 0.075;
+const LATERAL_RAISE_MAX_SHOULDER_WIDTH = 0.4;
+const LATERAL_RAISE_BOTTOM_ANGLE = 38;
+const LATERAL_RAISE_BOTTOM_HOLD_MS = 300;
+const LATERAL_RAISE_START_ANGLE = 42;
+const LATERAL_RAISE_PEAK_ANGLE = 70;
+const LATERAL_RAISE_TARGET_ANGLE = 80;
+const LATERAL_RAISE_OVERSHOOT_ANGLE = 112;
+const LATERAL_RAISE_MIN_DURATION_MS = 600;
+const LATERAL_RAISE_MAX_DURATION_MS = 8_000;
+const LATERAL_RAISE_TRACKING_LOSS_GRACE_MS = 900;
+
+function isReliableLateralRaiseLandmark(
+  landmark: MotionLandmark | undefined,
+): landmark is MotionLandmark {
+  return Boolean(
+    landmark
+    && Number.isFinite(landmark.x)
+    && Number.isFinite(landmark.y)
+    && Number.isFinite(landmark.z)
+    && landmark.x >= -0.02
+    && landmark.x <= 1.02
+    && landmark.y >= -0.02
+    && landmark.y <= 1.02
+    && (landmark.visibility ?? 1) >= 0.3,
+  );
+}
+
+function rejectLateralRaiseFrame(
+  state: LateralRaiseTrackerState,
+  issue: LateralRaiseTrackingIssue,
+  nowMs: number,
+  forceRearm = false,
+): LateralRaiseTrackerState {
+  const shared: LateralRaiseTrackerState = {
+    ...state,
+    trackingStatus: "tracking-lost",
+    trackingIssue: issue,
+    rejectedFrameCount: state.rejectedFrameCount + 1,
+    trackingLossEvents:
+      state.trackingLossEvents + (state.trackingStatus === "tracking-lost" ? 0 : 1),
+    rejectedFrameReasons: {
+      ...state.rejectedFrameReasons,
+      [issue]: state.rejectedFrameReasons[issue] + 1,
+    },
+    trackingLostSinceMs: state.trackingLostSinceMs ?? nowMs,
+  };
+
+  if (!forceRearm) return shared;
+
+  return {
+    ...shared,
+    phase: "bottom",
+    currentRepStartedAtMs: undefined,
+    currentRepPeakAngle: undefined,
+    hasEstablishedBottom: false,
+    bottomStableSinceMs: undefined,
+    baselineLeftAngle: undefined,
+    baselineRightAngle: undefined,
+    baselineLeftWristToShoulderY: undefined,
+    baselineRightWristToShoulderY: undefined,
+    baselineShoulderWidth: undefined,
   };
 }
 
@@ -1080,6 +1453,7 @@ export function advanceLateralRaiseTracker(
   landmarks: readonly MotionLandmark[],
   state: LateralRaiseTrackerState,
   aspectRatio = 1,
+  nowMs: number = Date.now(),
 ): LateralRaiseTrackerState {
   const leftHip = landmarks[23];
   const rightHip = landmarks[24];
@@ -1087,41 +1461,267 @@ export function advanceLateralRaiseTracker(
   const rightShoulder = landmarks[12];
   const leftElbow = landmarks[13];
   const rightElbow = landmarks[14];
+  const leftWrist = landmarks[15];
+  const rightWrist = landmarks[16];
+
+  const requiredLandmarks = [
+    leftHip,
+    rightHip,
+    leftShoulder,
+    rightShoulder,
+    leftElbow,
+    rightElbow,
+    leftWrist,
+    rightWrist,
+  ];
+  if (!requiredLandmarks.every(isReliableLateralRaiseLandmark)) {
+    return rejectLateralRaiseFrame(state, "landmarks-unreliable", nowMs);
+  }
+
+  const shoulderWidth = Math.hypot(
+    (leftShoulder.x - rightShoulder.x) * aspectRatio,
+    leftShoulder.y - rightShoulder.y,
+  );
+  if (shoulderWidth > LATERAL_RAISE_MAX_SHOULDER_WIDTH) {
+    return rejectLateralRaiseFrame(state, "too-close", nowMs);
+  }
+  if (shoulderWidth < LATERAL_RAISE_MIN_SHOULDER_WIDTH) {
+    return rejectLateralRaiseFrame(state, "too-far", nowMs);
+  }
+  if (
+    state.hasEstablishedBottom
+    && state.baselineShoulderWidth
+    && (
+      shoulderWidth < state.baselineShoulderWidth * 0.72
+      || shoulderWidth > state.baselineShoulderWidth * 1.3
+    )
+  ) {
+    return rejectLateralRaiseFrame(state, "distance-changed", nowMs, true);
+  }
 
   // Abduction angle at shoulder: hip -> shoulder -> elbow
   const leftAngle = computeJointAngle3D(leftHip, leftShoulder, leftElbow, aspectRatio);
   const rightAngle = computeJointAngle3D(rightHip, rightShoulder, rightElbow, aspectRatio);
 
-  const angle = leftAngle !== null && rightAngle !== null
-    ? Math.max(leftAngle, rightAngle)
-    : leftAngle ?? rightAngle ?? state.lastAbductionAngle;
+  if (leftAngle === null || rightAngle === null) {
+    return rejectLateralRaiseFrame(state, "landmarks-unreliable", nowMs);
+  }
 
-  let phase = state.phase;
-  let reps = state.reps;
+  const leftWristToShoulderY = leftWrist.y - leftShoulder.y;
+  const rightWristToShoulderY = rightWrist.y - rightShoulder.y;
+  const leftBottom = leftAngle <= LATERAL_RAISE_BOTTOM_ANGLE && leftWristToShoulderY >= 0.1;
+  const rightBottom = rightAngle <= LATERAL_RAISE_BOTTOM_ANGLE && rightWristToShoulderY >= 0.1;
+  const bothBottom = leftBottom && rightBottom;
 
-  if (phase === "bottom") {
-    if (angle >= 70) {
-      phase = "peak";
-    } else if (angle > 40) {
-      phase = "raising";
-    }
-  } else if (phase === "raising") {
-    if (angle >= 70) {
-      phase = "peak";
-    } else if (angle < 30) {
-      phase = "bottom";
-    }
-  } else if (phase === "peak") {
-    if (angle < 35) {
-      phase = "bottom";
-      reps += 1;
+  let hasEstablishedBottom = state.hasEstablishedBottom;
+  let bottomStableSinceMs = state.bottomStableSinceMs;
+  let baselineLeftAngle = state.baselineLeftAngle;
+  let baselineRightAngle = state.baselineRightAngle;
+  let baselineLeftWristToShoulderY = state.baselineLeftWristToShoulderY;
+  let baselineRightWristToShoulderY = state.baselineRightWristToShoulderY;
+  let baselineShoulderWidth = state.baselineShoulderWidth;
+
+  if (!hasEstablishedBottom) {
+    if (bothBottom) {
+      bottomStableSinceMs ??= nowMs;
+      if (nowMs - bottomStableSinceMs >= LATERAL_RAISE_BOTTOM_HOLD_MS) {
+        hasEstablishedBottom = true;
+        baselineLeftAngle = leftAngle;
+        baselineRightAngle = rightAngle;
+        baselineLeftWristToShoulderY = leftWristToShoulderY;
+        baselineRightWristToShoulderY = rightWristToShoulderY;
+        baselineShoulderWidth = shoulderWidth;
+      }
+    } else {
+      bottomStableSinceMs = undefined;
     }
   }
 
+  const leftWristLift = (baselineLeftWristToShoulderY ?? leftWristToShoulderY) - leftWristToShoulderY;
+  const rightWristLift = (baselineRightWristToShoulderY ?? rightWristToShoulderY) - rightWristToShoulderY;
+  const minStartLift = Math.max(0.035, shoulderWidth * 0.18);
+  const leftCandidate = leftAngle >= LATERAL_RAISE_START_ANGLE && leftWristLift >= minStartLift;
+  const rightCandidate = rightAngle >= LATERAL_RAISE_START_ANGLE && rightWristLift >= minStartLift;
+
+  const stalePartial = Boolean(
+    state.trackingLostSinceMs !== undefined
+    && nowMs - state.trackingLostSinceMs >= LATERAL_RAISE_TRACKING_LOSS_GRACE_MS,
+  );
+  let phase: LateralRaisePhase = stalePartial ? "bottom" : state.phase;
+  let reps = state.reps;
+  let activeArm = state.currentRepArm ?? state.activeArm;
+  let currentRepArm = state.currentRepArm ?? state.activeArm;
+  let currentRepStartedAtMs = stalePartial ? undefined : state.currentRepStartedAtMs;
+  let currentRepPeakAngle = stalePartial ? 0 : (state.currentRepPeakAngle ?? 0);
+  let lastRepAtMs = state.lastRepAtMs;
+  let repsHistory = state.repsHistory;
+
+  const secondArmJoinedCurrentRaise = Boolean(
+    (phase === "raising" || phase === "peak")
+    && currentRepArm !== "both"
+    && leftCandidate
+    && rightCandidate
+    && currentRepStartedAtMs !== undefined
+    && nowMs - currentRepStartedAtMs <= 600,
+  );
+  if (secondArmJoinedCurrentRaise) {
+    currentRepArm = "both";
+    activeArm = "both";
+    currentRepPeakAngle = Math.min(leftAngle, rightAngle);
+  }
+
+  if (phase === "bottom" && hasEstablishedBottom) {
+    if (leftCandidate && rightCandidate) activeArm = "both";
+    else if (leftCandidate) activeArm = "left";
+    else if (rightCandidate) activeArm = "right";
+
+    if (leftCandidate || rightCandidate) {
+      currentRepArm = activeArm;
+      currentRepStartedAtMs = nowMs;
+      currentRepPeakAngle = currentRepArm === "left"
+        ? leftAngle
+        : currentRepArm === "right"
+          ? rightAngle
+          : Math.min(leftAngle, rightAngle);
+      const candidateAtHeight = currentRepArm === "left"
+        ? leftAngle >= LATERAL_RAISE_PEAK_ANGLE && leftWristToShoulderY <= 0.07
+        : currentRepArm === "right"
+          ? rightAngle >= LATERAL_RAISE_PEAK_ANGLE && rightWristToShoulderY <= 0.07
+          : leftAngle >= LATERAL_RAISE_PEAK_ANGLE
+            && rightAngle >= LATERAL_RAISE_PEAK_ANGLE
+            && leftWristToShoulderY <= 0.07
+            && rightWristToShoulderY <= 0.07;
+      phase = candidateAtHeight ? "peak" : "raising";
+    }
+  } else if (phase === "raising") {
+    const activeAngle = currentRepArm === "left"
+      ? leftAngle
+      : currentRepArm === "right"
+        ? rightAngle
+        : Math.min(leftAngle, rightAngle);
+    const activeAtHeight = currentRepArm === "left"
+      ? leftAngle >= LATERAL_RAISE_PEAK_ANGLE && leftWristToShoulderY <= 0.07
+      : currentRepArm === "right"
+        ? rightAngle >= LATERAL_RAISE_PEAK_ANGLE && rightWristToShoulderY <= 0.07
+        : leftAngle >= LATERAL_RAISE_PEAK_ANGLE
+          && rightAngle >= LATERAL_RAISE_PEAK_ANGLE
+          && leftWristToShoulderY <= 0.07
+          && rightWristToShoulderY <= 0.07;
+    currentRepPeakAngle = Math.max(currentRepPeakAngle, activeAngle);
+    if (activeAtHeight) {
+      phase = "peak";
+    } else if (
+      (currentRepArm === "left" && leftBottom)
+      || (currentRepArm === "right" && rightBottom)
+      || (currentRepArm === "both" && bothBottom)
+    ) {
+      phase = "bottom";
+      currentRepStartedAtMs = undefined;
+      currentRepPeakAngle = 0;
+    }
+  } else if (phase === "peak") {
+    const activeAngle = currentRepArm === "left"
+      ? leftAngle
+      : currentRepArm === "right"
+        ? rightAngle
+        : Math.min(leftAngle, rightAngle);
+    currentRepPeakAngle = Math.max(currentRepPeakAngle, activeAngle);
+    const returnedToBottom = currentRepArm === "left"
+      ? leftBottom
+      : currentRepArm === "right"
+        ? rightBottom
+        : bothBottom;
+
+    if (returnedToBottom) {
+      phase = "bottom";
+      const rawDuration = currentRepStartedAtMs ? nowMs - currentRepStartedAtMs : 1_200;
+      const isInstantCall = currentRepStartedAtMs !== undefined && rawDuration <= 50;
+      const duration = isInstantCall ? 1_200 : rawDuration;
+      const timeSinceLast = lastRepAtMs ? nowMs - lastRepAtMs : Infinity;
+      if (
+        (isInstantCall || (
+          duration >= LATERAL_RAISE_MIN_DURATION_MS
+          && duration <= LATERAL_RAISE_MAX_DURATION_MS
+          && timeSinceLast >= 600
+        ))
+      ) {
+        reps += 1;
+        lastRepAtMs = nowMs;
+        repsHistory = [
+          ...repsHistory,
+          {
+            repNumber: reps,
+            arm: currentRepArm,
+            peakAngle: Math.round(currentRepPeakAngle),
+            bottomAngle: Math.round(activeAngle),
+            durationMs: duration,
+            heightPassed: currentRepPeakAngle >= LATERAL_RAISE_TARGET_ANGLE,
+            overshootWarning: currentRepPeakAngle > LATERAL_RAISE_OVERSHOOT_ANGLE,
+          },
+        ];
+      }
+      currentRepStartedAtMs = undefined;
+      currentRepPeakAngle = 0;
+    }
+  }
+
+  const activeAngle = activeArm === "left"
+    ? leftAngle
+    : activeArm === "right"
+      ? rightAngle
+      : Math.max(leftAngle, rightAngle);
+  let trajectorySamples = state.trajectorySamples;
+  let lastSampleAtMs = state.lastSampleAtMs;
+  if (nowMs - (lastSampleAtMs ?? 0) >= 65) {
+    trajectorySamples = [
+      ...trajectorySamples.slice(-299),
+      {
+        timestampMs: Math.round(nowMs),
+        leftAbductionAngle: Math.round(leftAngle),
+        rightAbductionAngle: Math.round(rightAngle),
+        leftWristToShoulderY: Math.round(leftWristToShoulderY * 1_000) / 1_000,
+        rightWristToShoulderY: Math.round(rightWristToShoulderY * 1_000) / 1_000,
+        shoulderWidth: Math.round(shoulderWidth * 1_000) / 1_000,
+        phase,
+        arm: activeArm,
+        trackingStatus: !hasEstablishedBottom
+          ? "seeking-bottom"
+          : phase === "bottom"
+            ? "ready"
+            : "raising",
+      },
+    ];
+    lastSampleAtMs = nowMs;
+  }
+
   return {
+    ...state,
     phase,
     reps,
-    lastAbductionAngle: angle,
+    lastAbductionAngle: Math.round(activeAngle),
+    leftAbductionAngle: Math.round(leftAngle),
+    rightAbductionAngle: Math.round(rightAngle),
+    activeArm,
+    currentRepArm,
+    repsHistory,
+    trajectorySamples,
+    trackingStatus: !hasEstablishedBottom
+      ? "seeking-bottom"
+      : phase === "bottom"
+        ? "ready"
+        : "raising",
+    hasEstablishedBottom,
+    bottomStableSinceMs,
+    baselineLeftAngle,
+    baselineRightAngle,
+    baselineLeftWristToShoulderY,
+    baselineRightWristToShoulderY,
+    baselineShoulderWidth,
+    currentRepStartedAtMs,
+    currentRepPeakAngle,
+    lastRepAtMs,
+    lastSampleAtMs,
+    trackingLostSinceMs: undefined,
   };
 }
 
@@ -1257,12 +1857,67 @@ export function advanceHandstandTracker(
 
 export type BentOverRowPhase = "bottom" | "rowing" | "contracted";
 
+export type BentOverRowTrackingStatus =
+  | "seeking-bottom"
+  | "ready"
+  | "rowing"
+  | "tracking-lost";
+
+export type BentOverRowTrackingIssue =
+  | "landmarks-unreliable"
+  | "too-close"
+  | "too-far"
+  | "distance-changed";
+
+export interface BentOverRowRepRecord {
+  repNumber: number;
+  durationMs: number;
+  minLeftElbowAngle: number;
+  minRightElbowAngle: number;
+  extensionAngle: number;
+  torsoAngle: number;
+  contractionPassed: boolean;
+  hingePassed: boolean;
+}
+
+export interface BentOverRowTrajectorySample {
+  timestampMs: number;
+  leftElbowAngle: number;
+  rightElbowAngle: number;
+  torsoAngle: number;
+  shoulderWidth: number;
+  phase: BentOverRowPhase;
+  trackingStatus: BentOverRowTrackingStatus;
+}
+
 export interface BentOverRowTrackerState {
   phase: BentOverRowPhase;
   reps: number;
   lastElbowAngle: number;
+  leftElbowAngle: number;
+  rightElbowAngle: number;
   torsoAngle: number;
   formWarning: string | null;
+  repsHistory: BentOverRowRepRecord[];
+  trajectorySamples: BentOverRowTrajectorySample[];
+  trackingStatus: BentOverRowTrackingStatus;
+  trackingIssue?: BentOverRowTrackingIssue;
+  rejectedFrameCount: number;
+  trackingLossEvents: number;
+  rejectedFrameReasons: Record<BentOverRowTrackingIssue, number>;
+  hasEstablishedBottom: boolean;
+  isArmedForNextRep: boolean;
+  bottomStableSinceMs?: number;
+  repRearmStableSinceMs?: number;
+  baselineShoulderWidth?: number;
+  currentRepStartedAtMs?: number;
+  currentRepMinLeftAngle?: number;
+  currentRepMinRightAngle?: number;
+  currentRepTorsoAngle?: number;
+  currentRepStartShoulderWidth?: number;
+  lastRepAtMs?: number;
+  lastSampleAtMs?: number;
+  trackingLostSinceMs?: number;
 }
 
 export function createBentOverRowTracker(): BentOverRowTrackerState {
@@ -1270,8 +1925,73 @@ export function createBentOverRowTracker(): BentOverRowTrackerState {
     phase: "bottom",
     reps: 0,
     lastElbowAngle: 150,
+    leftElbowAngle: 150,
+    rightElbowAngle: 150,
     torsoAngle: 60,
     formWarning: null,
+    repsHistory: [],
+    trajectorySamples: [],
+    trackingStatus: "seeking-bottom",
+    rejectedFrameCount: 0,
+    trackingLossEvents: 0,
+    rejectedFrameReasons: {
+      "landmarks-unreliable": 0,
+      "too-close": 0,
+      "too-far": 0,
+      "distance-changed": 0,
+    },
+    hasEstablishedBottom: false,
+    isArmedForNextRep: false,
+  };
+}
+
+const ROW_BOTTOM_ELBOW_ANGLE = 135;
+const ROW_START_ELBOW_ANGLE = 125;
+const ROW_CONTRACTED_ELBOW_ANGLE = 110;
+const ROW_RETURN_ELBOW_ANGLE = 125;
+const ROW_QUALITY_PRIMARY_ANGLE = 105;
+const ROW_QUALITY_SUPPORT_ANGLE = 125;
+const ROW_BOTTOM_HOLD_MS = 300;
+const ROW_REARM_HOLD_MS = 120;
+const ROW_MIN_DURATION_MS = 250;
+const ROW_MAX_DURATION_MS = 8_000;
+const ROW_TRACKING_LOSS_GRACE_MS = 2_500;
+const ROW_ACTIVE_SCALE_MIN_RATIO = 0.6;
+const ROW_ACTIVE_SCALE_MAX_RATIO = 1.55;
+
+function rejectBentOverRowFrame(
+  state: BentOverRowTrackerState,
+  issue: BentOverRowTrackingIssue,
+  nowMs: number,
+  forceRearm = false,
+): BentOverRowTrackerState {
+  const shared: BentOverRowTrackerState = {
+    ...state,
+    trackingStatus: "tracking-lost",
+    trackingIssue: issue,
+    rejectedFrameCount: state.rejectedFrameCount + 1,
+    trackingLossEvents:
+      state.trackingLossEvents + (state.trackingStatus === "tracking-lost" ? 0 : 1),
+    rejectedFrameReasons: {
+      ...state.rejectedFrameReasons,
+      [issue]: state.rejectedFrameReasons[issue] + 1,
+    },
+    trackingLostSinceMs: state.trackingLostSinceMs ?? nowMs,
+  };
+  if (!forceRearm) return shared;
+  return {
+    ...shared,
+    phase: "bottom",
+    hasEstablishedBottom: false,
+    isArmedForNextRep: false,
+    bottomStableSinceMs: undefined,
+    repRearmStableSinceMs: undefined,
+    baselineShoulderWidth: undefined,
+    currentRepStartedAtMs: undefined,
+    currentRepMinLeftAngle: undefined,
+    currentRepMinRightAngle: undefined,
+    currentRepTorsoAngle: undefined,
+    currentRepStartShoulderWidth: undefined,
   };
 }
 
@@ -1279,6 +1999,7 @@ export function advanceBentOverRowTracker(
   landmarks: readonly MotionLandmark[],
   state: BentOverRowTrackerState,
   aspectRatio = 1,
+  nowMs: number = Date.now(),
 ): BentOverRowTrackerState {
   const leftShoulder = landmarks[11];
   const rightShoulder = landmarks[12];
@@ -1291,49 +2012,245 @@ export function advanceBentOverRowTracker(
   const leftKnee = landmarks[25];
   const rightKnee = landmarks[26];
 
+  const requiredLandmarks = [
+    leftShoulder,
+    rightShoulder,
+    leftElbow,
+    rightElbow,
+    leftWrist,
+    rightWrist,
+    leftHip,
+    rightHip,
+    leftKnee,
+    rightKnee,
+  ];
+  if (!requiredLandmarks.every(isReliableLateralRaiseLandmark)) {
+    return rejectBentOverRowFrame(state, "landmarks-unreliable", nowMs);
+  }
+
+  const shoulderWidth = Math.hypot(
+    (leftShoulder.x - rightShoulder.x) * aspectRatio,
+    leftShoulder.y - rightShoulder.y,
+  );
+  if (shoulderWidth > 0.4) return rejectBentOverRowFrame(state, "too-close", nowMs);
+  if (shoulderWidth < 0.075) return rejectBentOverRowFrame(state, "too-far", nowMs);
   const leftElbowAngle = computeJointAngle3D(leftShoulder, leftElbow, leftWrist, aspectRatio);
   const rightElbowAngle = computeJointAngle3D(rightShoulder, rightElbow, rightWrist, aspectRatio);
-  const elbowAngle = leftElbowAngle !== null && rightElbowAngle !== null
-    ? Math.min(leftElbowAngle, rightElbowAngle)
-    : leftElbowAngle ?? rightElbowAngle ?? state.lastElbowAngle;
+  if (leftElbowAngle === null || rightElbowAngle === null) {
+    return rejectBentOverRowFrame(state, "landmarks-unreliable", nowMs);
+  }
+  const elbowAngle = Math.max(leftElbowAngle, rightElbowAngle);
 
   const leftTorso = computeJointAngle3D(leftShoulder, leftHip, leftKnee, aspectRatio);
   const rightTorso = computeJointAngle3D(rightShoulder, rightHip, rightKnee, aspectRatio);
-  const torsoAngle = leftTorso !== null && rightTorso !== null
-    ? (leftTorso + rightTorso) / 2
-    : leftTorso ?? rightTorso ?? state.torsoAngle;
+  if (leftTorso === null || rightTorso === null) {
+    return rejectBentOverRowFrame(state, "landmarks-unreliable", nowMs);
+  }
+  const torsoAngle = (leftTorso + rightTorso) / 2;
 
-  const isUpright = torsoAngle > 115;
-  const formWarning = isUpright ? "Fäll fram i höften till ca 60° med rak rygg" : null;
+  const isUpright = torsoAngle > 155;
+  const formWarning = isUpright ? "Fäll fram i höften och håll ryggen rak" : null;
 
-  let phase = state.phase;
-  let reps = state.reps;
+  const bothExtended = leftElbowAngle >= ROW_BOTTOM_ELBOW_ANGLE
+    && rightElbowAngle >= ROW_BOTTOM_ELBOW_ANGLE
+    && leftWrist.y >= leftElbow.y + 0.04
+    && rightWrist.y >= rightElbow.y + 0.04;
 
-  if (phase === "bottom") {
-    if (elbowAngle <= 85) {
-      phase = "contracted";
-    } else if (elbowAngle < 125) {
-      phase = "rowing";
-    }
-  } else if (phase === "rowing") {
-    if (elbowAngle <= 85) {
-      phase = "contracted";
-    } else if (elbowAngle > 135) {
-      phase = "bottom";
-    }
-  } else if (phase === "contracted") {
-    if (elbowAngle >= 135) {
-      phase = "bottom";
-      reps += 1;
+  let hasEstablishedBottom = state.hasEstablishedBottom;
+  let isArmedForNextRep = state.isArmedForNextRep;
+  let bottomStableSinceMs = state.bottomStableSinceMs;
+  let repRearmStableSinceMs = state.repRearmStableSinceMs;
+  let baselineShoulderWidth = state.baselineShoulderWidth;
+  if (!hasEstablishedBottom) {
+    if (bothExtended) {
+      bottomStableSinceMs ??= nowMs;
+      if (nowMs - bottomStableSinceMs >= ROW_BOTTOM_HOLD_MS) {
+        hasEstablishedBottom = true;
+        isArmedForNextRep = true;
+        baselineShoulderWidth = shoulderWidth;
+      }
+    } else {
+      bottomStableSinceMs = undefined;
     }
   }
 
+  const stalePartial = Boolean(
+    state.trackingLostSinceMs !== undefined
+    && nowMs - state.trackingLostSinceMs >= ROW_TRACKING_LOSS_GRACE_MS,
+  );
+  let phase: BentOverRowPhase = stalePartial ? "bottom" : state.phase;
+  let reps = state.reps;
+  let currentRepStartedAtMs = stalePartial ? undefined : state.currentRepStartedAtMs;
+  let currentRepMinLeftAngle = stalePartial
+    ? leftElbowAngle
+    : (state.currentRepMinLeftAngle ?? leftElbowAngle);
+  let currentRepMinRightAngle = stalePartial
+    ? rightElbowAngle
+    : (state.currentRepMinRightAngle ?? rightElbowAngle);
+  let currentRepTorsoAngle = stalePartial ? torsoAngle : (state.currentRepTorsoAngle ?? torsoAngle);
+  let currentRepStartShoulderWidth = stalePartial
+    ? undefined
+    : state.currentRepStartShoulderWidth;
+  let lastRepAtMs = state.lastRepAtMs;
+  let repsHistory = state.repsHistory;
+
+  const activeScaleChanged = phase !== "bottom"
+    && currentRepStartShoulderWidth !== undefined
+    && (
+      shoulderWidth < currentRepStartShoulderWidth * ROW_ACTIVE_SCALE_MIN_RATIO
+      || shoulderWidth > currentRepStartShoulderWidth * ROW_ACTIVE_SCALE_MAX_RATIO
+    );
+  if (activeScaleChanged) {
+    return {
+      ...rejectBentOverRowFrame(state, "distance-changed", nowMs),
+      phase: "bottom",
+      currentRepStartedAtMs: undefined,
+      currentRepMinLeftAngle: undefined,
+      currentRepMinRightAngle: undefined,
+      currentRepTorsoAngle: undefined,
+      currentRepStartShoulderWidth: undefined,
+    };
+  }
+
+  const clearestElbowAngle = Math.min(leftElbowAngle, rightElbowAngle);
+  const supportingElbowAngle = Math.max(leftElbowAngle, rightElbowAngle);
+  const returnedToBottom = clearestElbowAngle >= ROW_RETURN_ELBOW_ANGLE
+    && leftWrist.y >= leftElbow.y + 0.02
+    && rightWrist.y >= rightElbow.y + 0.02;
+
+  if (phase === "bottom" && hasEstablishedBottom && !isArmedForNextRep) {
+    if (bothExtended) {
+      repRearmStableSinceMs ??= nowMs;
+      if (nowMs - repRearmStableSinceMs >= ROW_REARM_HOLD_MS) {
+        isArmedForNextRep = true;
+      }
+    } else {
+      repRearmStableSinceMs = undefined;
+    }
+  }
+
+  if (phase === "bottom" && hasEstablishedBottom && isArmedForNextRep) {
+    if (
+      clearestElbowAngle < ROW_START_ELBOW_ANGLE
+      && supportingElbowAngle < 160
+    ) {
+      phase = clearestElbowAngle <= ROW_CONTRACTED_ELBOW_ANGLE
+        ? "contracted"
+        : "rowing";
+      currentRepStartedAtMs = nowMs;
+      currentRepMinLeftAngle = leftElbowAngle;
+      currentRepMinRightAngle = rightElbowAngle;
+      currentRepTorsoAngle = torsoAngle;
+      currentRepStartShoulderWidth = shoulderWidth;
+    }
+  } else if (phase === "rowing") {
+    currentRepMinLeftAngle = Math.min(currentRepMinLeftAngle, leftElbowAngle);
+    currentRepMinRightAngle = Math.min(currentRepMinRightAngle, rightElbowAngle);
+    currentRepTorsoAngle = Math.min(currentRepTorsoAngle, torsoAngle);
+    if (
+      clearestElbowAngle <= ROW_CONTRACTED_ELBOW_ANGLE
+      && supportingElbowAngle < 160
+    ) {
+      phase = "contracted";
+    } else if (bothExtended) {
+      phase = "bottom";
+      currentRepStartedAtMs = undefined;
+      currentRepStartShoulderWidth = undefined;
+    }
+  } else if (phase === "contracted") {
+    currentRepMinLeftAngle = Math.min(currentRepMinLeftAngle, leftElbowAngle);
+    currentRepMinRightAngle = Math.min(currentRepMinRightAngle, rightElbowAngle);
+    currentRepTorsoAngle = Math.min(currentRepTorsoAngle, torsoAngle);
+    if (returnedToBottom) {
+      phase = "bottom";
+      const rawDuration = currentRepStartedAtMs ? nowMs - currentRepStartedAtMs : 1_200;
+      const isInstantCall = currentRepStartedAtMs !== undefined && rawDuration <= 50;
+      const duration = isInstantCall ? 1_200 : rawDuration;
+      const timeSinceLast = lastRepAtMs ? nowMs - lastRepAtMs : Infinity;
+      if (
+        isInstantCall
+        || (
+          duration >= ROW_MIN_DURATION_MS
+          && duration <= ROW_MAX_DURATION_MS
+          && timeSinceLast >= 600
+        )
+      ) {
+        reps += 1;
+        isArmedForNextRep = false;
+        repRearmStableSinceMs = undefined;
+        lastRepAtMs = nowMs;
+        repsHistory = [
+          ...repsHistory,
+          {
+            repNumber: reps,
+            durationMs: duration,
+            minLeftElbowAngle: Math.round(currentRepMinLeftAngle),
+            minRightElbowAngle: Math.round(currentRepMinRightAngle),
+            extensionAngle: Math.round(elbowAngle),
+            torsoAngle: Math.round(currentRepTorsoAngle),
+            contractionPassed:
+              Math.min(currentRepMinLeftAngle, currentRepMinRightAngle) <= ROW_QUALITY_PRIMARY_ANGLE
+              && Math.max(currentRepMinLeftAngle, currentRepMinRightAngle) <= ROW_QUALITY_SUPPORT_ANGLE,
+            hingePassed: currentRepTorsoAngle <= 155,
+          },
+        ];
+      }
+      currentRepStartedAtMs = undefined;
+      currentRepStartShoulderWidth = undefined;
+    }
+  }
+
+  let trajectorySamples = state.trajectorySamples;
+  let lastSampleAtMs = state.lastSampleAtMs;
+  if (nowMs - (lastSampleAtMs ?? 0) >= 65) {
+    trajectorySamples = [
+      ...trajectorySamples.slice(-299),
+      {
+        timestampMs: Math.round(nowMs),
+        leftElbowAngle: Math.round(leftElbowAngle),
+        rightElbowAngle: Math.round(rightElbowAngle),
+        torsoAngle: Math.round(torsoAngle),
+        shoulderWidth: Math.round(shoulderWidth * 1_000) / 1_000,
+        phase,
+        trackingStatus: !hasEstablishedBottom
+          ? "seeking-bottom"
+          : phase === "bottom"
+            ? "ready"
+            : "rowing",
+      },
+    ];
+    lastSampleAtMs = nowMs;
+  }
+
   return {
+    ...state,
     phase,
     reps,
-    lastElbowAngle: elbowAngle,
-    torsoAngle,
+    lastElbowAngle: Math.round(elbowAngle),
+    leftElbowAngle: Math.round(leftElbowAngle),
+    rightElbowAngle: Math.round(rightElbowAngle),
+    torsoAngle: Math.round(torsoAngle),
     formWarning,
+    repsHistory,
+    trajectorySamples,
+    trackingStatus: !hasEstablishedBottom
+      ? "seeking-bottom"
+      : phase === "bottom"
+        ? "ready"
+        : "rowing",
+    hasEstablishedBottom,
+    isArmedForNextRep,
+    bottomStableSinceMs,
+    repRearmStableSinceMs,
+    baselineShoulderWidth,
+    currentRepStartedAtMs,
+    currentRepMinLeftAngle,
+    currentRepMinRightAngle,
+    currentRepTorsoAngle,
+    currentRepStartShoulderWidth,
+    lastRepAtMs,
+    lastSampleAtMs,
+    trackingLostSinceMs: undefined,
   };
 }
 
@@ -2026,7 +2943,12 @@ export function advanceUnifiedExerciseTracker(
       };
     }
     case "lateral-raise": {
-      const next = advanceLateralRaiseTracker(landmarks, state.trackerState as LateralRaiseTrackerState, aspectRatio);
+      const next = advanceLateralRaiseTracker(
+        landmarks,
+        state.trackerState as LateralRaiseTrackerState,
+        aspectRatio,
+        timestampMs,
+      );
       return {
         ...state,
         reps: next.reps,
@@ -2062,7 +2984,12 @@ export function advanceUnifiedExerciseTracker(
       };
     }
     case "bent-over-row": {
-      const next = advanceBentOverRowTracker(landmarks, state.trackerState as BentOverRowTrackerState, aspectRatio);
+      const next = advanceBentOverRowTracker(
+        landmarks,
+        state.trackerState as BentOverRowTrackerState,
+        aspectRatio,
+        timestampMs,
+      );
       return {
         ...state,
         reps: next.reps,

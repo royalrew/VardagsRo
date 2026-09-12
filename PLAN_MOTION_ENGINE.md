@@ -253,6 +253,7 @@ Bygg en kastbar femminuters micro-loop med enkla handledsmål och duck-zon ovanp
   - Varje skiva ska vara komplett genom katalog, tracker, dispatcher, kameraguide, UI, replaytest och verkligt vardagsrumstest innan övningen markeras spårningsklar eller läggs i ett program.
   - Gates som kräver personer, hela pass eller flera dagar skiljer på **kod klar** och **liveverifierad**; automatiserade tester ersätter inte det uttryckliga acceptanskriteriet.
 * **Senast godkända steg:**
+  - **Livegodkända övningstester 2026-09-11:** Knäböj (`squat`), armhävningar (`pushup`), hantel-axelpress (`overhead-press`), bicepscurl (`bicep-curl`), utfall (`lunge`) och hantel-sidolyft (`lateral-raise`) är uttryckligen godkända av användaren i den verkliga kamerauppställningen. Sidolyftets slutrapport gav 15/15 reps, exakt 5 höger + 5 vänster + 5 båda, 100 % godkänd höjd och inga överslag. Deras särskilda provbänkar ligger därför inte längre i den aktiva testkön; övningarna använder ordinarie träningsläge. Nästa aktiva liveprov är framåtlutad hantelrodd (`bent-over-row`).
   - **Fas F & G Verifierade i Verkligheten:** iPhone som trådlös kamerasensor i vardagsrummet placerad under TV:n är bekräftad och verifierad av användaren ("fungerar perfekt").
   - **Fas J Levererad (Övningsbibliotek & Styrkeprogram):**
     1. **15 övningar med biomekaniska kinematic trackers:**

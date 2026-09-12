@@ -135,15 +135,17 @@ import {
 } from "@/lib/motion-cycling-intervals";
 import type { CyclingTrackerState } from "@/lib/motion-cycling";
 import { CyclingTestBench } from "./motion/CyclingTestBench";
-import { LungeTestBench } from "./motion/LungeTestBench";
-import { OverheadPressTestBench } from "./motion/OverheadPressTestBench";
-import { BicepCurlTestBench } from "./motion/BicepCurlTestBench";
+import { BentOverRowTestBench } from "./motion/BentOverRowTestBench";
 import { buildPushupTestReport } from "@/lib/motion-pushup-test";
 import { buildLungeTestReport } from "@/lib/motion-lunge-test";
 import { buildOverheadPressTestReport } from "@/lib/motion-overhead-press-test";
 import { buildBicepCurlTestReport } from "@/lib/motion-bicep-curl-test";
 import type { PushupTrackerState, LungeTrackerState } from "@/lib/motion-exercises";
-import type { OverheadPressTrackerState, BicepCurlTrackerState } from "@/lib/motion-library";
+import type {
+  BentOverRowTrackerState,
+  BicepCurlTrackerState,
+  OverheadPressTrackerState,
+} from "@/lib/motion-library";
 import { MotionDiagnosticsOverlay, type BaselineNoticeState } from "./motion/MotionDiagnosticsOverlay";
 import {
   MotionDiagnosticsPanel,
@@ -3188,28 +3190,11 @@ export function MotionLab({
         </section>
       ) : null}
 
-      {activeWorkoutExercise === "lunge" ? (
-        <LungeTestBench
-          lungeTracker={
-            unifiedTracker?.exerciseId === "lunge"
-              ? (unifiedTracker.trackerState as LungeTrackerState)
-              : null
-          }
-          isLive={isLive}
-          trackingEnabled={squatTrackingEnabled}
-          poseVisible={poseVisible}
-          onStartCamera={() => void startCamera()}
-          onToggleTracking={toggleSquatTracking}
-          onResetTracking={resetSquatTracking}
-          onCloseTest={() => setActiveWorkoutExercise("squat")}
-        />
-      ) : null}
-
-      {activeWorkoutExercise === "bicep-curl" ? (
-        <BicepCurlTestBench
-          curlTracker={
-            unifiedTracker?.exerciseId === "bicep-curl"
-              ? (unifiedTracker.trackerState as BicepCurlTrackerState)
+      {activeWorkoutExercise === "bent-over-row" ? (
+        <BentOverRowTestBench
+          tracker={
+            unifiedTracker?.exerciseId === "bent-over-row"
+              ? (unifiedTracker.trackerState as BentOverRowTrackerState)
               : null
           }
           isLive={isLive}
@@ -3224,8 +3209,7 @@ export function MotionLab({
 
       {activeTrackableExerciseId &&
       activeTrackableExerciseId !== "cycling" &&
-      activeTrackableExerciseId !== "lunge" &&
-      activeTrackableExerciseId !== "bicep-curl" ? (
+      activeTrackableExerciseId !== "bent-over-row" ? (
         <AdaptiveCameraSetupPanel
           key={`${activeTrackableExerciseId}-${initialMissionLaunch?.environment ?? "free"}`}
           exerciseId={activeTrackableExerciseId}
